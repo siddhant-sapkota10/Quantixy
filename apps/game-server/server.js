@@ -26,6 +26,13 @@ const PORT = Number(process.env.PORT || 3001);
 const CORS_ORIGIN = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean)
   : "*";
+
+// Log startup config so Render's log shows exactly what is active.
+console.log("[server] starting up");
+console.log("[server] PORT =", PORT);
+console.log("[server] CORS_ORIGIN =", CORS_ORIGIN);
+console.log("[server] NODE_ENV =", process.env.NODE_ENV ?? "(not set)");
+console.log("[server] SUPABASE_URL set:", Boolean(process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL));
 const MATCH_DURATION_MS = 60000;
 const TIMER_UPDATE_INTERVAL_MS = 1000;
 const FREEZE_DURATION_MS = 2000;
@@ -135,8 +142,11 @@ const httpServer = createServer((request, response) => {
 
 const io = new Server(httpServer, {
   cors: {
+    // When CORS_ORIGIN is "*" (not set), mirror any request origin (origin: true).
+    // When a list is provided, only those origins are allowed.
     origin: CORS_ORIGIN === "*" ? true : CORS_ORIGIN,
-    methods: ["GET", "POST"]
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 

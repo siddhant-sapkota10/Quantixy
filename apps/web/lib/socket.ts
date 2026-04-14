@@ -122,10 +122,13 @@ export const createGameSocket = (): GameSocket => {
   }
 
   return io(socketUrl, {
-    // Try WebSocket first; fall back to HTTP long-polling for networks that block WS.
-    transports: ["websocket", "polling"],
+    // Start with HTTP long-polling so the Engine.IO session handshake always succeeds
+    // through Render's proxy, then automatically upgrade to WebSocket.
+    // "websocket" first skips the handshake and fails on most reverse proxies.
+    transports: ["polling", "websocket"],
     autoConnect: true,
     reconnectionAttempts: 5,
-    reconnectionDelay: 1500
+    reconnectionDelay: 2000,
+    timeout: 20000
   });
 };
