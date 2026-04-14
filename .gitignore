@@ -1,9 +1,5 @@
 node_modules
+.env
+.env.local
+.env.*.local
 .next
-dist
-coverage
-.turbo
-.DS_Store
-npm-debug.log*
-package-lock.json
-apps/web/.next
