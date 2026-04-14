@@ -190,13 +190,14 @@ export function GameClient({ initialTopic, initialDifficulty }: GameClientProps)
     setRematchRequested(false);
     setGameResult(null);
 
-    // Mark connection failed after 10 s if the socket never fires "connect".
+    // Mark connection failed after 20 s if the socket never fires "connect".
+    // 20 s gives Render's free tier time to cold-start the server.
     const connectionTimeout = setTimeout(() => {
       if (!nextSocket.connected) {
-        console.error("[client] connection timed out after 10 s");
+        console.error("[client] connection timed out after 20 s");
         setStatus("failed");
       }
-    }, 10000);
+    }, 20000);
 
     // Track consecutive connect_error events; flip to "failed" after 3.
     let connectErrorCount = 0;
@@ -204,7 +205,8 @@ export function GameClient({ initialTopic, initialDifficulty }: GameClientProps)
     const handleConnect = async () => {
       clearTimeout(connectionTimeout);
       connectErrorCount = 0;
-      console.log(`[client] client connected -> id=${nextSocket.id}`);
+      // Log which transport was negotiated (polling or websocket) to help debug.
+      console.log(`[client] connected -> id=${nextSocket.id} transport=${nextSocket.io.engine.transport.name}`);
       const supabase = getSupabaseClient();
       const {
         data: { session }
