@@ -1,0 +1,28 @@
+[server] Socket.io game server running on http://localhost:3001
+[server] client connected -> id=CFt5Su4R9hLa_-HmAAAB
+[server] joinQueue received -> id=CFt5Su4R9hLa_-HmAAAB topic=arithmetic
+[server] client connected -> id=a9cVDxVUWamzRA41AAAD
+[server] joinQueue received -> id=a9cVDxVUWamzRA41AAAD topic=arithmetic
+[server] matchFound emitted -> room=room-1 {
+  players: [ 'CFt5Su4R9hLa_-HmAAAB', 'a9cVDxVUWamzRA41AAAD' ],
+  topic: 'arithmetic'
+}
+[server] newQuestion emitted -> room=room-1 { question: '8 + 7' }
+[server] client connected -> id=8iVi1TE2eO8nORg4AAAG
+[server] joinQueue received -> id=8iVi1TE2eO8nORg4AAAG topic=arithmetic
+[server] client connected -> id=j3a5JtzMGhEV3O_ZAAAH
+[server] joinQueue received -> id=j3a5JtzMGhEV3O_ZAAAH topic=arithmetic
+[server] matchFound emitted -> room=room-2 {
+  players: [ '8iVi1TE2eO8nORg4AAAG', 'j3a5JtzMGhEV3O_ZAAAH' ],
+  topic: 'arithmetic'
+}
+[server] newQuestion emitted -> room=room-2 { question: '8 + 7' }
+[server] submitAnswer received -> id=8iVi1TE2eO8nORg4AAAG answer=15
+[server] pointScored emitted -> room=room-2 {
+  scorer: '8iVi1TE2eO8nORg4AAAG',
+  scores: { '8iVi1TE2eO8nORg4AAAG': 1, j3a5JtzMGhEV3O_ZAAAH: 0 }
+}
+[server] newQuestion emitted -> room=room-2 { question: '14 - 5' }
+[server] client disconnected -> id=8iVi1TE2eO8nORg4AAAG reason=client namespace disconnect
+[server] gameOver emitted -> room=room-2 { message: 'Player-j3a5 wins by disconnect.' }
+[server] client disconnected -> id=j3a5JtzMGhEV3O_ZAAAH reason=client namespace disconnect

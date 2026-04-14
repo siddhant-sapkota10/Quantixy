@@ -1,0 +1,14 @@
+{
+  "name": "@mathbattle/game-server",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.103.0",
+    "dotenv": "^17.4.2",
+    "socket.io": "^4.8.3"
+  }
+}
