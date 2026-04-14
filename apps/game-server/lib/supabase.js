@@ -1,10 +1,12 @@
 const { createClient } = require("@supabase/supabase-js");
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+// Prefer the server-side name SUPABASE_URL; fall back to the legacy NEXT_PUBLIC_ name
+// so an existing .env without a rename still boots.
+const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl) {
-  throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL.");
+  throw new Error("Missing SUPABASE_URL (or legacy NEXT_PUBLIC_SUPABASE_URL).");
 }
 
 if (!serviceRoleKey) {

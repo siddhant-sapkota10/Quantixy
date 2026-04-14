@@ -15,7 +15,7 @@ type LeaderboardEntry = {
   topic: string;
 };
 
-const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL;
+const socketUrl = process.env.NEXT_PUBLIC_SERVER_URL;
 
 const options = [
   { label: "All Topics", value: "all" },
@@ -48,7 +48,7 @@ export function LeaderboardClient() {
 
   useEffect(() => {
     if (!leaderboardUrl) {
-      setError("NEXT_PUBLIC_SOCKET_URL is not set.");
+      setError("NEXT_PUBLIC_SERVER_URL is not set.");
       setLoading(false);
       return;
     }

@@ -42,26 +42,40 @@ const activeGames = new Map();
 const VALID_EMOTE_IDS = new Set(EMOTES.map((emote) => emote.id));
 let roomCounter = 1;
 
-function sendJson(response, statusCode, payload) {
+// Returns the origin to echo back in Access-Control-Allow-Origin.
+// Echoes the exact request origin when it is in the allowed list so browsers
+// cache the preflight correctly for each origin.
+function getAllowedOrigin(request) {
+  if (CORS_ORIGIN === "*") return "*";
+  const requestOrigin = request.headers.origin ?? "";
+  if (Array.isArray(CORS_ORIGIN) && CORS_ORIGIN.includes(requestOrigin)) {
+    return requestOrigin;
+  }
+  // Fall back to the first configured origin (better than a wildcard for credentialed requests).
+  return Array.isArray(CORS_ORIGIN) ? (CORS_ORIGIN[0] ?? "*") : CORS_ORIGIN;
+}
+
+function sendJson(request, response, statusCode, payload) {
   response.writeHead(statusCode, {
     "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": Array.isArray(CORS_ORIGIN) ? CORS_ORIGIN[0] ?? "*" : CORS_ORIGIN,
+    "Access-Control-Allow-Origin": getAllowedOrigin(request),
     "Access-Control-Allow-Methods": "GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Vary": "Origin"
   });
   response.end(JSON.stringify(payload));
 }
 
 async function handleHttpRequest(request, response) {
   if (!request.url) {
-    sendJson(response, 400, { error: "Invalid request URL" });
+    sendJson(request, response, 400, { error: "Invalid request URL" });
     return;
   }
 
   const url = new URL(request.url, `http://${request.headers.host ?? `localhost:${PORT}`}`);
 
   if (request.method === "OPTIONS") {
-    sendJson(response, 204, {});
+    sendJson(request, response, 204, {});
     return;
   }
 
@@ -70,13 +84,13 @@ async function handleHttpRequest(request, response) {
       const topic = url.searchParams.get("topic") ?? undefined;
       const rows = await getLeaderboard(topic);
 
-      sendJson(response, 200, {
+      sendJson(request, response, 200, {
         topic: topic ?? "all",
         leaderboard: rows
       });
     } catch (error) {
       console.error("[server] leaderboard fetch failed", error);
-      sendJson(response, 500, { error: "Failed to load leaderboard" });
+      sendJson(request, response, 500, { error: "Failed to load leaderboard" });
     }
     return;
   }
@@ -89,7 +103,7 @@ async function handleHttpRequest(request, response) {
       const accessToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
 
       if (!accessToken) {
-        sendJson(response, 401, { error: "Missing access token" });
+        sendJson(request, response, 401, { error: "Missing access token" });
         return;
       }
 
@@ -100,19 +114,19 @@ async function handleHttpRequest(request, response) {
 
       if (!profile) {
         console.warn("[server] profile not found", { authUserId });
-        sendJson(response, 404, { error: "Profile not found" });
+        sendJson(request, response, 404, { error: "Profile not found" });
         return;
       }
 
-      sendJson(response, 200, profile);
+      sendJson(request, response, 200, profile);
     } catch (error) {
       console.error("[server] profile fetch failed", { authUserId, error });
-      sendJson(response, 500, { error: "Failed to load profile" });
+      sendJson(request, response, 500, { error: "Failed to load profile" });
     }
     return;
   }
 
-  sendJson(response, 404, { error: "Not found" });
+  sendJson(request, response, 404, { error: "Not found" });
 }
 
 const httpServer = createServer((request, response) => {

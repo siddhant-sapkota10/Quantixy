@@ -20,7 +20,7 @@ import { CountdownDisplay } from "@/components/animations/CountdownDisplay";
 import { GameOverOverlay } from "@/components/animations/GameOverOverlay";
 import { SnowfallOverlay } from "@/components/animations/SnowfallOverlay";
 
-type GameStatus = "connecting" | "waiting" | "countdown" | "playing" | "finished" | "opponent-left";
+type GameStatus = "connecting" | "waiting" | "countdown" | "playing" | "finished" | "opponent-left" | "failed";
 
 type ScoreState = {
   you: number;
@@ -82,7 +82,8 @@ const statusHeading: Record<GameStatus, string> = {
   countdown: "Match found",
   playing: "In game",
   finished: "Game over",
-  "opponent-left": "Opponent left the game"
+  "opponent-left": "Opponent left the game",
+  failed: "Connection Failed"
 };
 
 const statusCopy: Record<GameStatus, string> = {
@@ -91,7 +92,8 @@ const statusCopy: Record<GameStatus, string> = {
   countdown: "Get ready. The round starts in a moment.",
   playing: "Answer quickly and keep the score moving.",
   finished: "This round is complete.",
-  "opponent-left": "The match ended because the other player disconnected."
+  "opponent-left": "The match ended because the other player disconnected.",
+  failed: "Could not reach the multiplayer server. Check your connection and try again."
 };
 
 type GameClientProps = {
@@ -109,6 +111,7 @@ export function GameClient({ initialTopic, initialDifficulty }: GameClientProps)
     [difficulty]
   );
 
+  const [retryKey, setRetryKey] = useState(0);
   const [socket, setSocket] = useState<GameSocket | null>(null);
   const [status, setStatus] = useState<GameStatus>("connecting");
   const [scores, setScores] = useState<ScoreState>(initialScores);
@@ -187,7 +190,20 @@ export function GameClient({ initialTopic, initialDifficulty }: GameClientProps)
     setRematchRequested(false);
     setGameResult(null);
 
+    // Mark connection failed after 10 s if the socket never fires "connect".
+    const connectionTimeout = setTimeout(() => {
+      if (!nextSocket.connected) {
+        console.error("[client] connection timed out after 10 s");
+        setStatus("failed");
+      }
+    }, 10000);
+
+    // Track consecutive connect_error events; flip to "failed" after 3.
+    let connectErrorCount = 0;
+
     const handleConnect = async () => {
+      clearTimeout(connectionTimeout);
+      connectErrorCount = 0;
       console.log(`[client] client connected -> id=${nextSocket.id}`);
       const supabase = getSupabaseClient();
       const {
@@ -210,7 +226,11 @@ export function GameClient({ initialTopic, initialDifficulty }: GameClientProps)
     };
 
     const handleConnectError = (error: Error) => {
-      console.error("[client] socket connect_error", error.message);
+      connectErrorCount++;
+      console.error(`[client] socket connect_error (attempt ${connectErrorCount})`, error.message);
+      if (connectErrorCount >= 3) {
+        setStatus("failed");
+      }
     };
 
     const handleAuthRequired = (payload: { message?: string }) => {
@@ -595,6 +615,7 @@ export function GameClient({ initialTopic, initialDifficulty }: GameClientProps)
     nextSocket.on("opponentLeft", handleOpponentLeft);
 
     return () => {
+      clearTimeout(connectionTimeout);
       nextSocket.off("connect", handleConnect);
       nextSocket.off("connect_error", handleConnectError);
       nextSocket.off("authRequired", handleAuthRequired);
@@ -613,7 +634,7 @@ export function GameClient({ initialTopic, initialDifficulty }: GameClientProps)
       nextSocket.disconnect();
       setSocket(null);
     };
-  }, [difficulty, router, topic]);
+  }, [difficulty, retryKey, router, topic]);
 
   const submitAnswer = () => {
     const trimmedAnswer = answer.trim();
@@ -654,6 +675,11 @@ export function GameClient({ initialTopic, initialDifficulty }: GameClientProps)
     setGameResult(null);
     console.log("[client] requestRematch emitted");
     socket.emit("requestRematch");
+  };
+
+  const handleRetryConnection = () => {
+    setStatus("connecting");
+    setRetryKey((k) => k + 1);
   };
 
   const handleChangeTopic = () => {
@@ -926,7 +952,27 @@ export function GameClient({ initialTopic, initialDifficulty }: GameClientProps)
           </div>
         </div>
 
-        {isOpponentLeft ? (
+        {status === "failed" ? (
+          <div className="rounded-[1.75rem] border border-amber-500/30 bg-amber-500/10 p-6 text-center">
+            <p className="text-sm uppercase tracking-[0.3em] text-amber-300">Connection Failed</p>
+            <h2 className="mt-4 text-3xl font-black tracking-tight text-amber-200">
+              Could not reach the game server
+            </h2>
+            <p className="mt-3 text-base text-slate-300">
+              Make sure the server is running and{" "}
+              <code className="rounded bg-slate-800 px-1 py-0.5 text-sm">NEXT_PUBLIC_SERVER_URL</code>{" "}
+              is set correctly.
+            </p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
+              <Button className="w-full sm:w-auto" onClick={handleRetryConnection}>
+                Retry Connection
+              </Button>
+              <Button variant="secondary" className="w-full sm:w-auto" onClick={handleReturnToLobby}>
+                Return to Lobby
+              </Button>
+            </div>
+          </div>
+        ) : isOpponentLeft ? (
           <div className="rounded-[1.75rem] border border-rose-500/30 bg-rose-500/10 p-6 text-center">
             <p className="text-sm uppercase tracking-[0.3em] text-rose-300">Match Ended</p>
             <h2 className="mt-4 text-4xl font-black tracking-tight text-rose-200">

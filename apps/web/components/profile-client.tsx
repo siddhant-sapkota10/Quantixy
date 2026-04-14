@@ -215,7 +215,7 @@ export function ProfileClient() {
         const {
           data: { session }
         } = await supabase.auth.getSession();
-        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL;
+        const socketUrl = process.env.NEXT_PUBLIC_SERVER_URL;
 
         if (!socketUrl || !session?.access_token) {
           console.warn("[profile] skipping backend profile enrichment", {

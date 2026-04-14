@@ -2,12 +2,14 @@
 
 import { io, type Socket } from "socket.io-client";
 
+// NEXT_PUBLIC_SERVER_URL must be set in Vercel (production) env vars.
+// For local dev it falls back to localhost:3001 via .env.local.
 const socketUrl =
-  process.env.NEXT_PUBLIC_SOCKET_URL ??
+  process.env.NEXT_PUBLIC_SERVER_URL ??
   (typeof window !== "undefined" ? window.location.origin : undefined);
 
 if (typeof window !== "undefined") {
-  console.log("[socket] server URL →", socketUrl ?? "(none — check NEXT_PUBLIC_SOCKET_URL)");
+  console.log("[socket] server URL →", socketUrl ?? "(none — check NEXT_PUBLIC_SERVER_URL)");
 }
 
 export type ServerToClientEvents = {
@@ -116,11 +118,14 @@ export type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 export const createGameSocket = (): GameSocket => {
   if (!socketUrl) {
-    throw new Error("NEXT_PUBLIC_SOCKET_URL is not set and no browser origin fallback is available.");
+    throw new Error("NEXT_PUBLIC_SERVER_URL is not set and no browser origin fallback is available.");
   }
 
   return io(socketUrl, {
-    transports: ["websocket"],
-    autoConnect: true
+    // Try WebSocket first; fall back to HTTP long-polling for networks that block WS.
+    transports: ["websocket", "polling"],
+    autoConnect: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1500
   });
 };

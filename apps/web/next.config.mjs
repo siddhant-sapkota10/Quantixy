@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
-const devHost = process.env.NEXT_PUBLIC_SOCKET_URL
-  ? new URL(process.env.NEXT_PUBLIC_SOCKET_URL).hostname
+const devHost = process.env.NEXT_PUBLIC_SERVER_URL
+  ? new URL(process.env.NEXT_PUBLIC_SERVER_URL).hostname
   : undefined;
 
 const nextConfig = {
