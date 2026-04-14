@@ -1,5 +1,34 @@
-node_modules
+# Dependencies
+node_modules/
+
+# Environment variables — NEVER commit these
 .env
-.env.local
-.env.*.local
-.next
+.env.*
+!.env.example
+
+# Next.js build output
+.next/
+out/
+
+# Build artifacts
+dist/
+*.tsbuildinfo
+
+# Logs
+*.log
+logs/
+
+# Vercel
+.vercel/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor / IDE local config
+.claude/
+.idea/
+.vscode/settings.json
+
+# Test output
+coverage/
