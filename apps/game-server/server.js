@@ -143,7 +143,7 @@ function calculateEloChange(playerRating, opponentRating, actualScore) {
 }
 
 function getNextQuestion(game) {
-  const question = generateQuestion(game.topic, game.difficulty);
+  const question = generateQuestion(game.topic, game.difficulty, game.roomId);
   game.questionIndex += 1;
   return question;
 }
