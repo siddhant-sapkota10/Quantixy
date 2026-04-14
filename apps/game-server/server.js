@@ -28,6 +28,7 @@ const CORS_ORIGIN = process.env.CORS_ORIGIN
   : "*";
 
 // Log startup config so Render's log shows exactly what is active.
+console.log("MATHBATTLE BACKEND LIVE VERSION A1");
 console.log("[server] starting up");
 console.log("[server] PORT =", PORT);
 console.log("[server] CORS_ORIGIN =", CORS_ORIGIN);
