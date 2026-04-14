@@ -23,17 +23,16 @@ const {
 
 const HOST = "0.0.0.0";
 const PORT = Number(process.env.PORT || 3001);
-const CORS_ORIGIN = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean)
-  : "*";
 
-// Log startup config so Render's log shows exactly what is active.
-console.log("MATHBATTLE BACKEND LIVE VERSION A1");
-console.log("[server] starting up");
+const ALLOWED_ORIGINS = [
+  "https://math-battle-web.vercel.app",
+  "http://localhost:3000",
+  "http://192.168.1.102:3000",
+];
+
+console.log("MATHBATTLE BACKEND LIVE VERSION A2");
 console.log("[server] PORT =", PORT);
-console.log("[server] CORS_ORIGIN =", CORS_ORIGIN);
-console.log("[server] NODE_ENV =", process.env.NODE_ENV ?? "(not set)");
-console.log("[server] SUPABASE_URL set:", Boolean(process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL));
+console.log("[server] ALLOWED_ORIGINS =", ALLOWED_ORIGINS);
 const MATCH_DURATION_MS = 60000;
 const TIMER_UPDATE_INTERVAL_MS = 1000;
 const FREEZE_DURATION_MS = 2000;
@@ -50,17 +49,12 @@ const activeGames = new Map();
 const VALID_EMOTE_IDS = new Set(EMOTES.map((emote) => emote.id));
 let roomCounter = 1;
 
-// Returns the origin to echo back in Access-Control-Allow-Origin.
-// Echoes the exact request origin when it is in the allowed list so browsers
-// cache the preflight correctly for each origin.
 function getAllowedOrigin(request) {
-  if (CORS_ORIGIN === "*") return "*";
   const requestOrigin = request.headers.origin ?? "";
-  if (Array.isArray(CORS_ORIGIN) && CORS_ORIGIN.includes(requestOrigin)) {
+  if (ALLOWED_ORIGINS.includes(requestOrigin)) {
     return requestOrigin;
   }
-  // Fall back to the first configured origin (better than a wildcard for credentialed requests).
-  return Array.isArray(CORS_ORIGIN) ? (CORS_ORIGIN[0] ?? "*") : CORS_ORIGIN;
+  return ALLOWED_ORIGINS[0];
 }
 
 function sendJson(request, response, statusCode, payload) {
@@ -143,12 +137,10 @@ const httpServer = createServer((request, response) => {
 
 const io = new Server(httpServer, {
   cors: {
-    // When CORS_ORIGIN is "*" (not set), mirror any request origin (origin: true).
-    // When a list is provided, only those origins are allowed.
-    origin: CORS_ORIGIN === "*" ? true : CORS_ORIGIN,
+    origin: ALLOWED_ORIGINS,
     methods: ["GET", "POST"],
-    credentials: true
-  }
+    credentials: false,
+  },
 });
 
 function sanitizeUsername(value) {
