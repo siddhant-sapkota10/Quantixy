@@ -43,7 +43,7 @@ export function OpponentPresence({
     : "thinking";
 
   return (
-    <div className="pointer-events-none flex min-h-[1.75rem] items-center justify-center">
+    <div className="pointer-events-none flex min-h-[2rem] items-center justify-center py-0.5">
       <AnimatePresence mode="wait">
         {displayKey === "waiting-for-you" && (
           <PresencePill key="waiting-for-you" variant="waiting">
@@ -70,6 +70,7 @@ export function OpponentPresence({
         {displayKey === "thinking" && (
           <PresencePill key="thinking" variant="thinking">
             <ThinkingDots />
+            <span className="ml-1.5">Thinking</span>
           </PresencePill>
         )}
       </AnimatePresence>
@@ -81,10 +82,10 @@ export function OpponentPresence({
 
 const variantStyles: Record<string, string> = {
   waiting:
-    "border-amber-400/40 bg-amber-950/70 text-amber-200 shadow-[0_0_10px_rgba(251,191,36,0.12)]",
-  answered: "border-emerald-500/30 bg-emerald-950/60 text-emerald-300",
-  typing:   "border-amber-400/25 bg-slate-900/70 text-amber-300",
-  thinking: "border-slate-700/50 bg-slate-900/40 text-slate-500",
+    "border-amber-400/50 bg-amber-950/80 text-amber-200 shadow-[0_0_12px_rgba(251,191,36,0.18)]",
+  answered: "border-emerald-500/40 bg-emerald-950/70 text-emerald-300",
+  typing:   "border-amber-400/40 bg-slate-900/80 text-amber-300",
+  thinking: "border-slate-600/60 bg-slate-800/60 text-slate-400",
 };
 
 function PresencePill({
@@ -128,19 +129,19 @@ function TypingDots() {
   );
 }
 
-/** Very subtle three-dot pulse — low-key "opponent is alive" signal. */
+/** Pulsing dots — visible "opponent is alive and working" signal. */
 function ThinkingDots() {
   return (
-    <span className="flex items-center gap-[4px]">
+    <span className="flex items-center gap-[3px]">
       {[0, 1, 2].map((i) => (
         <motion.span
           key={i}
-          className="h-[5px] w-[5px] rounded-full bg-slate-600"
-          animate={{ opacity: [0.25, 0.65, 0.25] }}
+          className="h-1.5 w-1.5 rounded-full bg-slate-400"
+          animate={{ opacity: [0.3, 0.9, 0.3] }}
           transition={{
-            duration: 1.6,
+            duration: 1.4,
             repeat: Infinity,
-            delay: i * 0.28,
+            delay: i * 0.25,
             ease: "easeInOut",
           }}
         />
