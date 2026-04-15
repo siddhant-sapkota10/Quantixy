@@ -957,7 +957,7 @@ export function GameClient({
       const ultimateLabel = `${payload.type.replace(/_/g, " ").toUpperCase()}`;
       setEmoteLabels((previous) => [
         ...previous,
-        { id: labelId, who: payload.by, text: `ULTIMATE: ${ultimateLabel}` }
+        { id: labelId, who: payload.by, icon: "⚡", label: `ULTIMATE: ${ultimateLabel}` }
       ]);
       setTimeout(() => {
         setEmoteLabels((previous) => previous.filter((entry) => entry.id !== labelId));
@@ -1509,6 +1509,45 @@ export function GameClient({
   const roomReady = roomPlayerCount === 2;
   const timerLabel = `00:${String(Math.max(0, timer.secondsLeft)).padStart(2, "0")}`;
 
+  /**
+   * Consolidated in-match status display.
+   *
+   * Previously 13 individually-conditional <p> elements stacked inside the
+   * question card, causing the card to grow/shrink by up to ~300 px as
+   * effects toggled on and off — the largest source of layout shift.
+   *
+   * Now: a single prioritised object drives a fixed-height reserved slot.
+   * The card height stays constant regardless of which effects are active.
+   */
+  const primaryStatus = isActiveGameplay
+    ? isFrozen
+      ? { text: "FROZEN ❄️",         color: "text-sky-200",     large: true  }
+      : isShieldBlocked
+      ? { text: "BLOCKED 🛡️",        color: "text-emerald-200", large: true  }
+      : isSlowed
+      ? { text: "Slowed 🐢",          color: "text-amber-200",   large: false }
+      : isBlackoutActive
+      ? { text: "Blackout Active",    color: "text-violet-200",  large: false }
+      : isTitanActive
+      ? { text: "Iron Will Active",   color: "text-emerald-200", large: false }
+      : youEliminated
+      ? { text: "Eliminated ✕",       color: "text-rose-300",    large: false }
+      : null
+    : null;
+
+  const secondaryStatus = (() => {
+    if (!isActiveGameplay) return null;
+    const parts = [
+      isOpponentTitanActive                                 && "Opp. Iron Will",
+      !isFrozen && !isTitanActive && feedback.youShieldActive && "Shield Active 🛡️",
+      !isFrozen && feedback.opponentShieldActive            && "Opponent Shielded",
+      hasDoublePoints                                       && "2× Points Active",
+      opponentHasDoublePoints                               && "Opp. 2× Points",
+      !youEliminated && opponentEliminated                  && "Opponent Eliminated",
+    ].filter(Boolean) as string[];
+    return parts.length > 0 ? parts.join("  ·  ") : null;
+  })();
+
   const getStreakLabel = (streak: number) => {
     if (streak >= 5) {
       return "UNSTOPPABLE";
@@ -1640,7 +1679,7 @@ export function GameClient({
 
         {/* Player panels */}
         <div
-          className={`grid grid-cols-[1fr_auto_1fr] gap-2 items-end rounded-3xl border border-slate-800 bg-slate-900/70 p-3 sm:gap-4 sm:p-4 md:p-6 ${
+          className={`grid grid-cols-[1fr_auto_1fr] gap-2 items-start rounded-3xl border border-slate-800 bg-slate-900/70 p-3 sm:gap-4 sm:p-4 md:p-6 ${
             isFrozen ? "ring-2 ring-sky-300/30 bg-sky-500/10" : ""
           }`}
         >
@@ -1665,6 +1704,8 @@ export function GameClient({
               shieldBlockFlashKey={animState.youShieldBlockFlashKey}
               powerUpGlowKey={animState.youPowerUpGlowKey}
             />
+            {/* Symmetry spacer — matches OpponentPresence min-height in opponent column */}
+            <div className="min-h-[2.25rem]" aria-hidden="true" />
             <PowerUpSlot
               type={feedback.youPowerUpAvailable}
               onUse={handleUsePowerUp}
@@ -1915,72 +1956,23 @@ export function GameClient({
                   </p>
                 )}
 
-                {isFrozen ? (
-                  <p className="mt-4 text-2xl font-black uppercase tracking-[0.25em] text-sky-200">
-                    FROZEN ❄️
-                  </p>
-                ) : null}
-                {isSlowed ? (
-                  <p className="mt-2 text-sm font-semibold uppercase tracking-[0.22em] text-amber-200">
-                    Slowed 🐢
-                  </p>
-                ) : null}
-                {isBlackoutActive ? (
-                  <p className="mt-2 text-sm font-semibold uppercase tracking-[0.22em] text-violet-200">
-                    Blackout Active
-                  </p>
-                ) : null}
-                {isTitanActive ? (
-                  <p className="mt-2 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-200">
-                    Iron Will Active
-                  </p>
-                ) : null}
-                {isOpponentTitanActive ? (
-                  <p className="mt-2 text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">
-                    Opponent Iron Will
-                  </p>
-                ) : null}
-                {isShieldBlocked ? (
-                  <p className="mt-4 text-2xl font-black uppercase tracking-[0.25em] text-emerald-200">
-                    BLOCKED 🛡️
-                  </p>
-                ) : null}
-                {!isFrozen && feedback.youShieldActive && isActiveGameplay ? (
-                  <p className="mt-4 text-sm font-semibold uppercase tracking-[0.24em] text-emerald-300">
-                    Shield Active 🛡️
-                  </p>
-                ) : null}
-                {!isFrozen && feedback.opponentShieldActive && isActiveGameplay ? (
-                  <p className="mt-2 text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">
-                    Opponent Shielded
-                  </p>
-                ) : null}
-                {isActiveGameplay && hasDoublePoints ? (
-                  <p className="mt-2 text-xs font-semibold uppercase tracking-[0.22em] text-sky-200">
-                    Double Points Ready ✖️
-                  </p>
-                ) : null}
-                {isActiveGameplay && opponentHasDoublePoints ? (
-                  <p className="mt-2 text-xs font-semibold uppercase tracking-[0.22em] text-rose-200">
-                    Opponent Has Double Points
-                  </p>
-                ) : null}
-                {/* Opponent "answered" pressure cue is now in OpponentPresence below their panel */}
-                {isActiveGameplay && youEliminated ? (
-                  <p className="mt-2 text-sm font-semibold uppercase tracking-[0.2em] text-rose-300">
-                    Eliminated (3 strikes)
-                  </p>
-                ) : null}
-                {isActiveGameplay && opponentEliminated ? (
-                  <p className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
-                    Opponent eliminated
-                  </p>
-                ) : null}
-                {isActiveGameplay ? (
-                  <p className="mt-2 text-xs uppercase tracking-[0.2em] text-slate-400">
-                    Strikes: {strikes.you}/3
-                  </p>
-                ) : null}
+                {/* Fixed-height status slot — never causes layout shift */}
+                <div className="mt-3 flex min-h-[2.75rem] flex-col items-center justify-center gap-0.5">
+                  {primaryStatus ? (
+                    <p
+                      className={`font-black uppercase tracking-[0.22em] ${
+                        primaryStatus.large ? "text-xl sm:text-2xl" : "text-sm"
+                      } ${primaryStatus.color}`}
+                    >
+                      {primaryStatus.text}
+                    </p>
+                  ) : null}
+                  {secondaryStatus ? (
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 sm:text-[11px]">
+                      {secondaryStatus}
+                    </p>
+                  ) : null}
+                </div>
 
                 {/* Frost burst overlay */}
                 <FrostBurst active={animState.frostBurstActive} />
