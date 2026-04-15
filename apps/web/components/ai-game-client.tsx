@@ -46,6 +46,9 @@ const initialFeedback: FeedbackState = {
 const BOT_AVATAR = "🤖";
 const BOT_NAME = "MathBot";
 const GAME_DURATION_S = 60;
+const FINAL_PHASE_SECONDS = 10;
+const CLUTCH_SECONDS = 3;
+const CLOSE_SCORE_DELTA = 2;
 
 // ---------------------------------------------------------------------------
 // Component
@@ -78,6 +81,12 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
   const [answer, setAnswer] = useState("");
   const [countdownValue, setCountdownValue] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
+  const [isFinalPhase, setIsFinalPhase] = useState(false);
+  const [scoreImpactKey, setScoreImpactKey] = useState({ you: 0, opponent: 0 });
+  const [clutchMoment, setClutchMoment] = useState<{ key: number; side: "you" | "opponent" | null }>({
+    key: 0,
+    side: null
+  });
   const [gameResult, setGameResult] = useState<{
     result: "win" | "loss" | "draw";
   } | null>(null);
@@ -95,6 +104,8 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
   const countdownLaunchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isRunningRef = useRef(false);
   const secondsRef = useRef(GAME_DURATION_S);
+  const finalPhaseTriggeredRef = useRef(false);
+  const finalSecondTickRef = useRef<number | null>(null);
   // Incremented on every cleanup — any in-flight countdown from a prior run checks this
   // and exits early. Prevents React Strict Mode's double-invoke from spawning two intervals.
   const countdownGenRef = useRef(0);
@@ -113,6 +124,35 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
   useEffect(() => { feedbackRef.current = feedback; }, [feedback]);
   useEffect(() => { strikesRef.current = strikes; }, [strikes]);
   useEffect(() => { eliminatedRef.current = eliminated; }, [eliminated]);
+
+  const playFinalSecondCue = (secondsLeft: number) => {
+    if (secondsLeft <= 0 || secondsLeft > FINAL_PHASE_SECONDS) {
+      return;
+    }
+    if (finalSecondTickRef.current === secondsLeft) {
+      return;
+    }
+    finalSecondTickRef.current = secondsLeft;
+    soundManager.play(secondsLeft <= CLUTCH_SECONDS ? "fast" : "tick");
+  };
+
+  const triggerEndgameScoreImpact = (side: "you" | "opponent") => {
+    const secondsLeft = secondsRef.current;
+    const nextYou = side === "you" ? scoresRef.current.you + 1 : scoresRef.current.you;
+    const nextOpponent = side === "opponent" ? scoresRef.current.opponent + 1 : scoresRef.current.opponent;
+    const boost = Math.abs(nextYou - nextOpponent) <= CLOSE_SCORE_DELTA ? 2 : 1;
+
+    if (secondsLeft <= FINAL_PHASE_SECONDS) {
+      setScoreImpactKey((previous) => ({
+        ...previous,
+        [side]: previous[side] + boost
+      }));
+    }
+    if (secondsLeft <= CLUTCH_SECONDS) {
+      setClutchMoment((previous) => ({ side, key: previous.key + 1 }));
+      soundManager.play("fast");
+    }
+  };
 
   // ---------------------------------------------------------------------------
   // Load player profile once
@@ -197,6 +237,7 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
 
         if (willScore) {
           triggerScoreGlow("opponent");
+          triggerEndgameScoreImpact("opponent");
           const prev = feedbackRef.current;
           const newStreak = prev.opponentStreak + 1;
 
@@ -256,6 +297,11 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
     setCurrentQuestion("");
     setAnswer("");
     setGameResult(null);
+    setIsFinalPhase(false);
+    setScoreImpactKey({ you: 0, opponent: 0 });
+    setClutchMoment({ key: 0, side: null });
+    finalPhaseTriggeredRef.current = false;
+    finalSecondTickRef.current = null;
     secondsRef.current = GAME_DURATION_S;
     setSecondsLeft(GAME_DURATION_S);
     clearTimers();
@@ -293,6 +339,7 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
               return;
             }
             secondsRef.current -= 1;
+            playFinalSecondCue(secondsRef.current);
             setSecondsLeft(secondsRef.current);
             if (secondsRef.current <= 0) {
               finishGame();
@@ -335,6 +382,21 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
     }
   }, [eliminated.opponent, eliminated.you, finishGame, status]);
 
+  useEffect(() => {
+    if (status !== "playing") {
+      setIsFinalPhase(false);
+      finalPhaseTriggeredRef.current = false;
+      finalSecondTickRef.current = null;
+      return;
+    }
+
+    if (!finalPhaseTriggeredRef.current && secondsLeft <= FINAL_PHASE_SECONDS) {
+      finalPhaseTriggeredRef.current = true;
+      setIsFinalPhase(true);
+      soundManager.play("tick");
+    }
+  }, [secondsLeft, status]);
+
   // ---------------------------------------------------------------------------
   // Player submits an answer
   // ---------------------------------------------------------------------------
@@ -350,6 +412,7 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
       if (aiTimeoutRef.current) { clearTimeout(aiTimeoutRef.current); aiTimeoutRef.current = null; }
 
       triggerScoreGlow("you");
+      triggerEndgameScoreImpact("you");
       const prev = feedbackRef.current;
       const newStreak = prev.youStreak + 1;
 
@@ -389,6 +452,10 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
   const isPlaying = status === "playing";
   const isFinished = status === "finished";
   const isCountdown = status === "countdown";
+  const showFinalPhase = isPlaying && isFinalPhase;
+  const isFinalSeconds = isPlaying && secondsLeft <= CLUTCH_SECONDS;
+  const isCloseScore = Math.abs(scores.you - scores.opponent) <= CLOSE_SCORE_DELTA;
+  const resultIsClose = isFinished && isCloseScore;
   const youEliminated = eliminated.you;
   const opponentEliminated = eliminated.opponent;
 
@@ -416,6 +483,45 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
   return (
     <section className="relative w-full max-w-4xl rounded-[2rem] border border-white/10 bg-slate-950/70 p-4 shadow-glow backdrop-blur sm:p-6 md:p-10">
       <GameOverOverlay result={isFinished ? (gameResult?.result ?? null) : null} />
+      <motion.div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-[1] rounded-[2rem]"
+        animate={{
+          opacity: showFinalPhase ? (isFinalSeconds ? 0.4 : 0.26) : 0,
+          scale: showFinalPhase ? [1, 1.01, 1] : 1
+        }}
+        transition={{
+          opacity: { duration: 0.22, ease: "easeOut" },
+          scale: {
+            duration: isFinalSeconds ? 0.55 : 1.1,
+            repeat: showFinalPhase ? Number.POSITIVE_INFINITY : 0,
+            repeatType: "mirror",
+            ease: "easeInOut"
+          }
+        }}
+        style={{
+          background:
+            "radial-gradient(ellipse at center, rgba(248,113,113,0.08) 0%, rgba(15,23,42,0.35) 64%, rgba(2,6,23,0.48) 100%)"
+        }}
+      />
+      <AnimatePresence>
+        {clutchMoment.key > 0 && clutchMoment.side ? (
+          <motion.div
+            key={`ai-clutch-${clutchMoment.key}`}
+            className="pointer-events-none absolute inset-0 z-[2] rounded-[2rem]"
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: [0, 0.38, 0], scale: [0.98, 1.01, 1] }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.34, ease: "easeOut" }}
+            style={{
+              background:
+                clutchMoment.side === "you"
+                  ? "radial-gradient(ellipse at 24% 50%, rgba(56,189,248,0.34) 0%, transparent 65%)"
+                  : "radial-gradient(ellipse at 76% 50%, rgba(251,113,133,0.34) 0%, transparent 65%)"
+            }}
+          />
+        ) : null}
+      </AnimatePresence>
 
       {/* Streak-broken popup */}
       <AnimatePresence>
@@ -442,13 +548,13 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
         }}
       />
 
-      <div className="flex flex-col gap-5 sm:gap-6 md:gap-8">
+      <div className="relative z-10 flex flex-col gap-5 sm:gap-6 md:gap-8">
         {/* Header */}
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.25em] text-sky-300">
             <span>Topic: {topicLabel}</span>
             <span>Difficulty: {difficultyLabel}</span>
-            <span>Time: {timerLabel}</span>
+            <span className={showFinalPhase ? "text-rose-300" : undefined}>Time: {timerLabel}</span>
             <span className="rounded-full border border-violet-400/30 bg-violet-500/10 px-2 py-0.5 text-violet-300">
               vs AI
             </span>
@@ -481,6 +587,22 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
               pulseKey={feedback.youPulseKey}
               scoreGlowKey={animState.youScoreGlowKey}
             />
+            <AnimatePresence>
+              {scoreImpactKey.you > 0 ? (
+                <motion.div
+                  key={`ai-score-you-${scoreImpactKey.you}`}
+                  className="pointer-events-none absolute inset-0 z-10 rounded-3xl"
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: [0, isCloseScore ? 0.46 : 0.32, 0], scale: [0.98, 1.01, 1] }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: isCloseScore ? 0.34 : 0.28, ease: "easeOut" }}
+                  style={{
+                    background:
+                      "radial-gradient(ellipse at 24% 34%, rgba(56,189,248,0.46) 0%, rgba(56,189,248,0.12) 34%, transparent 68%)"
+                  }}
+                />
+              ) : null}
+            </AnimatePresence>
             <FloatingLabel items={youFloatingItems} />
           </div>
 
@@ -502,6 +624,22 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
               pulseKey={feedback.opponentPulseKey}
               scoreGlowKey={animState.opponentScoreGlowKey}
             />
+            <AnimatePresence>
+              {scoreImpactKey.opponent > 0 ? (
+                <motion.div
+                  key={`ai-score-opp-${scoreImpactKey.opponent}`}
+                  className="pointer-events-none absolute inset-0 z-10 rounded-3xl"
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: [0, isCloseScore ? 0.46 : 0.32, 0], scale: [0.98, 1.01, 1] }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: isCloseScore ? 0.34 : 0.28, ease: "easeOut" }}
+                  style={{
+                    background:
+                      "radial-gradient(ellipse at 76% 34%, rgba(251,113,133,0.46) 0%, rgba(251,113,133,0.12) 34%, transparent 68%)"
+                  }}
+                />
+              ) : null}
+            </AnimatePresence>
             <FloatingLabel items={opponentFloatingItems} />
           </div>
         </div>
@@ -511,9 +649,28 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
           <>
             <div className="relative rounded-[1.75rem] border border-slate-800 bg-slate-900/80 p-4 text-center sm:p-6">
               {isPlaying && (
-                <div className="absolute right-3 top-3 rounded-full border border-slate-700 bg-slate-950/80 px-2 py-1 text-sm font-black tracking-[0.15em] text-sky-200 sm:right-5 sm:top-5 sm:px-4 sm:py-2 sm:text-lg sm:tracking-[0.2em]">
+                <motion.div
+                  className={`absolute right-3 top-3 rounded-full border px-2 py-1 text-sm font-black tracking-[0.15em] sm:right-5 sm:top-5 sm:px-4 sm:py-2 sm:text-lg sm:tracking-[0.2em] ${
+                    showFinalPhase
+                      ? "border-rose-400/70 bg-rose-950/70 text-rose-100 shadow-[0_0_18px_rgba(248,113,113,0.35)]"
+                      : "border-slate-700 bg-slate-950/80 text-sky-200"
+                  }`}
+                  animate={
+                    showFinalPhase
+                      ? {
+                          scale: isFinalSeconds ? [1, 1.08, 1] : [1, 1.04, 1],
+                          opacity: [1, 0.92, 1]
+                        }
+                      : { scale: 1, opacity: 1 }
+                  }
+                  transition={{
+                    duration: isFinalSeconds ? 0.5 : 0.9,
+                    repeat: showFinalPhase ? Number.POSITIVE_INFINITY : 0,
+                    ease: "easeInOut"
+                  }}
+                >
                   {timerLabel}
-                </div>
+                </motion.div>
               )}
 
               <p className={`text-sm uppercase tracking-[0.3em] text-slate-500 ${isPlaying ? "pr-14 sm:pr-0" : ""}`}>
@@ -572,7 +729,7 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
                   : gameResult?.result === "draw"
                   ? "border-amber-400/40 bg-amber-500/10"
                   : "border-rose-500/30 bg-rose-500/10"
-              }`}
+              } ${resultIsClose ? "shadow-[0_0_30px_rgba(248,113,113,0.18)]" : ""}`}
             >
               <p
                 className={`text-sm uppercase tracking-[0.3em] ${
@@ -607,6 +764,11 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
                   ? `Dead heat against ${BOT_NAME}.`
                   : `${BOT_NAME} won this round. Try again!`}
               </p>
+              {resultIsClose ? (
+                <p className="mt-2 text-xs font-semibold uppercase tracking-[0.22em] text-amber-200">
+                  Photo Finish
+                </p>
+              ) : null}
               <p className="mt-4 text-sm uppercase tracking-[0.25em] text-slate-400 sm:mt-6">
                 Final Score
               </p>

@@ -74,12 +74,12 @@ export function EmoteBar({
         disabled={disabled || coolingDown}
         aria-label={coolingDown ? "Emote cooldown" : "Send emote (keys 1–6)"}
         title={coolingDown ? "Emote cooldown…" : "Send emote  (keys 1–6)"}
-        className={`relative flex h-11 w-11 items-center justify-center rounded-full border text-xl transition-all duration-200 select-none ${
+        className={`relative flex h-11 w-11 items-center justify-center rounded-full border text-xl transition-all duration-150 ease-out select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
           coolingDown
-            ? "border-slate-700 bg-slate-900/60 opacity-50 cursor-not-allowed"
+            ? "cursor-not-allowed border-slate-700 bg-slate-900/60 opacity-55 saturate-50"
             : open
             ? "border-amber-400/60 bg-amber-950/60 shadow-[0_0_12px_rgba(251,191,36,0.18)]"
-            : "border-slate-700 bg-slate-900 hover:border-slate-500 hover:bg-slate-800 active:scale-90"
+            : "border-slate-700 bg-slate-900 hover:border-slate-500 hover:bg-slate-800 active:scale-[0.96]"
         }`}
       >
         💬
@@ -134,7 +134,7 @@ function EmoteButton({ emote, index, onSend }: EmoteButtonProps) {
       onClick={() => onSend(emote.id)}
       title={`${emote.label} (${index + 1})`}
       aria-label={emote.label}
-      className="group relative flex h-12 w-12 items-center justify-center rounded-xl border border-slate-700 bg-slate-950/80 text-2xl transition-all hover:border-amber-400/40 hover:bg-slate-800 active:scale-90 active:border-amber-400/70"
+      className="group relative flex h-12 w-12 items-center justify-center rounded-xl border border-slate-700 bg-slate-950/80 text-2xl transition-all duration-150 ease-out hover:border-amber-400/40 hover:bg-slate-800 active:scale-[0.96] active:border-amber-400/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60"
     >
       <span className="pointer-events-none">{emote.icon}</span>
       {/* Keyboard shortcut badge — shown on hover */}

@@ -215,6 +215,10 @@ const initialFeedback: FeedbackState = {
   questionWinner: null
 };
 
+const FINAL_PHASE_SECONDS = 10;
+const CLUTCH_SECONDS = 3;
+const CLOSE_SCORE_DELTA = 2;
+
 function formatRoomCode(code: string) {
   const clean = String(code ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
 
@@ -320,6 +324,11 @@ export function GameClient({
   const [roomLobby, setRoomLobby] = useState<RoomLobbyState | null>(null);
   const [roomErrorMessage, setRoomErrorMessage] = useState<string | null>(null);
   const [roomNotice, setRoomNotice] = useState<string | null>(null);
+  const [roomStartPending, setRoomStartPending] = useState(false);
+  const [copyRoomPending, setCopyRoomPending] = useState(false);
+  const [leavePending, setLeavePending] = useState(false);
+  const [ultimateActivating, setUltimateActivating] = useState(false);
+  const ultimateActivateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [gameResult, setGameResult] = useState<{
     result: "win" | "loss" | "draw";
     message: string;
@@ -339,6 +348,15 @@ export function GameClient({
   const [opponentUltimateFxKey, setOpponentUltimateFxKey] = useState(0);
   const [youUltimateFxType, setYouUltimateFxType] = useState<UltimateType | null>(null);
   const [opponentUltimateFxType, setOpponentUltimateFxType] = useState<UltimateType | null>(null);
+  const [isFinalPhase, setIsFinalPhase] = useState(false);
+  const [scoreImpactKey, setScoreImpactKey] = useState({ you: 0, opponent: 0 });
+  const [clutchMoment, setClutchMoment] = useState<{ key: number; side: "you" | "opponent" | null }>({
+    key: 0,
+    side: null
+  });
+  const finalPhaseTriggeredRef = useRef(false);
+  const timerSecondsRef = useRef(initialTimer.secondsLeft);
+  const finalSecondTickRef = useRef<number | null>(null);
 
   // Animation hook
   const {
@@ -363,6 +381,61 @@ export function GameClient({
   useEffect(() => {
     scoresRef.current = scores;
   }, [scores]);
+
+  useEffect(() => {
+    timerSecondsRef.current = timer.secondsLeft;
+  }, [timer.secondsLeft]);
+
+  useEffect(() => {
+    if (status !== "playing") {
+      setIsFinalPhase(false);
+      finalPhaseTriggeredRef.current = false;
+      finalSecondTickRef.current = null;
+      return;
+    }
+
+    if (!finalPhaseTriggeredRef.current && timer.secondsLeft <= FINAL_PHASE_SECONDS) {
+      finalPhaseTriggeredRef.current = true;
+      setIsFinalPhase(true);
+      soundManager.play("tick");
+    }
+  }, [status, timer.secondsLeft]);
+
+  useEffect(() => {
+    if (status !== "room-lobby") {
+      setRoomStartPending(false);
+      setCopyRoomPending(false);
+    }
+    if (status !== "playing") {
+      setUltimateActivating(false);
+    }
+  }, [status]);
+
+  useEffect(() => {
+    if (!roomLobby?.canStart) {
+      setRoomStartPending(false);
+    }
+  }, [roomLobby?.canStart]);
+
+  useEffect(() => {
+    if (!ultimate.ready || ultimate.used) {
+      setUltimateActivating(false);
+    }
+  }, [ultimate.ready, ultimate.used]);
+
+  const playFinalSecondCue = (secondsLeft: number) => {
+    if (secondsLeft <= 0 || secondsLeft > FINAL_PHASE_SECONDS) {
+      return;
+    }
+
+    if (finalSecondTickRef.current === secondsLeft) {
+      return;
+    }
+
+    finalSecondTickRef.current = secondsLeft;
+    // Reuses existing sound IDs; easy to swap for dedicated endgame SFX later.
+    soundManager.play(secondsLeft <= CLUTCH_SECONDS ? "fast" : "tick");
+  };
 
   useEffect(() => {
     const nextSocket = createGameSocket();
@@ -395,15 +468,29 @@ export function GameClient({
     setRoomLobby(null);
     setRoomErrorMessage(null);
     setRoomNotice(null);
+    setRoomStartPending(false);
+    setCopyRoomPending(false);
+    setLeavePending(false);
+    setUltimateActivating(false);
     setGameResult(null);
     setUltimateCue(null);
     setYouUltimateFxKey(0);
     setOpponentUltimateFxKey(0);
     setYouUltimateFxType(null);
     setOpponentUltimateFxType(null);
+    setIsFinalPhase(false);
+    setScoreImpactKey({ you: 0, opponent: 0 });
+    setClutchMoment({ key: 0, side: null });
+    finalPhaseTriggeredRef.current = false;
+    timerSecondsRef.current = initialTimer.secondsLeft;
+    finalSecondTickRef.current = null;
     if (ultimateCueTimeoutRef.current) {
       clearTimeout(ultimateCueTimeoutRef.current);
       ultimateCueTimeoutRef.current = null;
+    }
+    if (ultimateActivateTimeoutRef.current) {
+      clearTimeout(ultimateActivateTimeoutRef.current);
+      ultimateActivateTimeoutRef.current = null;
     }
     currentMatchRoomIdRef.current = null;
 
@@ -611,6 +698,8 @@ export function GameClient({
       console.log("[client] roomError received", payload);
       setRoomErrorMessage(payload.message || "Room action failed.");
       setRoomNotice(null);
+      setRoomStartPending(false);
+      setCopyRoomPending(false);
       if (roomJoinMode === "join") {
         setStatus("failed");
       }
@@ -652,6 +741,9 @@ export function GameClient({
       opponentInfernoPending?: boolean;
     }) => {
       console.log("[client] matchFound received", payload);
+      setRoomStartPending(false);
+      setCopyRoomPending(false);
+      setLeavePending(false);
       currentMatchRoomIdRef.current =
         payload.roomId ?? payload.room ?? payload.roomInfo?.id ?? currentMatchRoomIdRef.current;
       setYourName(payload.yourName ?? "You");
@@ -810,6 +902,8 @@ export function GameClient({
       opponentInfernoPending?: boolean;
     }) => {
       console.log("[client] timerUpdate received", payload);
+      timerSecondsRef.current = payload.secondsLeft;
+      playFinalSecondCue(payload.secondsLeft);
       setTimer({
         secondsLeft: payload.secondsLeft
       });
@@ -986,8 +1080,36 @@ export function GameClient({
       const prevScores = scoresRef.current;
       const newYouScore = nextScores?.you ?? payload.you ?? 0;
       const newOpponentScore = nextScores?.opponent ?? payload.opponent ?? 0;
+      const youScored = newYouScore > prevScores.you;
+      const opponentScored = newOpponentScore > prevScores.opponent;
       if (newYouScore > prevScores.you) triggerScoreGlow("you");
       if (newOpponentScore > prevScores.opponent) triggerScoreGlow("opponent");
+      const secondsRemaining = timerSecondsRef.current;
+      const isCloseRace = Math.abs(newYouScore - newOpponentScore) <= CLOSE_SCORE_DELTA;
+      const endgameBoost = isCloseRace ? 2 : 1;
+      if (secondsRemaining <= FINAL_PHASE_SECONDS) {
+        if (youScored) {
+          setScoreImpactKey((previous) => ({
+            ...previous,
+            you: previous.you + endgameBoost
+          }));
+        }
+        if (opponentScored) {
+          setScoreImpactKey((previous) => ({
+            ...previous,
+            opponent: previous.opponent + endgameBoost
+          }));
+        }
+      }
+      if (secondsRemaining <= CLUTCH_SECONDS) {
+        if (youScored) {
+          setClutchMoment((previous) => ({ side: "you", key: previous.key + 1 }));
+          soundManager.play("fast");
+        } else if (opponentScored) {
+          setClutchMoment((previous) => ({ side: "opponent", key: previous.key + 1 }));
+          soundManager.play("fast");
+        }
+      }
 
       // Use "in" check to distinguish explicit null (clear) from absent (keep previous)
       const payloadYouAvailable = (payload as { powerUpsAvailable?: PowerUpId[] }).powerUpsAvailable;
@@ -1161,6 +1283,7 @@ export function GameClient({
       opponentInfernoPending?: boolean;
     }) => {
       console.log("[client] ultimateApplied received", payload);
+      setUltimateActivating(false);
       syncUltimateFromPayload(payload);
       setFeedback((previous) => ({
         ...previous,
@@ -1240,6 +1363,7 @@ export function GameClient({
       opponentInfernoPending?: boolean;
     }) => {
       console.log("[client] ultimateEnded received", payload);
+      setUltimateActivating(false);
       syncUltimateFromPayload(payload);
       setFeedback((previous) => ({
         ...previous,
@@ -1466,6 +1590,11 @@ export function GameClient({
       };
     }) => {
       console.log("[client] gameOver received", payload);
+      setUltimateActivating(false);
+      setRoomStartPending(false);
+      setCopyRoomPending(false);
+      setLeavePending(false);
+      setIsFinalPhase(false);
       const result =
         payload.result === "loss" ? "loss" : payload.result === "draw" ? "draw" : "win";
 
@@ -1574,6 +1703,9 @@ export function GameClient({
       setRematchRequested(false);
       setOpponentRematchRequested(false);
       setRematchProgress({ requestedPlayers: 0, requiredPlayers: 2 });
+      setIsFinalPhase(false);
+      setScoreImpactKey({ you: 0, opponent: 0 });
+      setClutchMoment({ key: 0, side: null });
       setGameResult({
         result: "loss",
         message: payload.message ?? "Opponent left the game",
@@ -1615,6 +1747,10 @@ export function GameClient({
       if (ultimateCueTimeoutRef.current) {
         clearTimeout(ultimateCueTimeoutRef.current);
         ultimateCueTimeoutRef.current = null;
+      }
+      if (ultimateActivateTimeoutRef.current) {
+        clearTimeout(ultimateActivateTimeoutRef.current);
+        ultimateActivateTimeoutRef.current = null;
       }
       nextSocket.off("connect", handleConnect);
       nextSocket.off("connect_error", handleConnectError);
@@ -1701,6 +1837,7 @@ export function GameClient({
   };
 
   const handleChangeTopic = () => {
+    setLeavePending(true);
     if (socket && roomLobby) {
       socket.emit("leaveRoom");
     }
@@ -1709,6 +1846,10 @@ export function GameClient({
   };
 
   const handleReturnToLobby = () => {
+    if (leavePending) {
+      return;
+    }
+    setLeavePending(true);
     if (socket && roomLobby) {
       socket.emit("leaveRoom");
     }
@@ -1717,25 +1858,29 @@ export function GameClient({
   };
 
   const handleStartRoomMatch = () => {
-    if (!socket || !roomLobby?.isHost || !roomLobby.canStart) {
+    if (!socket || !roomLobby?.isHost || !roomLobby.canStart || roomStartPending) {
       return;
     }
 
+    setRoomStartPending(true);
     socket.emit("startRoomMatch");
   };
 
   const handleCopyRoomCode = async () => {
-    if (!roomLobby?.roomCode) {
+    if (!roomLobby?.roomCode || copyRoomPending) {
       return;
     }
 
     try {
+      setCopyRoomPending(true);
       await navigator.clipboard.writeText(roomLobby.roomCode);
       setRoomNotice("Room code copied.");
       setTimeout(() => setRoomNotice(null), 1200);
     } catch {
       setRoomErrorMessage("Could not copy room code.");
       setRoomNotice(null);
+    } finally {
+      setCopyRoomPending(false);
     }
   };
 
@@ -1757,10 +1902,18 @@ export function GameClient({
       return;
     }
 
-    if (!ultimate.ready || ultimate.used || !ultimate.implemented || youEliminated) {
+    if (!ultimate.ready || ultimate.used || !ultimate.implemented || youEliminated || ultimateActivating) {
       return;
     }
 
+    setUltimateActivating(true);
+    if (ultimateActivateTimeoutRef.current) {
+      clearTimeout(ultimateActivateTimeoutRef.current);
+    }
+    ultimateActivateTimeoutRef.current = setTimeout(() => {
+      setUltimateActivating(false);
+      ultimateActivateTimeoutRef.current = null;
+    }, 1400);
     socket.emit("activateUltimate");
   };
 
@@ -1824,7 +1977,12 @@ export function GameClient({
   const isOpponentGuardianShieldActive =
     ultimate.opponentFortressUntil > Date.now() && ultimate.opponentFortressBlocksRemaining > 0;
   const canUseUltimate =
-    isActiveGameplay && ultimate.ready && !ultimate.used && ultimate.implemented && !youEliminated;
+    isActiveGameplay &&
+    ultimate.ready &&
+    !ultimate.used &&
+    ultimate.implemented &&
+    !youEliminated &&
+    !ultimateActivating;
   const roomPlayerCount = roomLobby?.players.length ?? 0;
   const roomReady = roomPlayerCount === 2;
   const rematchCtaLabel = rematchRequested
@@ -1840,6 +1998,10 @@ export function GameClient({
         ? `${rematchProgress.requestedPlayers}/${rematchProgress.requiredPlayers} players ready`
         : " ";
   const timerLabel = `00:${String(Math.max(0, timer.secondsLeft)).padStart(2, "0")}`;
+  const isCloseScore = Math.abs(scores.you - scores.opponent) <= CLOSE_SCORE_DELTA;
+  const isFinalSeconds = isActiveGameplay && timer.secondsLeft <= CLUTCH_SECONDS;
+  const showFinalPhase = isActiveGameplay && isFinalPhase;
+  const resultIsClose = isFinished && isCloseScore;
   const now = Date.now();
 
   /**
@@ -1863,6 +2025,8 @@ export function GameClient({
       ? { text: "Eliminated ✕",     color: "text-rose-300",    large: false }
       : feedback.youAnsweredCurrent
       ? { text: "Waiting...",        color: "text-slate-400",   large: false }
+      : showFinalPhase
+      ? { text: isFinalSeconds ? "Final Seconds" : "Final 10 Seconds", color: "text-rose-200", large: false }
       : null
     : null;
 
@@ -1992,7 +2156,7 @@ export function GameClient({
                   : used
                   ? "border-slate-700 bg-slate-900/60 text-slate-500"
                   : "border-slate-800 bg-slate-950/70 text-slate-400"
-              } ${clickable ? "" : "cursor-default"}`}
+              } ${clickable ? "active:scale-[0.975]" : "cursor-default opacity-70 saturate-50"} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60`}
             >
               <p className={`truncate font-semibold ${used ? "line-through decoration-slate-600" : ""}`}>
                 {powerUp.icon} {powerUp.name}
@@ -2071,6 +2235,45 @@ export function GameClient({
       {/* Game-over overlays (win glow / lose vignette) */}
       <GameOverOverlay result={isFinished ? (gameResult?.result ?? null) : null} />
       <UltimateActivationOverlay cue={ultimateCue} />
+      <motion.div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-[1] rounded-[2rem]"
+        animate={{
+          opacity: showFinalPhase ? (isFinalSeconds ? 0.42 : 0.28) : 0,
+          scale: showFinalPhase ? [1, 1.01, 1] : 1
+        }}
+        transition={{
+          opacity: { duration: 0.24, ease: "easeOut" },
+          scale: {
+            duration: isFinalSeconds ? 0.55 : 1.15,
+            repeat: showFinalPhase ? Number.POSITIVE_INFINITY : 0,
+            repeatType: "mirror",
+            ease: "easeInOut"
+          }
+        }}
+        style={{
+          background:
+            "radial-gradient(ellipse at center, rgba(248,113,113,0.08) 0%, rgba(15,23,42,0.36) 64%, rgba(2,6,23,0.5) 100%)"
+        }}
+      />
+      <AnimatePresence>
+        {clutchMoment.key > 0 && clutchMoment.side ? (
+          <motion.div
+            key={`clutch-${clutchMoment.key}`}
+            className="pointer-events-none absolute inset-0 z-[2] rounded-[2rem]"
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: [0, 0.4, 0], scale: [0.98, 1.01, 1] }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.34, ease: "easeOut" }}
+            style={{
+              background:
+                clutchMoment.side === "you"
+                  ? "radial-gradient(ellipse at 24% 50%, rgba(56,189,248,0.34) 0%, transparent 65%)"
+                  : "radial-gradient(ellipse at 76% 50%, rgba(251,113,133,0.34) 0%, transparent 65%)"
+            }}
+          />
+        ) : null}
+      </AnimatePresence>
 
       {/* Streak-broken popup */}
       <AnimatePresence>
@@ -2090,12 +2293,12 @@ export function GameClient({
 
       <SoundToggle muted={muted} onToggle={handleToggleSound} />
 
-      <div className="flex flex-col gap-4 sm:gap-5 lg:gap-6">
+      <div className="relative z-10 flex flex-col gap-4 sm:gap-5 lg:gap-6">
         <div className="space-y-2.5 sm:space-y-3">
           <div className="flex min-h-[1.5rem] flex-wrap items-center gap-x-3 gap-y-1 text-xs uppercase tracking-[0.2em] text-sky-300">
             <span>Topic: {topicLabel}</span>
             <span>Difficulty: {difficultyLabel}</span>
-            <span>Time: {timerLabel}</span>
+            <span className={showFinalPhase ? "text-rose-300" : undefined}>Time: {timerLabel}</span>
           </div>
 
           <h1 className="min-h-[2.5rem] text-2xl font-black tracking-tight text-white sm:min-h-[3rem] sm:text-3xl md:min-h-[3.5rem] md:text-4xl lg:text-5xl">
@@ -2145,6 +2348,22 @@ export function GameClient({
               ultimateFxKey={youUltimateFxKey}
               ultimateFxType={youUltimateFxType}
             />
+            <AnimatePresence>
+              {scoreImpactKey.you > 0 ? (
+                <motion.div
+                  key={`score-you-${scoreImpactKey.you}`}
+                  className="pointer-events-none absolute inset-0 z-10 rounded-3xl"
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: [0, isCloseScore ? 0.48 : 0.34, 0], scale: [0.98, 1.01, 1] }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: isCloseScore ? 0.34 : 0.28, ease: "easeOut" }}
+                  style={{
+                    background:
+                      "radial-gradient(ellipse at 25% 35%, rgba(56,189,248,0.46) 0%, rgba(56,189,248,0.12) 34%, transparent 68%)"
+                  }}
+                />
+              ) : null}
+            </AnimatePresence>
             {/* Symmetry spacer - matches OpponentPresence min-height in opponent column */}
             <div className="min-h-[2.5rem]" aria-hidden="true" />
             <div
@@ -2187,6 +2406,8 @@ export function GameClient({
                 className={`mt-2 w-full py-2 text-xs ${canUseUltimate ? "shadow-lg shadow-emerald-500/20" : ""}`}
                 onClick={handleActivateUltimate}
                 disabled={!canUseUltimate}
+                loading={ultimateActivating}
+                loadingText="Activating..."
               >
                 {ultimate.used
                   ? "Ultimate Used"
@@ -2228,6 +2449,22 @@ export function GameClient({
               ultimateFxKey={opponentUltimateFxKey}
               ultimateFxType={opponentUltimateFxType}
             />
+            <AnimatePresence>
+              {scoreImpactKey.opponent > 0 ? (
+                <motion.div
+                  key={`score-opp-${scoreImpactKey.opponent}`}
+                  className="pointer-events-none absolute inset-0 z-10 rounded-3xl"
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: [0, isCloseScore ? 0.48 : 0.34, 0], scale: [0.98, 1.01, 1] }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: isCloseScore ? 0.34 : 0.28, ease: "easeOut" }}
+                  style={{
+                    background:
+                      "radial-gradient(ellipse at 75% 35%, rgba(251,113,133,0.46) 0%, rgba(251,113,133,0.12) 34%, transparent 68%)"
+                  }}
+                />
+              ) : null}
+            </AnimatePresence>
             <OpponentPresence
               activity={opponentActivity}
               opponentAnswered={feedback.opponentAnsweredCurrent}
@@ -2302,7 +2539,13 @@ export function GameClient({
                   {formatRoomCode(roomLobby.roomCode)}
                 </p>
               </div>
-              <Button variant="secondary" className="px-4 py-2 text-sm" onClick={handleCopyRoomCode}>
+              <Button
+                variant="secondary"
+                className="px-4 py-2 text-sm"
+                onClick={handleCopyRoomCode}
+                loading={copyRoomPending}
+                loadingText="Copying..."
+              >
                 Copy Code
               </Button>
             </div>
@@ -2339,7 +2582,9 @@ export function GameClient({
               <Button
                 className="w-full"
                 onClick={handleStartRoomMatch}
-                disabled={!roomLobby.isHost || !roomLobby.canStart}
+                disabled={!roomLobby.isHost || !roomLobby.canStart || roomStartPending}
+                loading={roomStartPending}
+                loadingText="Starting..."
               >
                 {roomLobby.isHost
                   ? roomLobby.canStart
@@ -2347,7 +2592,14 @@ export function GameClient({
                     : "Waiting for Player"
                   : "Host Starts Match"}
               </Button>
-              <Button variant="secondary" className="w-full" onClick={handleReturnToLobby}>
+              <Button
+                variant="secondary"
+                className="w-full"
+                onClick={handleReturnToLobby}
+                disabled={leavePending}
+                loading={leavePending}
+                loadingText="Leaving..."
+              >
                 Leave Room
               </Button>
             </div>
@@ -2384,7 +2636,14 @@ export function GameClient({
               <Button className="w-full sm:w-auto" onClick={handleRetryConnection}>
                 Retry Connection
               </Button>
-              <Button variant="secondary" className="w-full sm:w-auto" onClick={handleReturnToLobby}>
+              <Button
+                variant="secondary"
+                className="w-full sm:w-auto"
+                onClick={handleReturnToLobby}
+                disabled={leavePending}
+                loading={leavePending}
+                loadingText="Leaving..."
+              >
                 Return to Lobby
               </Button>
             </div>
@@ -2397,7 +2656,14 @@ export function GameClient({
             </h2>
             <p className="mt-3 text-sm text-slate-200 sm:text-base">{gameResult?.message}</p>
             <div className="mt-6 sm:mt-8">
-              <Button variant="secondary" className="w-full" onClick={handleReturnToLobby}>
+              <Button
+                variant="secondary"
+                className="w-full"
+                onClick={handleReturnToLobby}
+                disabled={leavePending}
+                loading={leavePending}
+                loadingText="Leaving..."
+              >
                 Return to Lobby
               </Button>
             </div>
@@ -2408,9 +2674,28 @@ export function GameClient({
             <motion.div animate={animState.questionShakeControls}>
               <div className="relative rounded-[1.75rem] border border-slate-800 bg-slate-900/80 p-4 text-center transition-all duration-300 sm:p-6">
                 {isActiveGameplay ? (
-                  <div className="absolute right-3 top-3 rounded-full border border-slate-700 bg-slate-950/80 px-2 py-1 text-sm font-black tracking-[0.15em] text-sky-200 sm:right-5 sm:top-5 sm:px-4 sm:py-2 sm:text-lg sm:tracking-[0.2em]">
+                  <motion.div
+                    className={`absolute right-3 top-3 rounded-full border px-2 py-1 text-sm font-black tracking-[0.15em] sm:right-5 sm:top-5 sm:px-4 sm:py-2 sm:text-lg sm:tracking-[0.2em] ${
+                      showFinalPhase
+                        ? "border-rose-400/70 bg-rose-950/70 text-rose-100 shadow-[0_0_18px_rgba(248,113,113,0.35)]"
+                        : "border-slate-700 bg-slate-950/80 text-sky-200"
+                    }`}
+                    animate={
+                      showFinalPhase
+                        ? {
+                            scale: isFinalSeconds ? [1, 1.08, 1] : [1, 1.04, 1],
+                            opacity: [1, 0.92, 1]
+                          }
+                        : { scale: 1, opacity: 1 }
+                    }
+                    transition={{
+                      duration: isFinalSeconds ? 0.5 : 0.9,
+                      repeat: showFinalPhase ? Number.POSITIVE_INFINITY : 0,
+                      ease: "easeInOut"
+                    }}
+                  >
                     {timerLabel}
-                  </div>
+                  </motion.div>
                 ) : null}
                 <p className={`text-sm uppercase tracking-[0.3em] text-slate-500 ${isActiveGameplay ? "pr-14 sm:pr-0" : ""}`}>
                   {isCountdown ? "Countdown" : isWaitingState ? "Match Status" : "Current Question"}
@@ -2498,7 +2783,7 @@ export function GameClient({
                   : gameResult?.result === "draw"
                   ? "border-amber-400/40 bg-amber-500/10"
                   : "border-rose-500/30 bg-rose-500/10"
-              }`}
+              } ${resultIsClose ? "shadow-[0_0_32px_rgba(248,113,113,0.18)]" : ""}`}
             >
               <p
                 className={`text-sm uppercase tracking-[0.3em] ${
@@ -2527,6 +2812,11 @@ export function GameClient({
                   : "You Lose"}
               </h2>
               <p className="mt-3 text-base text-slate-200">{gameResult?.message}</p>
+              {resultIsClose ? (
+                <p className="mt-2 text-xs font-semibold uppercase tracking-[0.22em] text-amber-200">
+                  Photo Finish
+                </p>
+              ) : null}
               <p className="mt-4 text-sm uppercase tracking-[0.25em] text-slate-400 sm:mt-6">Final Score</p>
               <p className="mt-2 text-2xl font-black text-white sm:text-3xl">
                 {scores.you} - {scores.opponent}
@@ -2554,6 +2844,8 @@ export function GameClient({
                   className="w-full min-h-[2.75rem]"
                   onClick={handlePlayAgain}
                   disabled={rematchRequested}
+                  loading={rematchRequested}
+                  loadingText="Waiting..."
                 >
                   {rematchCtaLabel}
                 </Button>
@@ -2561,6 +2853,9 @@ export function GameClient({
                   variant="secondary"
                   className="w-full min-h-[2.75rem]"
                   onClick={handleChangeTopic}
+                  disabled={leavePending}
+                  loading={leavePending}
+                  loadingText="Leaving..."
                 >
                   Change Topic
                 </Button>

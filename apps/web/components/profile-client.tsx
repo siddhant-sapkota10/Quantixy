@@ -224,6 +224,7 @@ export function ProfileClient() {
   const [savingAvatarId, setSavingAvatarId] = useState<AvatarId | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [previewAvatarId, setPreviewAvatarId] = useState<AvatarId>(DEFAULT_AVATAR_ID);
+  const [navPending, setNavPending] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -469,7 +470,15 @@ export function ProfileClient() {
             </p>
           </div>
 
-          <Button variant="secondary" onClick={() => router.push("/")}>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setNavPending(true);
+              router.push("/");
+            }}
+            loading={navPending}
+            loadingText="Opening..."
+          >
             Back to Home
           </Button>
         </div>
@@ -519,8 +528,10 @@ export function ProfileClient() {
                 className="w-full"
                 onClick={() => void handleDisplayNameSave()}
                 disabled={savingDisplayName || loading}
+                loading={savingDisplayName}
+                loadingText="Saving..."
               >
-                {savingDisplayName ? "Saving..." : "Save Display Name"}
+                Save Display Name
               </Button>
               {displayNameError ? <p className="text-sm text-rose-300">{displayNameError}</p> : null}
             </div>

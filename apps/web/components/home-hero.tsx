@@ -298,7 +298,7 @@ function AuthModal({
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded-xl px-3 py-2.5 text-sm text-slate-300 underline-offset-4 transition hover:text-sky-300 hover:underline"
+            className="shrink-0 rounded-xl px-3 py-2.5 text-sm text-slate-300 underline-offset-4 transition-all duration-150 ease-out hover:text-sky-300 hover:underline active:scale-[0.975] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60"
           >
             Close
           </button>
@@ -323,11 +323,12 @@ function AuthModal({
                 setForgotOpen(false);
                 setPendingVerificationEmail(null);
               }}
-              className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+              disabled={authBusy || loading}
+              className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
                 authMode === "login"
                   ? "bg-sky-500/20 text-sky-200"
                   : "text-slate-300 hover:bg-slate-900/70"
-              }`}
+              } ${authBusy || loading ? "cursor-not-allowed opacity-55 saturate-50" : "active:scale-[0.975]"}`}
             >
               Log In
             </button>
@@ -340,11 +341,12 @@ function AuthModal({
                 setForgotOpen(false);
                 setPendingVerificationEmail(null);
               }}
-              className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+              disabled={authBusy || loading}
+              className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
                 authMode === "signup"
                   ? "bg-sky-500/20 text-sky-200"
                   : "text-slate-300 hover:bg-slate-900/70"
-              }`}
+              } ${authBusy || loading ? "cursor-not-allowed opacity-55 saturate-50" : "active:scale-[0.975]"}`}
             >
               Create Account
             </button>
@@ -357,6 +359,8 @@ function AuthModal({
               className="w-full font-bold"
               onClick={handleGoogleSignIn}
               disabled={authBusy || loading}
+              loading={authBusy}
+              loadingText="Connecting..."
             >
               Continue with Google
             </Button>
@@ -418,6 +422,8 @@ function AuthModal({
                   className="w-full"
                   onClick={handleForgotPasswordRequest}
                   disabled={authBusy || loading}
+                  loading={authBusy}
+                  loadingText="Sending..."
                 >
                   Send Reset Link
                 </Button>
@@ -441,6 +447,8 @@ function AuthModal({
                   className="w-full"
                   onClick={handlePasswordAuth}
                   disabled={authBusy || loading}
+                  loading={authBusy}
+                  loadingText={authMode === "login" ? "Logging In..." : "Creating..."}
                 >
                   {authMode === "login" ? "Log In" : "Create Account"}
                 </Button>
@@ -467,6 +475,8 @@ function AuthModal({
                 className="w-auto self-start px-0 py-0 text-xs font-medium uppercase tracking-[0.2em]"
                 onClick={handleResendVerification}
                 disabled={authBusy || loading}
+                loading={authBusy}
+                loadingText="Sending..."
               >
                 Resend Verification Email
               </Button>
@@ -496,6 +506,8 @@ export function HomeHero() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [guestBusy, setGuestBusy] = useState(false);
+  const [routeBusy, setRouteBusy] = useState<"play" | "ai" | "profile" | "leaderboard" | null>(null);
+  const [logoutBusy, setLogoutBusy] = useState(false);
   const [guestError, setGuestError] = useState<string | null>(null);
   const [accountIdentity, setAccountIdentity] = useState<{
     displayName: string;
@@ -580,6 +592,7 @@ export function HomeHero() {
       return;
     }
 
+    setRouteBusy("play");
     router.push("/play");
   };
 
@@ -589,6 +602,7 @@ export function HomeHero() {
       return;
     }
 
+    setRouteBusy("ai");
     router.push("/play?mode=ai");
   };
 
@@ -624,7 +638,12 @@ export function HomeHero() {
   };
 
   const handleLogout = async () => {
-    await signOut();
+    try {
+      setLogoutBusy(true);
+      await signOut();
+    } finally {
+      setLogoutBusy(false);
+    }
   };
 
   return (
@@ -650,7 +669,9 @@ export function HomeHero() {
             <Button
               className="w-full py-4 text-lg font-black shadow-lg shadow-sky-500/20 sm:py-5 sm:text-xl"
               onClick={handlePlayNow}
-              disabled={loading}
+              disabled={loading || guestBusy || Boolean(routeBusy)}
+              loading={routeBusy === "play"}
+              loadingText="Opening..."
             >
               Play Online
             </Button>
@@ -658,7 +679,9 @@ export function HomeHero() {
               variant="secondary"
               className="w-full py-4 text-lg font-bold sm:py-5 sm:text-xl"
               onClick={handlePlayVsAi}
-              disabled={loading}
+              disabled={loading || guestBusy || Boolean(routeBusy)}
+              loading={routeBusy === "ai"}
+              loadingText="Opening..."
             >
               Play vs AI 🤖
             </Button>
@@ -687,6 +710,8 @@ export function HomeHero() {
                 className="w-full"
                 onClick={handleGuestContinue}
                 disabled={guestBusy || loading}
+                loading={guestBusy}
+                loadingText="Continuing..."
               >
                 Continue as Guest
               </Button>
@@ -707,7 +732,12 @@ export function HomeHero() {
               <Button
                 variant="secondary"
                 className="w-full sm:col-span-2"
-                onClick={() => router.push("/leaderboard")}
+                onClick={() => {
+                  setRouteBusy("leaderboard");
+                  router.push("/leaderboard");
+                }}
+                loading={routeBusy === "leaderboard"}
+                loadingText="Opening..."
               >
                 Leaderboard
               </Button>
@@ -744,7 +774,12 @@ export function HomeHero() {
                 <Button
                   variant="secondary"
                   className="w-full sm:col-span-2"
-                  onClick={() => router.push("/leaderboard")}
+                  onClick={() => {
+                    setRouteBusy("leaderboard");
+                    router.push("/leaderboard");
+                  }}
+                  loading={routeBusy === "leaderboard"}
+                  loadingText="Opening..."
                 >
                   Leaderboard
                 </Button>
@@ -755,14 +790,24 @@ export function HomeHero() {
               <Button
                 variant="secondary"
                 className="w-full"
-                onClick={() => router.push("/profile")}
+                onClick={() => {
+                  setRouteBusy("profile");
+                  router.push("/profile");
+                }}
+                loading={routeBusy === "profile"}
+                loadingText="Opening..."
               >
                 Profile
               </Button>
               <Button
                 variant="secondary"
                 className="w-full"
-                onClick={() => router.push("/leaderboard")}
+                onClick={() => {
+                  setRouteBusy("leaderboard");
+                  router.push("/leaderboard");
+                }}
+                loading={routeBusy === "leaderboard"}
+                loadingText="Opening..."
               >
                 Leaderboard
               </Button>
@@ -770,6 +815,9 @@ export function HomeHero() {
                 variant="secondary"
                 className="w-full"
                 onClick={() => void handleLogout()}
+                disabled={logoutBusy}
+                loading={logoutBusy}
+                loadingText="Logging Out..."
               >
                 Log Out
               </Button>

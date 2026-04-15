@@ -127,8 +127,8 @@ export default function ResetPasswordPage() {
             />
           </label>
 
-          <Button className="w-full" type="submit" disabled={busy}>
-            {busy ? "Updating..." : "Update Password"}
+          <Button className="w-full" type="submit" disabled={busy} loading={busy} loadingText="Updating...">
+            Update Password
           </Button>
         </form>
 

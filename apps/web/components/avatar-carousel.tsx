@@ -92,7 +92,7 @@ function AvatarCard({
         isActive
           ? "border-sky-300/70 bg-slate-950/95 shadow-[0_18px_55px_rgba(2,6,23,0.76)]"
           : "border-slate-700/70 bg-slate-950/72"
-      } ${disabled ? "cursor-not-allowed opacity-80" : ""}`}
+      } ${disabled ? "cursor-not-allowed opacity-65 saturate-50" : "active:scale-[0.98]"} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60`}
       style={
         isActive
           ? {
@@ -101,6 +101,7 @@ function AvatarCard({
           : undefined
       }
       aria-pressed={isActive}
+      aria-busy={isSaving || undefined}
     >
       {isActive ? (
         <div className="pointer-events-none absolute inset-0 rounded-[1.35rem] ring-2 ring-white/10" />
@@ -277,7 +278,7 @@ export function AvatarCarousel({
             type="button"
             onClick={goPrev}
             disabled={disabled}
-            className="h-11 min-w-[3rem] rounded-xl border border-slate-700 bg-slate-950/82 px-3 text-base font-semibold text-slate-100 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+            className="h-11 min-w-[3rem] rounded-xl border border-slate-700 bg-slate-950/82 px-3 text-base font-semibold text-slate-100 transition-all duration-150 ease-out hover:border-slate-500 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 disabled:cursor-not-allowed disabled:opacity-55 disabled:saturate-50"
             aria-label="Previous avatar"
           >
             {"<"}
@@ -315,7 +316,7 @@ export function AvatarCarousel({
             type="button"
             onClick={goNext}
             disabled={disabled}
-            className="h-11 min-w-[3rem] rounded-xl border border-slate-700 bg-slate-950/82 px-3 text-base font-semibold text-slate-100 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+            className="h-11 min-w-[3rem] rounded-xl border border-slate-700 bg-slate-950/82 px-3 text-base font-semibold text-slate-100 transition-all duration-150 ease-out hover:border-slate-500 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 disabled:cursor-not-allowed disabled:opacity-55 disabled:saturate-50"
             aria-label="Next avatar"
           >
             {">"}
