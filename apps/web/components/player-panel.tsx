@@ -6,6 +6,8 @@ type PlayerPanelProps = {
   label: string;
   score: number;
   rating?: number;
+  strikes?: number;
+  eliminated?: boolean;
   avatar?: string;
   streakLabel?: string | null;
   streakLevel?: "fire" | "unstoppable" | null;
@@ -24,6 +26,8 @@ export function PlayerPanel({
   label,
   score,
   rating,
+  strikes = 0,
+  eliminated = false,
   avatar,
   streakLabel,
   streakLevel,
@@ -97,6 +101,9 @@ export function PlayerPanel({
               Rating {rating}
             </p>
           ) : null}
+          <p className={`mt-1 text-[11px] uppercase tracking-[0.2em] ${eliminated ? "text-rose-300" : "text-slate-500"}`}>
+            Strikes {strikes}/3
+          </p>
           <p className="mt-2 text-3xl font-bold text-white sm:text-4xl">{score}</p>
         </motion.div>
 

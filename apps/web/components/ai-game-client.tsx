@@ -23,6 +23,7 @@ import { getSupabaseClient } from "@/lib/supabase";
 type AiGameStatus = "countdown" | "playing" | "finished";
 
 type ScoreState = { you: number; opponent: number };
+type StrikeState = { you: number; opponent: number };
 type FeedbackState = {
   youStreak: number;
   opponentStreak: number;
@@ -31,6 +32,7 @@ type FeedbackState = {
 };
 
 const initialScores: ScoreState = { you: 0, opponent: 0 };
+const initialStrikes: StrikeState = { you: 0, opponent: 0 };
 const initialFeedback: FeedbackState = {
   youStreak: 0,
   opponentStreak: 0,
@@ -68,6 +70,8 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
   // Game state
   const [status, setStatus] = useState<AiGameStatus>("countdown");
   const [scores, setScores] = useState<ScoreState>(initialScores);
+  const [strikes, setStrikes] = useState<StrikeState>(initialStrikes);
+  const [eliminated, setEliminated] = useState({ you: false, opponent: false });
   const [secondsLeft, setSecondsLeft] = useState(GAME_DURATION_S);
   const [feedback, setFeedback] = useState<FeedbackState>(initialFeedback);
   const [currentQuestion, setCurrentQuestion] = useState("");
@@ -81,6 +85,8 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
   // Stable refs so callbacks never close over stale state
   const statusRef = useRef<AiGameStatus>("countdown");
   const scoresRef = useRef<ScoreState>(initialScores);
+  const strikesRef = useRef<StrikeState>(initialStrikes);
+  const eliminatedRef = useRef({ you: false, opponent: false });
   const feedbackRef = useRef<FeedbackState>(initialFeedback);
   const currentAnswerRef = useRef(""); // correct answer for the current question
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -105,6 +111,8 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
   useEffect(() => { statusRef.current = status; }, [status]);
   useEffect(() => { scoresRef.current = scores; }, [scores]);
   useEffect(() => { feedbackRef.current = feedback; }, [feedback]);
+  useEffect(() => { strikesRef.current = strikes; }, [strikes]);
+  useEffect(() => { eliminatedRef.current = eliminated; }, [eliminated]);
 
   // ---------------------------------------------------------------------------
   // Load player profile once
@@ -162,50 +170,67 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
   }, [clearTimers]);
 
   // ---------------------------------------------------------------------------
-  // Generate next question + schedule AI
+  // Generate next question + schedule AI attempts
   // ---------------------------------------------------------------------------
   const scheduleNextQuestion = useCallback(() => {
     if (statusRef.current !== "playing") return;
+    if (eliminatedRef.current.you || eliminatedRef.current.opponent) return;
 
     const { question, answer: correctAnswer } = generateQuestion(topic, difficulty);
     currentAnswerRef.current = correctAnswer;
     setCurrentQuestion(question);
     setAnswer("");
 
-    // Schedule AI response
-    const profile = getAiProfile(difficulty);
-    const delay = profile.minMs + Math.random() * (profile.maxMs - profile.minMs);
-    const willScore = Math.random() < profile.accuracy;
-
-    if (aiTimeoutRef.current) clearTimeout(aiTimeoutRef.current);
-
-    aiTimeoutRef.current = setTimeout(() => {
+    const scheduleAiAttempt = () => {
       if (statusRef.current !== "playing") return;
+      if (eliminatedRef.current.opponent) return;
 
-      if (willScore) {
-        // AI scores a point
-        triggerScoreGlow("opponent");
-        const prev = feedbackRef.current;
-        const newStreak = prev.opponentStreak + 1;
+      const profile = getAiProfile(difficulty);
+      const delay = profile.minMs + Math.random() * (profile.maxMs - profile.minMs);
+      const willScore = Math.random() < profile.accuracy;
 
-        setScores((s) => ({ ...s, opponent: s.opponent + 1 }));
-        setFeedback((f) => ({
-          ...f,
-          opponentStreak: newStreak,
-          opponentPulseKey: f.opponentPulseKey + 1,
-        }));
+      if (aiTimeoutRef.current) clearTimeout(aiTimeoutRef.current);
 
-        if (newStreak >= 3 && newStreak > prev.opponentStreak) {
-          soundManager.play("streak");
-        } else {
-          soundManager.play("correct");
+      aiTimeoutRef.current = setTimeout(() => {
+        if (statusRef.current !== "playing") return;
+        if (eliminatedRef.current.opponent) return;
+
+        if (willScore) {
+          triggerScoreGlow("opponent");
+          const prev = feedbackRef.current;
+          const newStreak = prev.opponentStreak + 1;
+
+          setScores((s) => ({ ...s, opponent: s.opponent + 1 }));
+          setFeedback((f) => ({
+            ...f,
+            opponentStreak: newStreak,
+            opponentPulseKey: f.opponentPulseKey + 1,
+          }));
+
+          if (newStreak >= 3 && newStreak > prev.opponentStreak) {
+            soundManager.play("streak");
+          } else {
+            soundManager.play("correct");
+          }
+
+          scheduleNextQuestion();
+          return;
         }
 
-        // Advance to next question
-        scheduleNextQuestion();
-      }
-      // If AI misses: question stays until player answers or game ends
-    }, delay);
+        setFeedback((f) => ({ ...f, opponentStreak: 0 }));
+        setStrikes((previous) => {
+          const next = { ...previous, opponent: previous.opponent + 1 };
+          if (next.opponent >= 3) {
+            setEliminated((current) => ({ ...current, opponent: true }));
+          } else {
+            scheduleAiAttempt();
+          }
+          return next;
+        });
+      }, delay);
+    };
+
+    scheduleAiAttempt();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topic, difficulty]);
 
@@ -222,6 +247,10 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
     setCountdownValue(null);
     setScores(initialScores);
     scoresRef.current = initialScores;
+    setStrikes(initialStrikes);
+    strikesRef.current = initialStrikes;
+    setEliminated({ you: false, opponent: false });
+    eliminatedRef.current = { you: false, opponent: false };
     setFeedback(initialFeedback);
     feedbackRef.current = initialFeedback;
     setCurrentQuestion("");
@@ -297,7 +326,7 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const trimmed = answer.trim();
-    if (!trimmed || status !== "playing") return;
+    if (!trimmed || status !== "playing" || eliminatedRef.current.you) return;
 
     const correct = trimmed.toLowerCase() === currentAnswerRef.current.toLowerCase();
 
@@ -327,6 +356,13 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
       soundManager.play("wrong");
       if (feedbackRef.current.youStreak >= 2) triggerStreakBroken();
       setFeedback((f) => ({ ...f, youStreak: 0 }));
+      setStrikes((previous) => {
+        const next = { ...previous, you: previous.you + 1 };
+        if (next.you >= 3) {
+          setEliminated((current) => ({ ...current, you: true }));
+        }
+        return next;
+      });
       setAnswer("");
     }
   };
@@ -338,6 +374,8 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
   const isPlaying = status === "playing";
   const isFinished = status === "finished";
   const isCountdown = status === "countdown";
+  const youEliminated = eliminated.you;
+  const opponentEliminated = eliminated.opponent;
 
   const getStreakLabel = (streak: number) => {
     if (streak >= 5) return "UNSTOPPABLE";
@@ -419,6 +457,8 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
             <PlayerPanel
               label={yourName}
               score={scores.you}
+              strikes={strikes.you}
+              eliminated={youEliminated}
               avatar={yourAvatar}
               streakLabel={isPlaying ? yourStreakLabel : null}
               streakLevel={isPlaying ? yourStreakLevel : null}
@@ -438,6 +478,8 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
             <PlayerPanel
               label={BOT_NAME}
               score={scores.opponent}
+              strikes={strikes.opponent}
+              eliminated={opponentEliminated}
               avatar={BOT_AVATAR}
               streakLabel={isPlaying ? opponentStreakLabel : null}
               streakLevel={isPlaying ? opponentStreakLevel : null}
@@ -482,14 +524,23 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
                     type="text"
                     value={answer}
                     onChange={(e) => setAnswer(e.target.value)}
-                    placeholder="Type your answer and press Enter"
+                    placeholder={youEliminated ? "Eliminated" : "Type your answer and press Enter"}
                     autoComplete="off"
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-900/80 px-4 py-4 text-slate-100 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/35"
+                    disabled={youEliminated}
+                    className="w-full rounded-2xl border border-slate-700 bg-slate-900/80 px-4 py-4 text-slate-100 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/35 disabled:cursor-not-allowed disabled:opacity-60"
                   />
                 </label>
-                <Button className="w-full" type="submit" disabled={!answer.trim()}>
+                <Button className="w-full" type="submit" disabled={!answer.trim() || youEliminated}>
                   Submit Answer
                 </Button>
+                <p className="text-center text-xs uppercase tracking-[0.2em] text-slate-400">
+                  Strikes: {strikes.you}/3
+                </p>
+                {youEliminated ? (
+                  <p className="text-center text-xs uppercase tracking-[0.2em] text-rose-300">
+                    Eliminated
+                  </p>
+                ) : null}
               </form>
             )}
           </>

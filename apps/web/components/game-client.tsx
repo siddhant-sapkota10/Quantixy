@@ -58,6 +58,11 @@ type RatingState = {
   opponent: number;
 };
 
+type StrikeState = {
+  you: number;
+  opponent: number;
+};
+
 type TimerState = {
   secondsLeft: number;
 };
@@ -89,6 +94,11 @@ const initialScores: ScoreState = {
 const initialRatings: RatingState = {
   you: 1000,
   opponent: 1000
+};
+
+const initialStrikes: StrikeState = {
+  you: 0,
+  opponent: 0
 };
 
 const initialTimer: TimerState = {
@@ -178,6 +188,8 @@ export function GameClient({
   const [status, setStatus] = useState<GameStatus>("connecting");
   const [scores, setScores] = useState<ScoreState>(initialScores);
   const [ratings, setRatings] = useState<RatingState>(initialRatings);
+  const [strikes, setStrikes] = useState<StrikeState>(initialStrikes);
+  const [eliminated, setEliminated] = useState({ you: false, opponent: false });
   const [timer, setTimer] = useState<TimerState>(initialTimer);
   const [feedback, setFeedback] = useState<FeedbackState>(initialFeedback);
   const feedbackRef = useRef(initialFeedback);
@@ -238,6 +250,8 @@ export function GameClient({
     setStatus("connecting");
     setScores(initialScores);
     setRatings(initialRatings);
+    setStrikes(initialStrikes);
+    setEliminated({ you: false, opponent: false });
     setTimer(initialTimer);
     setFeedback(initialFeedback);
     setCurrentQuestion("Waiting for the first question...");
@@ -395,6 +409,8 @@ export function GameClient({
       setCurrentQuestion("");
       setCountdownValue(null);
       setFeedback(initialFeedback);
+      setStrikes(initialStrikes);
+      setEliminated({ you: false, opponent: false });
       setTimer(initialTimer);
       setFrozenUntil(0);
       setShieldBlockedUntil(0);
@@ -469,12 +485,61 @@ export function GameClient({
       }, 1500);
     };
 
-    const handleIncorrectAnswer = () => {
-      console.log("[client] incorrectAnswer received");
+    const handleIncorrectAnswer = (payload: { strikes?: number; eliminated?: boolean }) => {
+      console.log("[client] incorrectAnswer received", payload);
       soundManager.play("wrong");
       // Show "Streak Broken" popup if local player had a streak going
       if (feedbackRef.current.youStreak >= 2) {
         triggerStreakBroken();
+      }
+      setStrikes((previous) => ({
+        ...previous,
+        you: payload.strikes ?? previous.you
+      }));
+      setEliminated((previous) => ({
+        ...previous,
+        you: payload.eliminated ?? previous.you
+      }));
+      if (payload.eliminated) {
+        setAnswer("");
+      }
+    };
+
+    const handleOpponentStrike = (payload: {
+      opponentStrikes?: number;
+      opponentEliminated?: boolean;
+    }) => {
+      console.log("[client] opponentStrike received", payload);
+      setStrikes((previous) => ({
+        ...previous,
+        opponent: payload.opponentStrikes ?? previous.opponent
+      }));
+      setEliminated((previous) => ({
+        ...previous,
+        opponent: payload.opponentEliminated ?? previous.opponent
+      }));
+    };
+
+    const handleLiveLeaderboard = (payload: {
+      entries?: Array<{
+        name: string;
+        score: number;
+        strikes: number;
+        eliminated: boolean;
+      }>;
+      scores?: { you: number; opponent: number };
+      strikes?: { you: number; opponent: number };
+      eliminated?: { you: boolean; opponent: boolean };
+    }) => {
+      console.log("[client] liveLeaderboard received", payload);
+      if (payload.scores) {
+        setScores(payload.scores);
+      }
+      if (payload.strikes) {
+        setStrikes(payload.strikes);
+      }
+      if (payload.eliminated) {
+        setEliminated(payload.eliminated);
       }
     };
 
@@ -488,6 +553,10 @@ export function GameClient({
       fastAnswer?: boolean;
       opponentFastAnswer?: boolean;
       pointsAwarded?: number;
+      strikes?: number;
+      opponentStrikes?: number;
+      youEliminated?: boolean;
+      opponentEliminated?: boolean;
       powerUpAvailable?: PowerUpId | null;
       opponentPowerUpAvailable?: PowerUpId | null;
       shieldActive?: boolean;
@@ -524,6 +593,14 @@ export function GameClient({
         you: newYouScore,
         opponent: newOpponentScore
       });
+      setStrikes((previous) => ({
+        you: payload.strikes ?? previous.you,
+        opponent: payload.opponentStrikes ?? previous.opponent
+      }));
+      setEliminated((previous) => ({
+        you: payload.youEliminated ?? previous.you,
+        opponent: payload.opponentEliminated ?? previous.opponent
+      }));
 
       setFeedback((previous) => ({
         youStreak: payload.streak ?? 0,
@@ -583,6 +660,8 @@ export function GameClient({
       youAnswered: boolean;
       opponentAnswered: boolean;
       winner: "you" | "opponent" | null;
+      youEliminated?: boolean;
+      opponentEliminated?: boolean;
     }) => {
       console.log("[client] questionState received", payload);
       if (payload.youAnswered) {
@@ -592,6 +671,10 @@ export function GameClient({
         ...previous,
         youAnsweredCurrent: payload.youAnswered,
         opponentAnsweredCurrent: payload.opponentAnswered
+      }));
+      setEliminated((previous) => ({
+        you: payload.youEliminated ?? previous.you,
+        opponent: payload.opponentEliminated ?? previous.opponent
       }));
     };
 
@@ -825,6 +908,8 @@ export function GameClient({
     nextSocket.on("newQuestion", handleNewQuestion);
     nextSocket.on("timerUpdate", handleTimerUpdate);
     nextSocket.on("incorrectAnswer", handleIncorrectAnswer);
+    nextSocket.on("opponentStrike", handleOpponentStrike);
+    nextSocket.on("liveLeaderboard", handleLiveLeaderboard);
     nextSocket.on("pointScored", handlePointScored);
     nextSocket.on("questionState", handleQuestionState);
     nextSocket.on("powerUpUsed", handlePowerUpUsed);
@@ -848,6 +933,8 @@ export function GameClient({
       nextSocket.off("newQuestion", handleNewQuestion);
       nextSocket.off("timerUpdate", handleTimerUpdate);
       nextSocket.off("incorrectAnswer", handleIncorrectAnswer);
+      nextSocket.off("opponentStrike", handleOpponentStrike);
+      nextSocket.off("liveLeaderboard", handleLiveLeaderboard);
       nextSocket.off("pointScored", handlePointScored);
       nextSocket.off("questionState", handleQuestionState);
       nextSocket.off("powerUpUsed", handlePowerUpUsed);
@@ -864,7 +951,7 @@ export function GameClient({
   const submitAnswer = () => {
     const trimmedAnswer = answer.trim();
 
-    if (!socket || !trimmedAnswer || status !== "playing") {
+    if (!socket || !trimmedAnswer || status !== "playing" || eliminated.you) {
       return;
     }
 
@@ -885,6 +972,8 @@ export function GameClient({
 
     setStatus("waiting");
     setScores(initialScores);
+    setStrikes(initialStrikes);
+    setEliminated({ you: false, opponent: false });
     setRatings((previous) => previous);
     setTimer(initialTimer);
     setFeedback(initialFeedback);
@@ -988,6 +1077,8 @@ export function GameClient({
   const isSlowed = feedback.youSlowedUntil > Date.now();
   const hasAnsweredCurrent = false;
   const opponentAnsweredCurrent = feedback.opponentAnsweredCurrent;
+  const youEliminated = eliminated.you;
+  const opponentEliminated = eliminated.opponent;
   const isShieldBlocked = shieldBlockedUntil > Date.now();
   const emoteCoolingDown = emoteCooldownUntil > Date.now();
   const hasDoublePoints = feedback.youDoublePointsUntil > Date.now();
@@ -1170,6 +1261,8 @@ export function GameClient({
               label={yourName}
               score={scores.you}
               rating={ratings.you}
+              strikes={strikes.you}
+              eliminated={youEliminated}
               avatar={yourAvatar}
               streakLabel={isActiveGameplay ? yourStreakLabel : null}
               streakLevel={isActiveGameplay ? yourStreakLevel : null}
@@ -1203,6 +1296,8 @@ export function GameClient({
               label={opponentName}
               score={scores.opponent}
               rating={ratings.opponent}
+              strikes={strikes.opponent}
+              eliminated={opponentEliminated}
               avatar={opponentAvatar}
               streakLabel={isActiveGameplay ? opponentStreakLabel : null}
               streakLevel={isActiveGameplay ? opponentStreakLevel : null}
@@ -1396,14 +1491,24 @@ export function GameClient({
                     Opponent Has Double Points
                   </p>
                 ) : null}
-                {isActiveGameplay && hasAnsweredCurrent && !opponentAnsweredCurrent ? (
-                  <p className="mt-2 text-sm font-semibold uppercase tracking-[0.2em] text-emerald-200">
-                    Correct - waiting for opponent...
-                  </p>
-                ) : null}
                 {isActiveGameplay && !hasAnsweredCurrent && opponentAnsweredCurrent ? (
                   <p className="mt-2 text-sm font-semibold uppercase tracking-[0.2em] text-amber-200">
                     Opponent answered - your turn
+                  </p>
+                ) : null}
+                {isActiveGameplay && youEliminated ? (
+                  <p className="mt-2 text-sm font-semibold uppercase tracking-[0.2em] text-rose-300">
+                    Eliminated (3 strikes)
+                  </p>
+                ) : null}
+                {isActiveGameplay && opponentEliminated ? (
+                  <p className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
+                    Opponent eliminated
+                  </p>
+                ) : null}
+                {isActiveGameplay ? (
+                  <p className="mt-2 text-xs uppercase tracking-[0.2em] text-slate-400">
+                    Strikes: {strikes.you}/3
                   </p>
                 ) : null}
 
@@ -1424,20 +1529,20 @@ export function GameClient({
                     value={answer}
                     onChange={(event) => setAnswer(event.target.value)}
                     placeholder={
-                      hasAnsweredCurrent
-                        ? "Waiting for opponent..."
-                        : isFrozen
+                      isFrozen
                         ? "Frozen..."
                         : isSlowed
                         ? "Slowed..."
+                        : youEliminated
+                        ? "Eliminated"
                         : "Type your answer and press Enter"
                     }
-                    disabled={isFrozen || isSlowed || hasAnsweredCurrent}
+                    disabled={isFrozen || isSlowed || youEliminated}
                     className="w-full rounded-2xl border border-slate-700 bg-slate-900/80 px-4 py-4 text-slate-100 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/35 disabled:cursor-not-allowed disabled:opacity-60"
                   />
                 </label>
 
-                <Button className="w-full" type="submit" disabled={!answer.trim() || isFrozen || isSlowed || hasAnsweredCurrent}>
+                <Button className="w-full" type="submit" disabled={!answer.trim() || isFrozen || isSlowed || youEliminated}>
                   Submit Answer
                 </Button>
               </form>

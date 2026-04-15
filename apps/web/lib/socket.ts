@@ -82,7 +82,34 @@ export type ServerToClientEvents = {
     message: string;
   }) => void;
   newQuestion: (payload: { question?: string } | string) => void;
-  incorrectAnswer: () => void;
+  incorrectAnswer: (payload: { strikes: number; eliminated: boolean }) => void;
+  opponentStrike: (payload: {
+    opponentStrikes: number;
+    opponentEliminated: boolean;
+  }) => void;
+  liveLeaderboard: (payload: {
+    entries: Array<{
+      socketId: string;
+      name: string;
+      avatar: string;
+      score: number;
+      strikes: number;
+      eliminated: boolean;
+    }>;
+    scores?: {
+      you: number;
+      opponent: number;
+    };
+    strikes?: {
+      you: number;
+      opponent: number;
+    };
+    eliminated?: {
+      you: boolean;
+      opponent: boolean;
+    };
+    updatedAt: number;
+  }) => void;
   pointScored: (payload: {
     scores?: { you?: number; opponent?: number };
     playerScores?: { you?: number; opponent?: number };
@@ -93,6 +120,10 @@ export type ServerToClientEvents = {
     fastAnswer?: boolean;
     opponentFastAnswer?: boolean;
     pointsAwarded?: number;
+    strikes?: number;
+    opponentStrikes?: number;
+    youEliminated?: boolean;
+    opponentEliminated?: boolean;
     youAnswered?: boolean;
     opponentAnswered?: boolean;
     powerUpAvailable?: PowerUpId | null;
@@ -108,6 +139,8 @@ export type ServerToClientEvents = {
     youAnswered: boolean;
     opponentAnswered: boolean;
     winner: "you" | "opponent" | null;
+    youEliminated?: boolean;
+    opponentEliminated?: boolean;
   }) => void;
   powerUpUsed: (payload: {
     type: PowerUpId;

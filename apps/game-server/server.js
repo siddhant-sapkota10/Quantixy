@@ -293,6 +293,14 @@ function buildPowerUpMap(players) {
   return Object.fromEntries(players.map((player) => [player.socketId, null]));
 }
 
+function buildStrikeMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, 0]));
+}
+
+function buildEliminatedMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, false]));
+}
+
 function buildFreezeMap(players) {
   return Object.fromEntries(players.map((player) => [player.socketId, 0]));
 }
@@ -438,6 +446,59 @@ function buildPlayerPowerState(game, socketId) {
   };
 }
 
+function emitLiveLeaderboard(roomId) {
+  const game = activeGames.get(roomId);
+
+  if (!game) {
+    return;
+  }
+
+  const entries = game.players
+    .map((player) => ({
+      socketId: player.socketId,
+      name: player.name,
+      avatar: player.avatar,
+      score: game.scores[player.socketId] ?? 0,
+      strikes: game.strikes[player.socketId] ?? 0,
+      eliminated: !!game.eliminated[player.socketId]
+    }))
+    .sort((a, b) => {
+      if (a.eliminated !== b.eliminated) {
+        return a.eliminated ? 1 : -1;
+      }
+
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+
+      return a.strikes - b.strikes;
+    });
+
+  for (const player of game.players) {
+    const opponent = getOpponent(game, player.socketId);
+    if (!opponent) {
+      continue;
+    }
+
+    io.to(player.socketId).emit("liveLeaderboard", {
+      entries,
+      scores: {
+        you: game.scores[player.socketId] ?? 0,
+        opponent: game.scores[opponent.socketId] ?? 0
+      },
+      strikes: {
+        you: game.strikes[player.socketId] ?? 0,
+        opponent: game.strikes[opponent.socketId] ?? 0
+      },
+      eliminated: {
+        you: !!game.eliminated[player.socketId],
+        opponent: !!game.eliminated[opponent.socketId]
+      },
+      updatedAt: Date.now()
+    });
+  }
+}
+
 function markPowerUpUsed(game, socketId) {
   game.powerUpUsesCount[socketId] = (game.powerUpUsesCount[socketId] ?? 0) + 1;
 }
@@ -470,7 +531,9 @@ function emitQuestionState(roomId) {
     io.to(player.socketId).emit("questionState", {
       youAnswered: !!youState?.answered,
       opponentAnswered: sameQuestion ? !!opponentState?.answered : false,
-      winner
+      winner,
+      youEliminated: !!game.eliminated[player.socketId],
+      opponentEliminated: !!game.eliminated[opponent.socketId]
     });
   }
 }
@@ -484,6 +547,8 @@ function resetGameState(game) {
   game.endsAt = null;
   game.phase = "countdown";
   game.scores = buildScoreMap(game.players);
+  game.strikes = buildStrikeMap(game.players);
+  game.eliminated = buildEliminatedMap(game.players);
   game.streaks = buildScoreMap(game.players);
   game.powerUps = buildPowerUpMap(game.players);
   game.freezeUntil = buildFreezeMap(game.players);
@@ -512,6 +577,10 @@ function emitNewQuestionToPlayer(roomId, socketId) {
   const questionState = game.playerQuestionState[socketId];
 
   if (!questionState) {
+    return;
+  }
+
+  if (game.eliminated[socketId]) {
     return;
   }
 
@@ -752,7 +821,7 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
 
   const questionState = game.playerQuestionState[playerSocketId];
 
-  if (!questionState || questionState.answered) {
+  if (!questionState || questionState.answered || game.eliminated[playerSocketId]) {
     return;
   }
 
@@ -804,6 +873,10 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
       fastAnswer: scorerSocketId === playerOneSocketId ? fastAnswer : false,
       opponentFastAnswer: scorerSocketId === playerTwoSocketId ? fastAnswer : false,
       pointsAwarded: scorerSocketId === playerOneSocketId ? pointsAwarded : 0,
+      strikes: game.strikes[playerOneSocketId] ?? 0,
+      opponentStrikes: game.strikes[playerTwoSocketId] ?? 0,
+      youEliminated: !!game.eliminated[playerOneSocketId],
+      opponentEliminated: !!game.eliminated[playerTwoSocketId],
       youAnswered: false,
       opponentAnswered: false,
       ...buildPlayerPowerState(game, playerOneSocketId)
@@ -819,6 +892,10 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
       fastAnswer: scorerSocketId === playerTwoSocketId ? fastAnswer : false,
       opponentFastAnswer: scorerSocketId === playerOneSocketId ? fastAnswer : false,
       pointsAwarded: scorerSocketId === playerTwoSocketId ? pointsAwarded : 0,
+      strikes: game.strikes[playerTwoSocketId] ?? 0,
+      opponentStrikes: game.strikes[playerOneSocketId] ?? 0,
+      youEliminated: !!game.eliminated[playerTwoSocketId],
+      opponentEliminated: !!game.eliminated[playerOneSocketId],
       youAnswered: false,
       opponentAnswered: false,
       ...buildPlayerPowerState(game, playerTwoSocketId)
@@ -828,6 +905,7 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
   questionState.index += 1;
   emitNewQuestionToPlayer(roomId, playerSocketId);
   emitQuestionState(roomId);
+  emitLiveLeaderboard(roomId);
 }
 
 function handleIncorrectAnswer(roomId, playerSocketId) {
@@ -837,7 +915,40 @@ function handleIncorrectAnswer(roomId, playerSocketId) {
     return;
   }
 
+  if (game.eliminated[playerSocketId]) {
+    return;
+  }
+
+  game.strikes[playerSocketId] = (game.strikes[playerSocketId] ?? 0) + 1;
   game.streaks[playerSocketId] = 0;
+
+  const opponent = getOpponent(game, playerSocketId);
+  const isEliminated = (game.strikes[playerSocketId] ?? 0) >= 3;
+
+  if (isEliminated) {
+    game.eliminated[playerSocketId] = true;
+    const playerState = game.playerQuestionState[playerSocketId];
+
+    if (playerState) {
+      playerState.answered = true;
+    }
+    clearPlayerQuestionTimer(game, playerSocketId);
+  }
+
+  io.to(playerSocketId).emit("incorrectAnswer", {
+    strikes: game.strikes[playerSocketId] ?? 0,
+    eliminated: isEliminated
+  });
+
+  if (opponent) {
+    io.to(opponent.socketId).emit("opponentStrike", {
+      opponentStrikes: game.strikes[playerSocketId] ?? 0,
+      opponentEliminated: isEliminated
+    });
+  }
+
+  emitQuestionState(roomId);
+  emitLiveLeaderboard(roomId);
 }
 
 function handleMissedQuestion(roomId, scorerSocketId) {
@@ -1003,6 +1114,8 @@ function createActiveGame(players, topic, difficulty, customRoomCode = null) {
     endsAt: null,
     phase: "waiting",
     scores: buildScoreMap(players),
+    strikes: buildStrikeMap(players),
+    eliminated: buildEliminatedMap(players),
     streaks: buildScoreMap(players),
     powerUps: buildPowerUpMap(players),
     freezeUntil: buildFreezeMap(players),
@@ -1066,6 +1179,8 @@ function createActiveGame(players, topic, difficulty, customRoomCode = null) {
       opponent: players[0].rating
     }
   });
+
+  emitLiveLeaderboard(roomId);
 
   startCountdown(roomId);
 }
@@ -1610,6 +1725,10 @@ io.on("connection", (socket) => {
       return;
     }
 
+    if (game.eliminated[socket.id]) {
+      return;
+    }
+
     if ((game.freezeUntil[socket.id] ?? 0) > Date.now()) {
       return;
     }
@@ -1640,7 +1759,6 @@ io.on("connection", (socket) => {
     }
 
     handleIncorrectAnswer(roomId, socket.id);
-    io.to(socket.id).emit("incorrectAnswer");
   });
 
   socket.on("requestRematch", () => {
@@ -1659,6 +1777,7 @@ io.on("connection", (socket) => {
     }
 
     resetGameState(game);
+    emitLiveLeaderboard(roomId);
     if (game.customRoomCode) {
       const customRoom = customRooms.get(game.customRoomCode);
 
