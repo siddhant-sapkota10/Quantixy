@@ -1206,24 +1206,21 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     ...buildPlayerPowerState(game, playerTwoSocketId)
   });
 
-  // Broadcast the new per-player completion state (youAnswered / opponentAnswered / winner).
+  // Broadcast the current completion state (youAnswered / opponentAnswered / winner).
   emitQuestionState(roomId);
   emitLiveLeaderboard(roomId);
 
-  // Once every non-eliminated player has answered, advance the shared question.
-  const allAnswered = game.players
-    .filter((p) => !game.eliminated[p.socketId])
-    .every((p) => !!game.playerQuestionState[p.socketId]?.answered);
-
-  if (allAnswered) {
+  // Fast reaction loop behavior:
+  // as soon as the first correct answer lands, advance everyone immediately.
+  // This prevents the scorer from being blocked waiting for the opponent.
+  if (isFirstCorrect) {
     advanceRoomQuestion(roomId);
   }
 }
 
 /**
  * Advance the shared room question index and push the new question to every
- * active player simultaneously. Called only when all non-eliminated players
- * have correctly answered the current question.
+ * active player simultaneously.
  */
 function advanceRoomQuestion(roomId) {
   const game = activeGames.get(roomId);
