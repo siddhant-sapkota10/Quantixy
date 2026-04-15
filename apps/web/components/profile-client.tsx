@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/button";
-import { AVATARS, DEFAULT_AVATAR_ID, getAvatar, type AvatarId } from "@/lib/avatars";
+import { AvatarCarousel } from "@/components/avatar-carousel";
+import { DEFAULT_AVATAR_ID, getAvatar, normalizeAvatarId, type AvatarId } from "@/lib/avatars";
 import { getReadableAuthError, sanitizeDisplayName, validateDisplayName } from "@/lib/auth";
 import { getSupabaseClient } from "@/lib/supabase";
 import { formatTopicLabel, type Topic } from "@/lib/topics";
@@ -123,7 +124,7 @@ async function loadProfileFromSupabase(authUserId: string): Promise<ProfileRespo
   return {
     username: player.username,
     displayName: player.display_name ?? player.username,
-    avatarId: player.avatar_id ?? DEFAULT_AVATAR_ID,
+    avatarId: normalizeAvatarId(player.avatar_id),
     summary: {
       totalMatches: matchRows.length,
       wins,
@@ -181,6 +182,7 @@ export function ProfileClient() {
   const [displayNameError, setDisplayNameError] = useState<string | null>(null);
   const [savingAvatarId, setSavingAvatarId] = useState<AvatarId | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [previewAvatarId, setPreviewAvatarId] = useState<AvatarId>(DEFAULT_AVATAR_ID);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -265,6 +267,7 @@ export function ProfileClient() {
         }
 
         const nextData = (await response.json()) as ProfileResponse;
+        nextData.avatarId = normalizeAvatarId(nextData.avatarId);
         console.log("[profile] enriched profile loaded", {
           ratings: nextData.ratings.length,
           matches: nextData.matches.length
@@ -302,7 +305,11 @@ export function ProfileClient() {
 
     return formatTopicLabel(data.summary.highestRatedTopic as Topic);
   }, [data?.summary.highestRatedTopic]);
-  const currentAvatar = getAvatar(data?.avatarId);
+  const selectedAvatarId = normalizeAvatarId(data?.avatarId);
+  useEffect(() => {
+    setPreviewAvatarId(selectedAvatarId);
+  }, [selectedAvatarId]);
+  const currentAvatar = getAvatar(previewAvatarId);
   const totalMatches = data?.summary.totalMatches ?? 0;
   const currentDisplayName = data?.displayName ?? data?.username ?? "Profile";
 
@@ -311,7 +318,7 @@ export function ProfileClient() {
       return;
     }
 
-    const previousAvatarId = data.avatarId ?? DEFAULT_AVATAR_ID;
+    const previousAvatarId = normalizeAvatarId(data.avatarId);
     setAvatarError(null);
     setSavingAvatarId(avatarId);
     setData((current) => (current ? { ...current, avatarId } : current));
@@ -480,45 +487,32 @@ export function ProfileClient() {
         </div>
 
         <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-4 sm:p-6">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-sky-400/20 bg-slate-950/80 text-5xl shadow-glow">
-                {currentAvatar.icon}
-              </div>
-              <div>
-                <p className="text-sm uppercase tracking-[0.25em] text-slate-400">Choose Avatar</p>
-                <h2 className="mt-2 text-2xl font-bold text-white">{currentAvatar.name}</h2>
-                <p className="mt-1 text-sm text-slate-300">
-                  Pick the character that represents you in matches, the leaderboard, and your profile.
+          <div className="grid gap-6 lg:grid-cols-[minmax(240px,0.9fr)_minmax(0,1.4fr)] lg:items-stretch">
+            <div className="flex h-full flex-col justify-between space-y-4 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
+              <div className="space-y-3">
+                <p className="text-sm uppercase tracking-[0.25em] text-slate-400">Character Select</p>
+                <h2 className="text-3xl font-black text-white">{currentAvatar.name}</h2>
+                <p className="text-xs uppercase tracking-[0.22em] text-sky-200/90">{currentAvatar.role}</p>
+                <p className="text-sm text-slate-300">
+                  Pick your identity for multiplayer matches. Selection is saved to your profile instantly.
                 </p>
+              </div>
+
+              <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 px-3 py-3">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Ultimate</p>
+                <p className="mt-1 text-base font-semibold text-white">{currentAvatar.ultimateName}</p>
+                <p className="mt-1 text-sm text-slate-300">{currentAvatar.ultimateDescription}</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {AVATARS.map((avatar) => {
-                const isSelected = (data?.avatarId ?? DEFAULT_AVATAR_ID) === avatar.id;
-                const isSaving = savingAvatarId === avatar.id;
-
-                return (
-                  <button
-                    key={avatar.id}
-                    type="button"
-                    onClick={() => void handleAvatarSelect(avatar.id)}
-                    disabled={loading || Boolean(savingAvatarId)}
-                    className={`rounded-2xl border px-4 py-4 text-center transition ${
-                      isSelected
-                        ? "border-sky-400 bg-sky-500/15 ring-2 ring-sky-400/35 shadow-glow"
-                        : "border-slate-800 bg-slate-950/70 hover:border-slate-700"
-                    } disabled:cursor-not-allowed disabled:opacity-70`}
-                  >
-                    <div className="text-3xl">{avatar.icon}</div>
-                    <p className="mt-2 text-sm font-semibold text-white">{avatar.name}</p>
-                    <p className="mt-1 text-[11px] uppercase tracking-[0.2em] text-slate-400">
-                      {isSaving ? "Saving..." : isSelected ? "Selected" : "Choose"}
-                    </p>
-                  </button>
-                );
-              })}
+            <div className="min-w-0">
+              <AvatarCarousel
+                selectedId={selectedAvatarId}
+                savingId={savingAvatarId}
+                disabled={loading || Boolean(savingAvatarId)}
+                onFocusChange={setPreviewAvatarId}
+                onSelect={(avatarId) => void handleAvatarSelect(avatarId)}
+              />
             </div>
           </div>
 

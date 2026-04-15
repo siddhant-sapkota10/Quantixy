@@ -4,6 +4,7 @@ const { createServer } = require("node:http");
 const { Server } = require("socket.io");
 const { URL } = require("node:url");
 const EMOTES = require("../../packages/shared/emotes.json");
+const AVATARS = require("../../packages/shared/avatars.json");
 const POWER_UPS = require("../../packages/shared/powerups.json");
 const { verifyAccessToken } = require("./lib/supabase");
 const {
@@ -45,9 +46,8 @@ const MATCH_DURATION_MS = 60000;
 const TIMER_UPDATE_INTERVAL_MS = 1000;
 const FREEZE_DURATION_MS = 1600;
 const SLOW_DURATION_MS = 1000;
-const DOUBLE_POINTS_DURATION_MS = 6000;
 const POWER_UP_COOLDOWN_MS = 3500;
-const MAX_POWER_UP_USES_PER_MATCH = 3;
+const MAX_POWER_UP_USES_PER_MATCH = POWER_UPS.length;
 const EMOTE_COOLDOWN_MS = 1500;
 const EMOTE_BURST_WINDOW_MS = 5000;
 const EMOTE_BURST_LIMIT = 3;
@@ -59,62 +59,17 @@ const ULTIMATE_MAX_CHARGE = 100;
 const ULTIMATE_TIME_CHARGE_PER_SECOND = 1.4;
 const ULTIMATE_CORRECT_CHARGE = 18;
 const ULTIMATE_STREAK_BONUS_CHARGE = 6;
-const ULTIMATE_TITAN_DURATION_MS = 8000;
-const ULTIMATE_SHADOW_DURATION_MS = 3000;
+const ULTIMATE_DEFAULT_DURATION_MS = 6000;
 const ROOM_CODE_LENGTH = 6;
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
-const AVATAR_ULTIMATE_CONFIG = {
-  flash: {
-    ultimateType: "lightning_surge",
-    displayName: "Lightning Surge",
-    chargeMultiplier: 1
-  },
-  titan: {
-    ultimateType: "iron_will",
-    displayName: "Iron Will",
-    chargeMultiplier: 0.95
-  },
-  shadow: {
-    ultimateType: "blackout",
-    displayName: "Blackout",
-    chargeMultiplier: 1.05
-  },
-  inferno: {
-    ultimateType: "cataclysm",
-    displayName: "Cataclysm",
-    chargeMultiplier: 0.8
-  },
-  frost: {
-    ultimateType: "glacier_lock",
-    displayName: "Glacier Lock",
-    chargeMultiplier: 1
-  },
-  volt: {
-    ultimateType: "overclock",
-    displayName: "Overclock",
-    chargeMultiplier: 1
-  },
-  aegis: {
-    ultimateType: "bulwark",
-    displayName: "Bulwark",
-    chargeMultiplier: 1
-  },
-  nova: {
-    ultimateType: "starfall",
-    displayName: "Starfall",
-    chargeMultiplier: 1
-  }
-};
 
 const topicQueues = new Map();
 const activeGames = new Map();
 const customRooms = new Map();
 const VALID_EMOTE_IDS = new Set(EMOTES.map((emote) => emote.id));
 const POWER_UP_BY_ID = new Map(POWER_UPS.map((powerUp) => [powerUp.id, powerUp]));
-const POWER_UP_EARN_ORDER = [...POWER_UPS]
-  .filter((powerUp) => Number.isFinite(powerUp.earnStreak))
-  .sort((a, b) => (b.earnStreak ?? 0) - (a.earnStreak ?? 0));
+const POWER_UP_IDS = POWER_UPS.map((powerUp) => powerUp.id);
+const AVATAR_BY_ID = new Map(AVATARS.map((avatar) => [avatar.id, avatar]));
 let roomCounter = 1;
 
 function getAllowedOrigin(request) {
@@ -350,7 +305,11 @@ function clearUltimateEffects(game) {
   clearUltimateTimeoutMap(game, "blackoutTimeout");
   game.titanUntil = buildTitanUntilMap(game.players);
   game.blackoutUntil = buildBlackoutUntilMap(game.players);
+  game.overclockUntil = buildOverclockUntilMap(game.players);
+  game.fortressUntil = buildFortressUntilMap(game.players);
   game.flashBonusRemaining = buildFlashBonusRemainingMap(game.players);
+  game.novaBonusRemaining = buildNovaBonusRemainingMap(game.players);
+  game.fortressBlocksRemaining = buildFortressBlocksMap(game.players);
   game.infernoPending = buildInfernoPendingMap(game.players);
 }
 
@@ -358,8 +317,15 @@ function buildScoreMap(players) {
   return Object.fromEntries(players.map((player) => [player.socketId, 0]));
 }
 
-function buildPowerUpMap(players) {
-  return Object.fromEntries(players.map((player) => [player.socketId, null]));
+function buildPowerUpInventoryMap(players) {
+  const initialInventory = Object.fromEntries(POWER_UP_IDS.map((powerUpId) => [powerUpId, true]));
+  return Object.fromEntries(
+    players.map((player) => [player.socketId, { ...initialInventory }])
+  );
+}
+
+function buildPowerUpUsedListMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, []]));
 }
 
 function buildUltimateChargeMap(players) {
@@ -382,7 +348,23 @@ function buildBlackoutUntilMap(players) {
   return Object.fromEntries(players.map((player) => [player.socketId, 0]));
 }
 
+function buildOverclockUntilMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, 0]));
+}
+
+function buildFortressUntilMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, 0]));
+}
+
 function buildFlashBonusRemainingMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, 0]));
+}
+
+function buildNovaBonusRemainingMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, 0]));
+}
+
+function buildFortressBlocksMap(players) {
   return Object.fromEntries(players.map((player) => [player.socketId, 0]));
 }
 
@@ -418,6 +400,14 @@ function buildDoublePointsMap(players) {
   return Object.fromEntries(players.map((player) => [player.socketId, 0]));
 }
 
+function buildHintTextMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, ""]));
+}
+
+function buildHintUntilMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, 0]));
+}
+
 function buildPowerUpCooldownMap(players) {
   return Object.fromEntries(players.map((player) => [player.socketId, 0]));
 }
@@ -446,11 +436,14 @@ function buildEmoteCooldownMap(players) {
 }
 
 function clearMatchEffects(game) {
-  game.powerUps = buildPowerUpMap(game.players);
+  game.powerUpInventory = buildPowerUpInventoryMap(game.players);
+  game.powerUpUsedList = buildPowerUpUsedListMap(game.players);
   game.freezeUntil = buildFreezeMap(game.players);
   game.shieldActive = buildShieldMap(game.players);
   game.slowUntil = buildSlowMap(game.players);
   game.doublePointsUntil = buildDoublePointsMap(game.players);
+  game.hintText = buildHintTextMap(game.players);
+  game.hintUntil = buildHintUntilMap(game.players);
   game.powerUpCooldownUntil = buildPowerUpCooldownMap(game.players);
   game.powerUpUsesCount = buildPowerUpUsesMap(game.players);
   game.emoteCooldownUntil = buildEmoteCooldownMap(game.players);
@@ -502,42 +495,74 @@ function isActiveUntil(value) {
 }
 
 function getAvatarUltimateConfig(avatarId) {
-  return AVATAR_ULTIMATE_CONFIG[avatarId] ?? AVATAR_ULTIMATE_CONFIG.flash;
+  return AVATAR_BY_ID.get(avatarId) ?? AVATAR_BY_ID.get("flash");
+}
+
+function normalizeAvatarId(value) {
+  if (AVATAR_BY_ID.has(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const legacyValue = value.toLowerCase();
+    if (legacyValue === "titan" || legacyValue === "aegis" || legacyValue === "frost") {
+      return "guardian";
+    }
+    if (legacyValue === "volt") {
+      return "flash";
+    }
+    if (legacyValue === "nova") {
+      return "inferno";
+    }
+  }
+
+  return "flash";
 }
 
 function getUltimateTypeForPlayer(game, socketId) {
   const player = game.players.find((entry) => entry.socketId === socketId);
-  return getAvatarUltimateConfig(player?.avatar).ultimateType;
+  return getAvatarUltimateConfig(player?.avatar)?.ultimateId ?? "rapid_fire";
 }
 
 function getUltimateDisplayNameForPlayer(game, socketId) {
   const player = game.players.find((entry) => entry.socketId === socketId);
-  return getAvatarUltimateConfig(player?.avatar).displayName;
+  return getAvatarUltimateConfig(player?.avatar)?.ultimateName ?? "Rapid Fire";
+}
+
+function getUltimateDescriptionForPlayer(game, socketId) {
+  const player = game.players.find((entry) => entry.socketId === socketId);
+  return getAvatarUltimateConfig(player?.avatar)?.ultimateDescription ?? "";
+}
+
+function getUltimateDurationMs(ultimateType) {
+  const avatar = AVATARS.find((entry) => entry.ultimateId === ultimateType);
+  return avatar?.ultimateMeta?.durationMs ?? ULTIMATE_DEFAULT_DURATION_MS;
+}
+
+function getUltimateMeta(ultimateType) {
+  const avatar = AVATARS.find((entry) => entry.ultimateId === ultimateType);
+  return avatar?.ultimateMeta ?? {};
 }
 
 function getUltimateChargeMultiplier(game, socketId) {
   const player = game.players.find((entry) => entry.socketId === socketId);
-  return getAvatarUltimateConfig(player?.avatar).chargeMultiplier ?? 1;
+  return getAvatarUltimateConfig(player?.avatar)?.ultimateMeta?.chargeMultiplier ?? 1;
 }
 
 function isUltimateImplemented(ultimateType) {
-  return (
-    ultimateType === "lightning_surge" ||
-    ultimateType === "iron_will" ||
-    ultimateType === "blackout" ||
-    ultimateType === "cataclysm"
-  );
+  return Boolean(AVATARS.find((avatar) => avatar.ultimateId === ultimateType));
 }
 
 function buildPlayerUltimateState(game, socketId) {
   const opponent = getOpponent(game, socketId);
   const opponentId = opponent?.socketId;
   const yourUltimateType = getUltimateTypeForPlayer(game, socketId);
-  const opponentUltimateType = opponentId ? getUltimateTypeForPlayer(game, opponentId) : "lightning_surge";
+  const opponentUltimateType = opponentId ? getUltimateTypeForPlayer(game, opponentId) : "rapid_fire";
 
   return {
     ultimateType: yourUltimateType,
     ultimateName: getUltimateDisplayNameForPlayer(game, socketId),
+    ultimateDescription: getUltimateDescriptionForPlayer(game, socketId),
     ultimateCharge: game.ultimateCharge[socketId] ?? 0,
     ultimateReady: !!game.ultimateReady[socketId],
     ultimateUsed: !!game.ultimateUsed[socketId],
@@ -552,8 +577,16 @@ function buildPlayerUltimateState(game, socketId) {
     opponentTitanUntil: opponentId ? game.titanUntil[opponentId] ?? 0 : 0,
     blackoutUntil: game.blackoutUntil[socketId] ?? 0,
     opponentBlackoutUntil: opponentId ? game.blackoutUntil[opponentId] ?? 0 : 0,
+    overclockUntil: game.overclockUntil[socketId] ?? 0,
+    opponentOverclockUntil: opponentId ? game.overclockUntil[opponentId] ?? 0 : 0,
+    fortressUntil: game.fortressUntil[socketId] ?? 0,
+    opponentFortressUntil: opponentId ? game.fortressUntil[opponentId] ?? 0 : 0,
+    fortressBlocksRemaining: game.fortressBlocksRemaining[socketId] ?? 0,
+    opponentFortressBlocksRemaining: opponentId ? game.fortressBlocksRemaining[opponentId] ?? 0 : 0,
     flashBonusRemaining: game.flashBonusRemaining[socketId] ?? 0,
     opponentFlashBonusRemaining: opponentId ? game.flashBonusRemaining[opponentId] ?? 0 : 0,
+    novaBonusRemaining: game.novaBonusRemaining[socketId] ?? 0,
+    opponentNovaBonusRemaining: opponentId ? game.novaBonusRemaining[opponentId] ?? 0 : 0,
     infernoPending: !!game.infernoPending[socketId],
     opponentInfernoPending: opponentId ? !!game.infernoPending[opponentId] : false
   };
@@ -582,22 +615,68 @@ function getDurationForPowerUp(type) {
     return FREEZE_DURATION_MS;
   }
 
-  if (type === "slow_opponent") {
-    return SLOW_DURATION_MS;
-  }
-
   if (type === "double_points") {
-    return DOUBLE_POINTS_DURATION_MS;
+    return 0;
   }
 
   return 0;
 }
 
-function pickEarnedPowerUp(streak) {
-  for (const powerUp of POWER_UP_EARN_ORDER) {
-    if (streak >= (powerUp.earnStreak ?? Number.MAX_SAFE_INTEGER)) {
-      return powerUp.id;
-    }
+function getAvailablePowerUps(game, socketId) {
+  const inventory = game.powerUpInventory[socketId] ?? {};
+  return POWER_UP_IDS.filter((powerUpId) => inventory[powerUpId]);
+}
+
+function hasPowerUp(game, socketId, type) {
+  return Boolean(game.powerUpInventory[socketId]?.[type]);
+}
+
+function consumePowerUp(game, socketId, type) {
+  if (!hasPowerUp(game, socketId, type)) {
+    return false;
+  }
+
+  game.powerUpInventory[socketId][type] = false;
+  game.powerUpUsedList[socketId] = [...(game.powerUpUsedList[socketId] ?? []), type];
+  game.powerUpUsesCount[socketId] = (game.powerUpUsesCount[socketId] ?? 0) + 1;
+  game.powerUpCooldownUntil[socketId] = Date.now() + POWER_UP_COOLDOWN_MS;
+  return true;
+}
+
+function buildQuestionHint(question) {
+  const answer = String(question?.answer ?? "").trim();
+  if (!answer) {
+    return "No hint available.";
+  }
+
+  if (answer.length === 1) {
+    return `Hint: answer is a single character and starts with "${answer[0]}".`;
+  }
+
+  return `Hint: starts with "${answer[0]}" and has ${answer.length} characters.`;
+}
+
+function clearHintState(game, socketId) {
+  game.hintText[socketId] = "";
+  game.hintUntil[socketId] = 0;
+}
+
+function isProtectedByFortress(game, socketId) {
+  return (
+    isActiveUntil(game.fortressUntil[socketId]) &&
+    (game.fortressBlocksRemaining[socketId] ?? 0) > 0
+  );
+}
+
+function consumeIncomingProtection(game, socketId) {
+  if (isProtectedByFortress(game, socketId)) {
+    game.fortressBlocksRemaining[socketId] = Math.max(0, (game.fortressBlocksRemaining[socketId] ?? 0) - 1);
+    return "guardian_shield";
+  }
+
+  if (game.shieldActive[socketId]) {
+    game.shieldActive[socketId] = false;
+    return "shield";
   }
 
   return null;
@@ -606,16 +685,24 @@ function pickEarnedPowerUp(streak) {
 function buildPlayerPowerState(game, socketId) {
   const opponent = getOpponent(game, socketId);
   const opponentId = opponent?.socketId;
+  const available = getAvailablePowerUps(game, socketId);
+  const opponentAvailable = opponentId ? getAvailablePowerUps(game, opponentId) : [];
 
   return {
-    powerUpAvailable: game.powerUps[socketId] ?? null,
-    opponentPowerUpAvailable: opponentId ? game.powerUps[opponentId] ?? null : null,
+    powerUpAvailable: available[0] ?? null,
+    opponentPowerUpAvailable: opponentAvailable[0] ?? null,
+    powerUpsAvailable: available,
+    opponentPowerUpsAvailable: opponentAvailable,
+    powerUpsUsed: game.powerUpUsedList[socketId] ?? [],
+    opponentPowerUpsUsed: opponentId ? game.powerUpUsedList[opponentId] ?? [] : [],
     shieldActive: !!game.shieldActive[socketId],
     opponentShieldActive: opponentId ? !!game.shieldActive[opponentId] : false,
     slowedUntil: game.slowUntil[socketId] ?? 0,
     opponentSlowedUntil: opponentId ? game.slowUntil[opponentId] ?? 0 : 0,
     doublePointsUntil: game.doublePointsUntil[socketId] ?? 0,
     opponentDoublePointsUntil: opponentId ? game.doublePointsUntil[opponentId] ?? 0 : 0,
+    hintText: game.hintText[socketId] ?? "",
+    hintUntil: game.hintUntil[socketId] ?? 0,
     ...buildPlayerUltimateState(game, socketId)
   };
 }
@@ -668,14 +755,10 @@ function emitLiveLeaderboard(roomId) {
         you: !!game.eliminated[player.socketId],
         opponent: !!game.eliminated[opponent.socketId]
       },
-      ...buildPlayerUltimateState(game, player.socketId),
+      ...buildPlayerPowerState(game, player.socketId),
       updatedAt: Date.now()
     });
   }
-}
-
-function markPowerUpUsed(game, socketId) {
-  game.powerUpUsesCount[socketId] = (game.powerUpUsesCount[socketId] ?? 0) + 1;
 }
 
 function emitQuestionState(roomId) {
@@ -731,18 +814,26 @@ function resetGameState(game) {
   game.ultimateUsed = buildUltimateUsedMap(game.players);
   game.titanUntil = buildTitanUntilMap(game.players);
   game.blackoutUntil = buildBlackoutUntilMap(game.players);
+  game.overclockUntil = buildOverclockUntilMap(game.players);
+  game.fortressUntil = buildFortressUntilMap(game.players);
+  game.fortressBlocksRemaining = buildFortressBlocksMap(game.players);
   game.flashBonusRemaining = buildFlashBonusRemainingMap(game.players);
+  game.novaBonusRemaining = buildNovaBonusRemainingMap(game.players);
   game.infernoPending = buildInfernoPendingMap(game.players);
   game.titanTimeout = buildUltimateEffectTimeoutMap(game.players);
   game.blackoutTimeout = buildUltimateEffectTimeoutMap(game.players);
-  game.powerUps = buildPowerUpMap(game.players);
+  game.powerUpInventory = buildPowerUpInventoryMap(game.players);
+  game.powerUpUsedList = buildPowerUpUsedListMap(game.players);
   game.freezeUntil = buildFreezeMap(game.players);
   game.shieldActive = buildShieldMap(game.players);
   game.slowUntil = buildSlowMap(game.players);
   game.doublePointsUntil = buildDoublePointsMap(game.players);
+  game.hintText = buildHintTextMap(game.players);
+  game.hintUntil = buildHintUntilMap(game.players);
   game.powerUpCooldownUntil = buildPowerUpCooldownMap(game.players);
   game.powerUpUsesCount = buildPowerUpUsesMap(game.players);
   game.emoteCooldownUntil = buildEmoteCooldownMap(game.players);
+  game.emoteTimestamps = Object.fromEntries(game.players.map((player) => [player.socketId, []]));
   clearAllQuestionTimers(game);
   clearMatchTimer(game);
   game.rematchRequests = new Set();
@@ -774,6 +865,7 @@ function emitNewQuestionToPlayer(roomId, socketId) {
     return;
   }
 
+  clearHintState(game, socketId);
   questionState.currentQuestion = question;
   questionState.answered = false;
   questionState.questionSentAt = Date.now();
@@ -1027,6 +1119,10 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
   const questionIndex = questionState.index;
   const existingWinner = game.questionWinnersByIndex[questionIndex] ?? null;
   const isFirstCorrect = !existingWinner;
+  const fastAnswer =
+    isFirstCorrect &&
+    typeof questionState.questionSentAt === "number" &&
+    Date.now() - questionState.questionSentAt <= FAST_ANSWER_MS;
   let awardedPoints = 0;
 
   if (isFirstCorrect) {
@@ -1035,35 +1131,22 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     awardedPoints = pointsAwarded;
 
     if (game.infernoPending[playerSocketId]) {
-      awardedPoints = Math.max(awardedPoints, 3);
+      awardedPoints = Math.max(awardedPoints, 2);
       game.infernoPending[playerSocketId] = false;
     }
 
-    if ((game.flashBonusRemaining[playerSocketId] ?? 0) > 0) {
+    if (isActiveUntil(game.overclockUntil[playerSocketId])) {
       awardedPoints += 1;
-      game.flashBonusRemaining[playerSocketId] = (game.flashBonusRemaining[playerSocketId] ?? 0) - 1;
     }
 
     game.scores[playerSocketId] = (game.scores[playerSocketId] ?? 0) + awardedPoints;
     game.streaks[playerSocketId] = (game.streaks[playerSocketId] ?? 0) + 1;
     const streakBonus = game.streaks[playerSocketId] >= 3 ? ULTIMATE_STREAK_BONUS_CHARGE : 0;
     increaseUltimateCharge(game, playerSocketId, ULTIMATE_CORRECT_CHARGE + streakBonus);
-
-    if (!game.powerUps[playerSocketId] && !game.shieldActive[playerSocketId]) {
-      const earnedPowerUp = pickEarnedPowerUp(game.streaks[playerSocketId]);
-
-      if (earnedPowerUp) {
-        game.powerUps[playerSocketId] = earnedPowerUp;
-      }
-    }
   }
 
   const playerOneSocketId = game.players[0].socketId;
   const playerTwoSocketId = game.players[1].socketId;
-  const fastAnswer =
-    isFirstCorrect &&
-    typeof questionState.questionSentAt === "number" &&
-    Date.now() - questionState.questionSentAt <= FAST_ANSWER_MS;
   const scorerSocketId = playerSocketId;
 
   if (isFirstCorrect) {
@@ -1279,6 +1362,7 @@ function removeFromGame(socket) {
   }
 
   activeGames.delete(roomId);
+  socket.leave(roomId);
   socket.data.roomId = undefined;
 
   if (!customRoomCode) {
@@ -1313,7 +1397,7 @@ async function resolveSocketPlayer(socket, topic, accessToken) {
     playerId: player.id,
     name: player.display_name ?? player.username,
     rating: rating.rating,
-    avatar: player.avatar_id ?? "flash"
+    avatar: normalizeAvatarId(player.avatar_id)
   };
 }
 
@@ -1341,15 +1425,22 @@ function createActiveGame(players, topic, difficulty, customRoomCode = null) {
     ultimateUsed: buildUltimateUsedMap(players),
     titanUntil: buildTitanUntilMap(players),
     blackoutUntil: buildBlackoutUntilMap(players),
+    overclockUntil: buildOverclockUntilMap(players),
+    fortressUntil: buildFortressUntilMap(players),
+    fortressBlocksRemaining: buildFortressBlocksMap(players),
     flashBonusRemaining: buildFlashBonusRemainingMap(players),
+    novaBonusRemaining: buildNovaBonusRemainingMap(players),
     infernoPending: buildInfernoPendingMap(players),
     titanTimeout: buildUltimateEffectTimeoutMap(players),
     blackoutTimeout: buildUltimateEffectTimeoutMap(players),
-    powerUps: buildPowerUpMap(players),
+    powerUpInventory: buildPowerUpInventoryMap(players),
+    powerUpUsedList: buildPowerUpUsedListMap(players),
     freezeUntil: buildFreezeMap(players),
     shieldActive: buildShieldMap(players),
     slowUntil: buildSlowMap(players),
     doublePointsUntil: buildDoublePointsMap(players),
+    hintText: buildHintTextMap(players),
+    hintUntil: buildHintUntilMap(players),
     powerUpCooldownUntil: buildPowerUpCooldownMap(players),
     powerUpUsesCount: buildPowerUpUsesMap(players),
     emoteCooldownUntil: buildEmoteCooldownMap(players),
@@ -1393,7 +1484,7 @@ function createActiveGame(players, topic, difficulty, customRoomCode = null) {
       you: players[0].rating,
       opponent: players[1].rating
     },
-    ...buildPlayerUltimateState(game, players[0].socketId)
+    ...buildPlayerPowerState(game, players[0].socketId)
   });
 
   io.to(players[1].socketId).emit("matchFound", {
@@ -1407,7 +1498,7 @@ function createActiveGame(players, topic, difficulty, customRoomCode = null) {
       you: players[1].rating,
       opponent: players[0].rating
     },
-    ...buildPlayerUltimateState(game, players[1].socketId)
+    ...buildPlayerPowerState(game, players[1].socketId)
   });
 
   emitLiveLeaderboard(roomId);
@@ -1570,7 +1661,7 @@ function useFreezePowerUp(roomId, playerSocketId) {
     return;
   }
 
-  if (game.powerUps[playerSocketId] !== "freeze") {
+  if (!hasPowerUp(game, playerSocketId, "freeze")) {
     return;
   }
 
@@ -1584,16 +1675,19 @@ function useFreezePowerUp(roomId, playerSocketId) {
     return;
   }
 
-  if (isActiveUntil(game.titanUntil[opponent.socketId])) {
-    game.powerUps[playerSocketId] = null;
-    game.powerUpCooldownUntil[playerSocketId] = Date.now() + POWER_UP_COOLDOWN_MS;
-    markPowerUpUsed(game, playerSocketId);
+  if (!consumePowerUp(game, playerSocketId, "freeze")) {
+    return;
+  }
+
+  const blockedByProtection = consumeIncomingProtection(game, opponent.socketId);
+  if (blockedByProtection) {
+    const blockedType = blockedByProtection === "guardian_shield" ? "guardian_shield" : "shield";
 
     io.to(playerSocketId).emit("powerUpUsed", {
       type: "freeze",
       by: "you",
       target: "opponent",
-      blockedBy: "iron_will",
+      blockedBy: blockedType,
       ...buildPlayerPowerState(game, playerSocketId)
     });
 
@@ -1601,21 +1695,8 @@ function useFreezePowerUp(roomId, playerSocketId) {
       type: "freeze",
       by: "opponent",
       target: "you",
-      blockedBy: "iron_will",
+      blockedBy: blockedType,
       ...buildPlayerPowerState(game, opponent.socketId)
-    });
-    return;
-  }
-
-  if (game.shieldActive[opponent.socketId]) {
-    game.powerUps[playerSocketId] = null;
-    game.shieldActive[opponent.socketId] = false;
-    game.powerUpCooldownUntil[playerSocketId] = Date.now() + POWER_UP_COOLDOWN_MS;
-    markPowerUpUsed(game, playerSocketId);
-
-    console.log(`[server] shieldBlocked emitted -> room=${roomId}`, {
-      attacker: playerSocketId,
-      defender: opponent.socketId
     });
 
     io.to(playerSocketId).emit("shieldBlocked", {
@@ -1635,11 +1716,8 @@ function useFreezePowerUp(roomId, playerSocketId) {
     return;
   }
 
-  game.powerUps[playerSocketId] = null;
   const durationMs = getDurationForPowerUp("freeze");
   game.freezeUntil[opponent.socketId] = Date.now() + durationMs;
-  game.powerUpCooldownUntil[playerSocketId] = Date.now() + POWER_UP_COOLDOWN_MS;
-  markPowerUpUsed(game, playerSocketId);
 
   console.log(`[server] powerUpUsed emitted -> room=${roomId}`, {
     type: "freeze",
@@ -1671,16 +1749,16 @@ function useShieldPowerUp(roomId, playerSocketId) {
     return;
   }
 
-  if (game.powerUps[playerSocketId] !== "shield" || game.shieldActive[playerSocketId]) {
+  if (!hasPowerUp(game, playerSocketId, "shield") || game.shieldActive[playerSocketId]) {
     return;
   }
 
   const opponent = getOpponent(game, playerSocketId);
+  if (!consumePowerUp(game, playerSocketId, "shield")) {
+    return;
+  }
 
-  game.powerUps[playerSocketId] = null;
   game.shieldActive[playerSocketId] = true;
-  game.powerUpCooldownUntil[playerSocketId] = Date.now() + POWER_UP_COOLDOWN_MS;
-  markPowerUpUsed(game, playerSocketId);
 
   io.to(playerSocketId).emit("shieldActivated", {
     by: "you",
@@ -1702,14 +1780,15 @@ function useDoublePointsPowerUp(roomId, playerSocketId) {
     return;
   }
 
-  if (game.powerUps[playerSocketId] !== "double_points") {
+  if (!hasPowerUp(game, playerSocketId, "double_points")) {
     return;
   }
 
-  game.powerUps[playerSocketId] = null;
-  game.doublePointsUntil[playerSocketId] = Date.now() + getDurationForPowerUp("double_points");
-  game.powerUpCooldownUntil[playerSocketId] = Date.now() + POWER_UP_COOLDOWN_MS;
-  markPowerUpUsed(game, playerSocketId);
+  if (!consumePowerUp(game, playerSocketId, "double_points")) {
+    return;
+  }
+
+  game.doublePointsUntil[playerSocketId] = Date.now() + 60000;
 
   const opponent = getOpponent(game, playerSocketId);
   io.to(playerSocketId).emit("powerUpUsed", {
@@ -1731,69 +1810,38 @@ function useDoublePointsPowerUp(roomId, playerSocketId) {
   }
 }
 
-function useSlowOpponentPowerUp(roomId, playerSocketId) {
+function useHintPowerUp(roomId, playerSocketId) {
   const game = activeGames.get(roomId);
 
   if (!game || game.phase !== "playing") {
     return;
   }
 
-  if (game.powerUps[playerSocketId] !== "slow_opponent") {
+  if (!hasPowerUp(game, playerSocketId, "hint")) {
     return;
   }
 
-  const opponent = getOpponent(game, playerSocketId);
-
-  if (!opponent) {
+  const questionState = game.playerQuestionState[playerSocketId];
+  const currentQuestion = questionState?.currentQuestion;
+  if (!currentQuestion) {
     return;
   }
 
-  if (isActiveUntil(game.freezeUntil[opponent.socketId]) || isActiveUntil(game.slowUntil[opponent.socketId])) {
+  if (!consumePowerUp(game, playerSocketId, "hint")) {
     return;
   }
 
-  if (isActiveUntil(game.titanUntil[opponent.socketId])) {
-    game.powerUps[playerSocketId] = null;
-    game.powerUpCooldownUntil[playerSocketId] = Date.now() + POWER_UP_COOLDOWN_MS;
-    markPowerUpUsed(game, playerSocketId);
-
-    io.to(playerSocketId).emit("powerUpUsed", {
-      type: "slow_opponent",
-      by: "you",
-      target: "opponent",
-      blockedBy: "iron_will",
-      ...buildPlayerPowerState(game, playerSocketId)
-    });
-
-    io.to(opponent.socketId).emit("powerUpUsed", {
-      type: "slow_opponent",
-      by: "opponent",
-      target: "you",
-      blockedBy: "iron_will",
-      ...buildPlayerPowerState(game, opponent.socketId)
-    });
-    return;
-  }
-
-  game.powerUps[playerSocketId] = null;
-  game.slowUntil[opponent.socketId] = Date.now() + getDurationForPowerUp("slow_opponent");
-  game.powerUpCooldownUntil[playerSocketId] = Date.now() + POWER_UP_COOLDOWN_MS;
-  markPowerUpUsed(game, playerSocketId);
+  const durationMs = getDurationForPowerUp("hint");
+  game.hintText[playerSocketId] = buildQuestionHint(currentQuestion);
+  game.hintUntil[playerSocketId] = Date.now() + durationMs;
 
   io.to(playerSocketId).emit("powerUpUsed", {
-    type: "slow_opponent",
+    type: "hint",
     by: "you",
-    target: "opponent",
-    durationMs: getDurationForPowerUp("slow_opponent"),
-    ...buildPlayerPowerState(game, playerSocketId)
-  });
-
-  io.to(opponent.socketId).emit("powerUpUsed", {
-    type: "slow_opponent",
-    by: "opponent",
     target: "you",
-    durationMs: getDurationForPowerUp("slow_opponent"),
-    ...buildPlayerPowerState(game, opponent.socketId)
+    durationMs,
+    hintText: game.hintText[playerSocketId],
+    ...buildPlayerPowerState(game, playerSocketId)
   });
 }
 
@@ -1804,22 +1852,25 @@ function useCleansePowerUp(roomId, playerSocketId) {
     return;
   }
 
-  if (game.powerUps[playerSocketId] !== "cleanse") {
+  if (!hasPowerUp(game, playerSocketId, "cleanse")) {
     return;
   }
 
   const hadFreeze = isActiveUntil(game.freezeUntil[playerSocketId]);
   const hadSlow = isActiveUntil(game.slowUntil[playerSocketId]);
+  const hadBlackout = isActiveUntil(game.blackoutUntil[playerSocketId]);
 
-  if (!hadFreeze && !hadSlow) {
+  if (!hadFreeze && !hadSlow && !hadBlackout) {
     return;
   }
 
-  game.powerUps[playerSocketId] = null;
+  if (!consumePowerUp(game, playerSocketId, "cleanse")) {
+    return;
+  }
+
   game.freezeUntil[playerSocketId] = 0;
   game.slowUntil[playerSocketId] = 0;
-  game.powerUpCooldownUntil[playerSocketId] = Date.now() + POWER_UP_COOLDOWN_MS;
-  markPowerUpUsed(game, playerSocketId);
+  game.blackoutUntil[playerSocketId] = 0;
 
   const opponent = getOpponent(game, playerSocketId);
 
@@ -1827,7 +1878,7 @@ function useCleansePowerUp(roomId, playerSocketId) {
     type: "cleanse",
     by: "you",
     target: "you",
-    removedEffects: [hadFreeze ? "freeze" : null, hadSlow ? "slow_opponent" : null].filter(Boolean),
+    removedEffects: [hadFreeze ? "freeze" : null, hadSlow ? "slow" : null, hadBlackout ? "blackout" : null].filter(Boolean),
     ...buildPlayerPowerState(game, playerSocketId)
   });
 
@@ -1841,54 +1892,15 @@ function useCleansePowerUp(roomId, playerSocketId) {
   }
 }
 
-function useStealMomentumPowerUp(roomId, playerSocketId) {
-  const game = activeGames.get(roomId);
-
-  if (!game || game.phase !== "playing") {
-    return;
-  }
-
-  if (game.powerUps[playerSocketId] !== "steal_momentum") {
-    return;
-  }
-
-  const opponent = getOpponent(game, playerSocketId);
-
-  if (!opponent) {
-    return;
-  }
-
-  game.powerUps[playerSocketId] = null;
-  game.powerUpCooldownUntil[playerSocketId] = Date.now() + POWER_UP_COOLDOWN_MS;
-  game.streaks[opponent.socketId] = 0;
-  game.shieldActive[opponent.socketId] = false;
-  game.doublePointsUntil[opponent.socketId] = 0;
-  markPowerUpUsed(game, playerSocketId);
-
-  io.to(playerSocketId).emit("powerUpUsed", {
-    type: "steal_momentum",
-    by: "you",
-    target: "opponent",
-    ...buildPlayerPowerState(game, playerSocketId)
-  });
-
-  io.to(opponent.socketId).emit("powerUpUsed", {
-    type: "steal_momentum",
-    by: "opponent",
-    target: "you",
-    ...buildPlayerPowerState(game, opponent.socketId)
-  });
-}
-
 function emitUltimateApplied(game, roomId, playerSocketId, opponentSocketId, payloadForYou, payloadForOpponent) {
   io.to(playerSocketId).emit("ultimateApplied", {
     ...payloadForYou,
-    ...buildPlayerUltimateState(game, playerSocketId)
+    ...buildPlayerPowerState(game, playerSocketId)
   });
 
   io.to(opponentSocketId).emit("ultimateApplied", {
     ...payloadForOpponent,
-    ...buildPlayerUltimateState(game, opponentSocketId)
+    ...buildPlayerPowerState(game, opponentSocketId)
   });
 
   emitLiveLeaderboard(roomId);
@@ -1897,13 +1909,28 @@ function emitUltimateApplied(game, roomId, playerSocketId, opponentSocketId, pay
 function emitUltimateEnded(game, playerSocketId, opponentSocketId, payloadForYou, payloadForOpponent) {
   io.to(playerSocketId).emit("ultimateEnded", {
     ...payloadForYou,
-    ...buildPlayerUltimateState(game, playerSocketId)
+    ...buildPlayerPowerState(game, playerSocketId)
   });
 
   io.to(opponentSocketId).emit("ultimateEnded", {
     ...payloadForOpponent,
-    ...buildPlayerUltimateState(game, opponentSocketId)
+    ...buildPlayerPowerState(game, opponentSocketId)
   });
+}
+
+function emitRematchStatus(game) {
+  const requestedPlayers = game.rematchRequests.size;
+  const requiredPlayers = game.players.length;
+
+  for (const player of game.players) {
+    const opponent = getOpponent(game, player.socketId);
+    io.to(player.socketId).emit("rematchStatus", {
+      youRequested: game.rematchRequests.has(player.socketId),
+      opponentRequested: opponent ? game.rematchRequests.has(opponent.socketId) : false,
+      requiredPlayers,
+      requestedPlayers
+    });
+  }
 }
 
 function useAvatarUltimate(roomId, playerSocketId) {
@@ -1928,69 +1955,56 @@ function useAvatarUltimate(roomId, playerSocketId) {
 
   const ultimateType = getUltimateTypeForPlayer(game, playerSocketId);
   const now = Date.now();
+  const ultimateMeta = getUltimateMeta(ultimateType);
 
   game.ultimateUsed[playerSocketId] = true;
   game.ultimateReady[playerSocketId] = false;
   game.ultimateCharge[playerSocketId] = ULTIMATE_MAX_CHARGE;
 
-  if (ultimateType === "lightning_surge") {
-    game.flashBonusRemaining[playerSocketId] = 2;
+  if (ultimateType === "rapid_fire") {
+    const durationMs = getUltimateDurationMs(ultimateType);
+    game.overclockUntil[playerSocketId] = now + durationMs;
     emitUltimateApplied(
       game,
       roomId,
       playerSocketId,
       opponent.socketId,
-      { by: "you", target: "you", type: ultimateType, effect: "flash_bonus", questionsRemaining: 2 },
-      { by: "opponent", target: "opponent", type: ultimateType, effect: "flash_bonus", questionsRemaining: 2 }
-    );
-    return;
-  }
-
-  if (ultimateType === "iron_will") {
-    clearTimeout(game.titanTimeout[playerSocketId]);
-    game.titanUntil[playerSocketId] = now + ULTIMATE_TITAN_DURATION_MS;
-    game.titanTimeout[playerSocketId] = setTimeout(() => {
-      const activeGame = activeGames.get(roomId);
-      if (!activeGame) {
-        return;
+      {
+        by: "you",
+        target: "you",
+        type: ultimateType,
+        effect: "rapid_fire_active",
+        durationMs
+      },
+      {
+        by: "opponent",
+        target: "opponent",
+        type: ultimateType,
+        effect: "rapid_fire_active",
+        durationMs
       }
-      activeGame.titanUntil[playerSocketId] = 0;
-      activeGame.titanTimeout[playerSocketId] = null;
-      emitUltimateEnded(
-        activeGame,
-        playerSocketId,
-        opponent.socketId,
-        { by: "you", target: "you", type: "iron_will", effect: "titan_expired" },
-        { by: "opponent", target: "opponent", type: "iron_will", effect: "titan_expired" }
-      );
-    }, ULTIMATE_TITAN_DURATION_MS);
-
-    emitUltimateApplied(
-      game,
-      roomId,
-      playerSocketId,
-      opponent.socketId,
-      { by: "you", target: "you", type: ultimateType, effect: "debuff_immunity", durationMs: ULTIMATE_TITAN_DURATION_MS },
-      { by: "opponent", target: "opponent", type: ultimateType, effect: "debuff_immunity", durationMs: ULTIMATE_TITAN_DURATION_MS }
     );
     return;
   }
 
-  if (ultimateType === "blackout") {
-    if (isActiveUntil(game.titanUntil[opponent.socketId])) {
+  if (ultimateType === "jam") {
+    const durationMs = getUltimateDurationMs(ultimateType);
+
+    const blockedByProtection = consumeIncomingProtection(game, opponent.socketId);
+    if (blockedByProtection) {
       emitUltimateApplied(
         game,
         roomId,
         playerSocketId,
         opponent.socketId,
-        { by: "you", target: "opponent", type: ultimateType, effect: "blocked_by_titan" },
-        { by: "opponent", target: "you", type: ultimateType, effect: "blocked_by_titan" }
+        { by: "you", target: "opponent", type: ultimateType, effect: `blocked_by_${blockedByProtection}` },
+        { by: "opponent", target: "you", type: ultimateType, effect: `blocked_by_${blockedByProtection}` }
       );
       return;
     }
 
     clearTimeout(game.blackoutTimeout[opponent.socketId]);
-    game.blackoutUntil[opponent.socketId] = now + ULTIMATE_SHADOW_DURATION_MS;
+    game.blackoutUntil[opponent.socketId] = now + durationMs;
     game.blackoutTimeout[opponent.socketId] = setTimeout(() => {
       const activeGame = activeGames.get(roomId);
       if (!activeGame) {
@@ -2002,31 +2016,47 @@ function useAvatarUltimate(roomId, playerSocketId) {
         activeGame,
         playerSocketId,
         opponent.socketId,
-        { by: "you", target: "opponent", type: "blackout", effect: "blackout_ended" },
-        { by: "opponent", target: "you", type: "blackout", effect: "blackout_ended" }
+        { by: "you", target: "opponent", type: "jam", effect: "jam_ended" },
+        { by: "opponent", target: "you", type: "jam", effect: "jam_ended" }
       );
-    }, ULTIMATE_SHADOW_DURATION_MS);
+    }, durationMs);
 
     emitUltimateApplied(
       game,
       roomId,
       playerSocketId,
       opponent.socketId,
-      { by: "you", target: "opponent", type: ultimateType, effect: "input_disabled", durationMs: ULTIMATE_SHADOW_DURATION_MS },
-      { by: "opponent", target: "you", type: ultimateType, effect: "input_disabled", durationMs: ULTIMATE_SHADOW_DURATION_MS }
+      { by: "you", target: "opponent", type: ultimateType, effect: "jam_active", durationMs },
+      { by: "opponent", target: "you", type: ultimateType, effect: "jam_active", durationMs }
     );
     return;
   }
 
-  if (ultimateType === "cataclysm") {
+  if (ultimateType === "double") {
     game.infernoPending[playerSocketId] = true;
     emitUltimateApplied(
       game,
       roomId,
       playerSocketId,
       opponent.socketId,
-      { by: "you", target: "you", type: ultimateType, effect: "next_correct_plus_three" },
-      { by: "opponent", target: "opponent", type: ultimateType, effect: "next_correct_plus_three" }
+      { by: "you", target: "you", type: ultimateType, effect: "next_correct_plus_two" },
+      { by: "opponent", target: "opponent", type: ultimateType, effect: "next_correct_plus_two" }
+    );
+    return;
+  }
+
+  if (ultimateType === "shield") {
+    const durationMs = getUltimateDurationMs(ultimateType);
+    const blocks = ultimateMeta.blocks ?? 1;
+    game.fortressUntil[playerSocketId] = now + durationMs;
+    game.fortressBlocksRemaining[playerSocketId] = blocks;
+    emitUltimateApplied(
+      game,
+      roomId,
+      playerSocketId,
+      opponent.socketId,
+      { by: "you", target: "you", type: ultimateType, effect: "guardian_shield_active", durationMs },
+      { by: "opponent", target: "opponent", type: ultimateType, effect: "guardian_shield_active", durationMs }
     );
     return;
   }
@@ -2036,19 +2066,27 @@ function useAvatarUltimate(roomId, playerSocketId) {
     roomId,
     playerSocketId,
     opponent.socketId,
-    { by: "you", target: "you", type: ultimateType, effect: "coming_soon" },
-    { by: "opponent", target: "opponent", type: ultimateType, effect: "coming_soon" }
+    { by: "you", target: "you", type: ultimateType, effect: "ultimate_applied" },
+    { by: "opponent", target: "opponent", type: ultimateType, effect: "ultimate_applied" }
   );
 }
 
-function handleSendEmote(roomId, playerSocketId, emoteId) {
+function handleSendEmote(roomId, playerSocketId, emoteId, clientMessageId) {
   const game = activeGames.get(roomId);
 
   if (!game || game.phase !== "playing") {
     return;
   }
 
+  if (!game.players.some((player) => player.socketId === playerSocketId)) {
+    return;
+  }
+
   if (!VALID_EMOTE_IDS.has(emoteId)) {
+    return;
+  }
+
+  if (!clientMessageId || typeof clientMessageId !== "string" || clientMessageId.length > 128) {
     return;
   }
 
@@ -2068,22 +2106,20 @@ function handleSendEmote(roomId, playerSocketId, emoteId) {
   timestamps.push(now);
   game.emoteTimestamps[playerSocketId] = timestamps;
 
-  const opponent = getOpponent(game, playerSocketId);
-
-  if (!opponent) {
-    return;
-  }
-
   game.emoteCooldownUntil[playerSocketId] = now + EMOTE_COOLDOWN_MS;
-  console.log(`[server] emoteReceived emitted -> room=${roomId}`, {
+  console.log(`[server] emotePlayed emitted -> room=${roomId}`, {
     emoteId,
+    clientMessageId,
     from: playerSocketId,
-    to: opponent.socketId
+    to: roomId
   });
 
-  io.to(opponent.socketId).emit("emoteReceived", {
+  io.to(roomId).emit("emotePlayed", {
+    roomId,
     emoteId,
-    sender: "opponent"
+    senderSocketId: playerSocketId,
+    clientMessageId,
+    sentAt: now
   });
 }
 
@@ -2222,8 +2258,13 @@ io.on("connection", (socket) => {
       return;
     }
 
+    if (!game.players.some((player) => player.socketId === socket.id)) {
+      return;
+    }
+
     game.rematchRequests.add(socket.id);
     console.log(`[server] requestRematch received -> id=${socket.id} room=${roomId}`);
+    emitRematchStatus(game);
 
     if (game.rematchRequests.size < game.players.length) {
       return;
@@ -2285,18 +2326,13 @@ io.on("connection", (socket) => {
       return;
     }
 
-    if (type === "slow_opponent") {
-      useSlowOpponentPowerUp(roomId, socket.id);
+    if (type === "hint") {
+      useHintPowerUp(roomId, socket.id);
       return;
     }
 
     if (type === "cleanse") {
       useCleansePowerUp(roomId, socket.id);
-      return;
-    }
-
-    if (type === "steal_momentum") {
-      useStealMomentumPowerUp(roomId, socket.id);
     }
   });
 
@@ -2312,12 +2348,14 @@ io.on("connection", (socket) => {
 
   socket.on("sendEmote", (payload) => {
     const roomId = socket.data.roomId;
+    const emoteId = payload?.emoteId;
+    const clientMessageId = payload?.clientMessageId;
 
-    if (!roomId || !payload?.emoteId) {
+    if (!roomId || !emoteId || !clientMessageId) {
       return;
     }
 
-    handleSendEmote(roomId, socket.id, payload.emoteId);
+    handleSendEmote(roomId, socket.id, emoteId, clientMessageId);
   });
 
   /**

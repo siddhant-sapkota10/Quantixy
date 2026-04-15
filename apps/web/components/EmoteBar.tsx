@@ -66,7 +66,7 @@ export function EmoteBar({
   const durationMs = Math.max(0, cooldownUntil - Date.now());
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative flex h-11 items-center">
       {/* Toggle button */}
       <button
         type="button"
@@ -74,7 +74,7 @@ export function EmoteBar({
         disabled={disabled || coolingDown}
         aria-label={coolingDown ? "Emote cooldown" : "Send emote (keys 1–6)"}
         title={coolingDown ? "Emote cooldown…" : "Send emote  (keys 1–6)"}
-        className={`relative flex h-10 w-10 items-center justify-center rounded-full border text-xl transition-all duration-200 select-none ${
+        className={`relative flex h-11 w-11 items-center justify-center rounded-full border text-xl transition-all duration-200 select-none ${
           coolingDown
             ? "border-slate-700 bg-slate-900/60 opacity-50 cursor-not-allowed"
             : open
@@ -103,7 +103,7 @@ export function EmoteBar({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 6 }}
             transition={{ duration: 0.14, ease: "easeOut" }}
-            className="absolute bottom-full left-0 mb-2 flex gap-1.5 rounded-2xl border border-slate-700/80 bg-slate-900/97 p-2 shadow-2xl backdrop-blur-sm"
+            className="absolute bottom-full left-0 mb-2 flex max-w-[min(92vw,28rem)] flex-wrap gap-1.5 rounded-2xl border border-slate-700/80 bg-slate-900/97 p-2 shadow-2xl backdrop-blur-sm"
             style={{ zIndex: 50 }}
           >
             {emotes.map((emote, index) => (

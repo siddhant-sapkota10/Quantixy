@@ -1,0 +1,84 @@
+[
+  {
+    "id": "flash",
+    "name": "Flash",
+    "role": "Speed",
+    "icon": "\u26A1",
+    "emoji": "\u26A1",
+    "theme": {
+      "accent": "#38BDF8",
+      "glow": "rgba(56,189,248,0.45)"
+    },
+    "description": "Outrun the clock and stack points fast.",
+    "ultimateId": "rapid_fire",
+    "ultimateName": "Rapid Fire",
+    "ultimateDescription": "For 3 seconds, each correct answer grants +1 extra point.",
+    "ultimateMeta": {
+      "effectType": "timed_bonus",
+      "durationMs": 3000,
+      "bonusPoints": 1,
+      "chargeMultiplier": 1
+    }
+  },
+  {
+    "id": "shadow",
+    "name": "Shadow",
+    "role": "Disrupt",
+    "icon": "\uD83C\uDF11",
+    "emoji": "\uD83C\uDF11",
+    "theme": {
+      "accent": "#A78BFA",
+      "glow": "rgba(167,139,250,0.42)"
+    },
+    "description": "Break the opponent rhythm with precise disruption.",
+    "ultimateId": "jam",
+    "ultimateName": "Jam",
+    "ultimateDescription": "For 2 seconds, the opponent cannot type.",
+    "ultimateMeta": {
+      "effectType": "disable_input",
+      "durationMs": 2000,
+      "chargeMultiplier": 1.02
+    }
+  },
+  {
+    "id": "guardian",
+    "name": "Guardian",
+    "role": "Defense",
+    "icon": "\uD83D\uDEE1\uFE0F",
+    "emoji": "\uD83D\uDEE1\uFE0F",
+    "theme": {
+      "accent": "#34D399",
+      "glow": "rgba(52,211,153,0.4)"
+    },
+    "description": "Hold your line and neutralize incoming pressure.",
+    "ultimateId": "shield",
+    "ultimateName": "Shield",
+    "ultimateDescription": "Blocks the next negative effect.",
+    "ultimateMeta": {
+      "effectType": "protective_block",
+      "blocks": 1,
+      "durationMs": 7000,
+      "chargeMultiplier": 0.98
+    }
+  },
+  {
+    "id": "inferno",
+    "name": "Inferno",
+    "role": "Burst",
+    "icon": "\uD83D\uDD25",
+    "emoji": "\uD83D\uDD25",
+    "theme": {
+      "accent": "#FB7185",
+      "glow": "rgba(251,113,133,0.43)"
+    },
+    "description": "Convert one clean answer into explosive momentum.",
+    "ultimateId": "double",
+    "ultimateName": "Double",
+    "ultimateDescription": "Your next correct answer gives +2 points.",
+    "ultimateMeta": {
+      "effectType": "next_correct_bonus",
+      "minimumPoints": 2,
+      "chargeMultiplier": 0.95
+    }
+  }
+]

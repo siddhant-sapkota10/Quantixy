@@ -14,6 +14,7 @@ if (typeof window !== "undefined") {
 type UltimateStatePayload = {
   ultimateType?: string;
   ultimateName?: string;
+  ultimateDescription?: string;
   ultimateCharge?: number;
   ultimateReady?: boolean;
   ultimateUsed?: boolean;
@@ -28,8 +29,16 @@ type UltimateStatePayload = {
   opponentTitanUntil?: number;
   blackoutUntil?: number;
   opponentBlackoutUntil?: number;
+  overclockUntil?: number;
+  opponentOverclockUntil?: number;
+  fortressUntil?: number;
+  opponentFortressUntil?: number;
+  fortressBlocksRemaining?: number;
+  opponentFortressBlocksRemaining?: number;
   flashBonusRemaining?: number;
   opponentFlashBonusRemaining?: number;
+  novaBonusRemaining?: number;
+  opponentNovaBonusRemaining?: number;
   infernoPending?: boolean;
   opponentInfernoPending?: boolean;
 };
@@ -131,12 +140,18 @@ export type ServerToClientEvents = {
     opponentAnswered?: boolean;
     powerUpAvailable?: PowerUpId | null;
     opponentPowerUpAvailable?: PowerUpId | null;
+    powerUpsAvailable?: PowerUpId[];
+    opponentPowerUpsAvailable?: PowerUpId[];
+    powerUpsUsed?: PowerUpId[];
+    opponentPowerUpsUsed?: PowerUpId[];
     shieldActive?: boolean;
     opponentShieldActive?: boolean;
     slowedUntil?: number;
     opponentSlowedUntil?: number;
     doublePointsUntil?: number;
     opponentDoublePointsUntil?: number;
+    hintText?: string;
+    hintUntil?: number;
   } & UltimateStatePayload) => void;
   questionState: (payload: {
     youAnswered: boolean;
@@ -168,23 +183,35 @@ export type ServerToClientEvents = {
     blockedBy?: string;
     powerUpAvailable?: PowerUpId | null;
     opponentPowerUpAvailable?: PowerUpId | null;
+    powerUpsAvailable?: PowerUpId[];
+    opponentPowerUpsAvailable?: PowerUpId[];
+    powerUpsUsed?: PowerUpId[];
+    opponentPowerUpsUsed?: PowerUpId[];
     shieldActive?: boolean;
     opponentShieldActive?: boolean;
     slowedUntil?: number;
     opponentSlowedUntil?: number;
     doublePointsUntil?: number;
     opponentDoublePointsUntil?: number;
+    hintText?: string;
+    hintUntil?: number;
   } & UltimateStatePayload) => void;
   shieldActivated: (payload: {
     by: "you" | "opponent";
     powerUpAvailable?: PowerUpId | null;
     opponentPowerUpAvailable?: PowerUpId | null;
+    powerUpsAvailable?: PowerUpId[];
+    opponentPowerUpsAvailable?: PowerUpId[];
+    powerUpsUsed?: PowerUpId[];
+    opponentPowerUpsUsed?: PowerUpId[];
     shieldActive?: boolean;
     opponentShieldActive?: boolean;
     slowedUntil?: number;
     opponentSlowedUntil?: number;
     doublePointsUntil?: number;
     opponentDoublePointsUntil?: number;
+    hintText?: string;
+    hintUntil?: number;
   } & UltimateStatePayload) => void;
   shieldBlocked: (payload: {
     by: "you" | "opponent";
@@ -192,12 +219,18 @@ export type ServerToClientEvents = {
     blockedType: "freeze";
     powerUpAvailable?: PowerUpId | null;
     opponentPowerUpAvailable?: PowerUpId | null;
+    powerUpsAvailable?: PowerUpId[];
+    opponentPowerUpsAvailable?: PowerUpId[];
+    powerUpsUsed?: PowerUpId[];
+    opponentPowerUpsUsed?: PowerUpId[];
     shieldActive?: boolean;
     opponentShieldActive?: boolean;
     slowedUntil?: number;
     opponentSlowedUntil?: number;
     doublePointsUntil?: number;
     opponentDoublePointsUntil?: number;
+    hintText?: string;
+    hintUntil?: number;
   } & UltimateStatePayload) => void;
   gameOver: (payload: {
     winnerId?: string;
@@ -219,8 +252,20 @@ export type ServerToClientEvents = {
       opponent: number;
     };
   }) => void;
+  rematchStatus: (payload: {
+    youRequested: boolean;
+    opponentRequested: boolean;
+    requiredPlayers: number;
+    requestedPlayers: number;
+  }) => void;
   opponentLeft: (payload: { message?: string }) => void;
-  emoteReceived: (payload: { emoteId: string; sender: "opponent" | "you" }) => void;
+  emotePlayed: (payload: {
+    roomId: string;
+    emoteId: string;
+    senderSocketId: string;
+    clientMessageId: string;
+    sentAt: number;
+  }) => void;
   /** Opponent started typing an answer — used to drive the presence indicator. */
   opponentTyping: () => void;
 };
@@ -235,7 +280,7 @@ export type ClientToServerEvents = {
   requestRematch: () => void;
   usePowerUp: (payload: { type: PowerUpId }) => void;
   activateUltimate: () => void;
-  sendEmote: (payload: { emoteId: string }) => void;
+  sendEmote: (payload: { emoteId: string; clientMessageId: string }) => void;
   /** Notify server that local player is actively typing — forwarded to opponent. */
   playerTyping: () => void;
 };
@@ -255,4 +300,3 @@ export const createGameSocket = (): GameSocket => {
     timeout: 20000
   });
 };
-

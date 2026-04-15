@@ -1,143 +1,65 @@
-export const AVATAR_IDS = [
-  "flash",
-  "titan",
-  "shadow",
-  "inferno",
-  "frost",
-  "volt",
-  "aegis",
-  "nova"
-] as const;
+import avatarsJson from "../../../packages/shared/avatars.json";
 
+export const AVATAR_IDS = ["flash", "shadow", "guardian", "inferno"] as const;
 export type AvatarId = (typeof AVATAR_IDS)[number];
-export type AvatarRarity = "common";
-export type AvatarUltimateId =
-  | "lightning_surge"
-  | "iron_will"
-  | "blackout"
-  | "cataclysm"
-  | "glacier_lock"
-  | "overclock"
-  | "bulwark"
-  | "starfall";
+export type AvatarRole = "Speed" | "Disrupt" | "Defense" | "Burst";
+export type AvatarUltimateId = "rapid_fire" | "jam" | "shield" | "double";
+
+export type AvatarUltimateMeta = {
+  effectType: string;
+  durationMs?: number;
+  blocks?: number;
+  bonusPoints?: number;
+  minimumPoints?: number;
+  chargeMultiplier?: number;
+};
+
+export type AvatarTheme = {
+  accent: string;
+  glow: string;
+};
 
 export type Avatar = {
   id: AvatarId;
   name: string;
+  role: AvatarRole;
   icon: string;
   emoji: string;
-  label: string;
-  rarity: AvatarRarity;
-  unlockKey: string | null;
+  theme: AvatarTheme;
+  description: string;
   ultimateId: AvatarUltimateId;
   ultimateName: string;
   ultimateDescription: string;
+  ultimateMeta: AvatarUltimateMeta;
 };
 
-export const AVATARS: Avatar[] = [
-  {
-    id: "flash",
-    name: "Flash",
-    icon: "⚡",
-    emoji: "⚡",
-    label: "Flash",
-    rarity: "common",
-    unlockKey: null,
-    ultimateId: "lightning_surge",
-    ultimateName: "Lightning Surge",
-    ultimateDescription: "Next 2 first-correct answers each gain +1 bonus point."
-  },
-  {
-    id: "titan",
-    name: "Titan",
-    icon: "🛡️",
-    emoji: "🛡️",
-    label: "Titan",
-    rarity: "common",
-    unlockKey: null,
-    ultimateId: "iron_will",
-    ultimateName: "Iron Will",
-    ultimateDescription: "Immune to debuffs for 8 seconds."
-  },
-  {
-    id: "shadow",
-    name: "Shadow",
-    icon: "🌑",
-    emoji: "🌑",
-    label: "Shadow",
-    rarity: "common",
-    unlockKey: null,
-    ultimateId: "blackout",
-    ultimateName: "Blackout",
-    ultimateDescription: "Disable opponent input for 3 seconds."
-  },
-  {
-    id: "inferno",
-    name: "Inferno",
-    icon: "🔥",
-    emoji: "🔥",
-    label: "Inferno",
-    rarity: "common",
-    unlockKey: null,
-    ultimateId: "cataclysm",
-    ultimateName: "Cataclysm",
-    ultimateDescription: "Next correct answer gives +3 points."
-  },
-  {
-    id: "frost",
-    name: "Frost",
-    icon: "❄️",
-    emoji: "❄️",
-    label: "Frost",
-    rarity: "common",
-    unlockKey: null,
-    ultimateId: "glacier_lock",
-    ultimateName: "Glacier Lock",
-    ultimateDescription: "Upcoming v2 ultimate."
-  },
-  {
-    id: "volt",
-    name: "Volt",
-    icon: "🔋",
-    emoji: "🔋",
-    label: "Volt",
-    rarity: "common",
-    unlockKey: null,
-    ultimateId: "overclock",
-    ultimateName: "Overclock",
-    ultimateDescription: "Upcoming v2 ultimate."
-  },
-  {
-    id: "aegis",
-    name: "Aegis",
-    icon: "🗿",
-    emoji: "🗿",
-    label: "Aegis",
-    rarity: "common",
-    unlockKey: null,
-    ultimateId: "bulwark",
-    ultimateName: "Bulwark",
-    ultimateDescription: "Upcoming v2 ultimate."
-  },
-  {
-    id: "nova",
-    name: "Nova",
-    icon: "🌟",
-    emoji: "🌟",
-    label: "Nova",
-    rarity: "common",
-    unlockKey: null,
-    ultimateId: "starfall",
-    ultimateName: "Starfall",
-    ultimateDescription: "Upcoming v2 ultimate."
-  }
-];
-
+export const AVATARS = avatarsJson as Avatar[];
 export const AVATAR_MAP = new Map<AvatarId, Avatar>(AVATARS.map((avatar) => [avatar.id, avatar]));
-
 export const DEFAULT_AVATAR_ID: AvatarId = "flash";
+const LEGACY_AVATAR_FALLBACKS: Record<string, AvatarId> = {
+  titan: "guardian",
+  aegis: "guardian",
+  frost: "guardian",
+  volt: "flash",
+  nova: "inferno"
+};
 
-export function getAvatar(id: string | null | undefined): Avatar {
-  return AVATAR_MAP.get(id as AvatarId) ?? (AVATAR_MAP.get(DEFAULT_AVATAR_ID) as Avatar);
+export function isAvatarId(value: string | null | undefined): value is AvatarId {
+  return Boolean(value && AVATAR_MAP.has(value as AvatarId));
 }
 
+export function normalizeAvatarId(value: string | null | undefined): AvatarId {
+  if (isAvatarId(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    return LEGACY_AVATAR_FALLBACKS[value.toLowerCase()] ?? DEFAULT_AVATAR_ID;
+  }
+
+  return DEFAULT_AVATAR_ID;
+}
+
+export function getAvatar(id: string | null | undefined): Avatar {
+  return AVATAR_MAP.get(normalizeAvatarId(id)) as Avatar;
+}

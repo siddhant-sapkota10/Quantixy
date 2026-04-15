@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { getProfileUsername } from "@/lib/auth";
+import { normalizeAvatarId } from "@/lib/avatars";
 import { getSupabaseClient } from "@/lib/supabase";
 import { TOPICS, type Topic } from "@/lib/topics";
 
@@ -113,7 +114,7 @@ export function usePlayerProfile(user?: User | null) {
         setProfile({
           id: currentPlayer.id,
           username: currentPlayer.username,
-          avatarId: currentPlayer.avatar_id ?? "fox",
+          avatarId: normalizeAvatarId(currentPlayer.avatar_id),
           ratings: TOPICS.map((topic) => ({
             topic,
             rating: ratingMap.get(topic) ?? 1000

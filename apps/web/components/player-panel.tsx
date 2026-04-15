@@ -39,9 +39,9 @@ export function PlayerPanel({
   powerUpGlowKey = 0,
 }: PlayerPanelProps) {
   return (
-    <div className="flex min-w-0 flex-col items-center gap-1.5 sm:gap-2">
+    <div className="flex min-w-0 flex-col items-center gap-2">
       {/* Streak / fast badges */}
-      <div className="flex min-h-[2rem] flex-col items-center justify-end text-center sm:min-h-[2.75rem]">
+      <div className="flex h-12 flex-col items-center justify-end text-center sm:h-14">
         <AnimatePresence mode="wait">
           {streakLabel ? (
             <motion.p
@@ -90,21 +90,33 @@ export function PlayerPanel({
               : "0 0 0 rgba(56, 189, 248, 0)",
           }}
           transition={{ duration: 0.45, ease: "easeOut" }}
-          className="w-full rounded-2xl border border-slate-800 bg-slate-950/80 p-3 text-center sm:p-4"
+          className="w-full min-h-[11.5rem] rounded-2xl border border-slate-800 bg-slate-950/80 p-3 text-center sm:min-h-[12.25rem] sm:p-4"
         >
           {avatar ? (
             <p className="text-2xl leading-none sm:text-3xl">{avatar}</p>
           ) : null}
-          <p className="mt-1 truncate text-xs uppercase tracking-[0.25em] text-slate-400">{label}</p>
-          {typeof rating === "number" ? (
-            <p className="mt-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">
-              Rating {rating}
+          <p className="mt-1 truncate px-1 text-xs uppercase tracking-[0.2em] text-slate-400">{label}</p>
+          <div className="mt-1 flex h-4 items-center justify-center">
+            {typeof rating === "number" ? (
+              <p className="truncate text-[11px] uppercase tracking-[0.16em] text-slate-500">
+                Rating {rating}
+              </p>
+            ) : (
+              <p className="text-[11px] uppercase tracking-[0.16em] text-transparent">Rating</p>
+            )}
+          </div>
+          <div className="mt-0.5 flex h-4 items-center justify-center">
+            <p
+              className={`text-[11px] uppercase tracking-[0.16em] ${
+                eliminated ? "text-rose-300" : "text-slate-500"
+              }`}
+            >
+              Strikes {strikes}/3
             </p>
-          ) : null}
-          <p className={`mt-1 text-[11px] uppercase tracking-[0.2em] ${eliminated ? "text-rose-300" : "text-slate-500"}`}>
-            Strikes {strikes}/3
-          </p>
-          <p className="mt-2 text-3xl font-bold text-white sm:text-4xl">{score}</p>
+          </div>
+          <div className="mt-2 flex h-11 items-center justify-center sm:h-12">
+            <p className="text-3xl font-bold text-white tabular-nums sm:text-4xl">{score}</p>
+          </div>
         </motion.div>
 
         {/* Score glow overlay — fires on every correct answer */}

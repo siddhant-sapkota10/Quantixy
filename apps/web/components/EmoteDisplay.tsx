@@ -16,12 +16,12 @@ export type EmoteDisplayItem = {
  */
 export function EmoteDisplay({ items }: { items: EmoteDisplayItem[] }) {
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-1 z-20 flex flex-col items-center gap-1.5 overflow-visible">
+    <div className="pointer-events-none absolute inset-x-0 top-1 z-20 flex h-14 flex-col items-center justify-start gap-1.5 overflow-hidden">
       <AnimatePresence>
-        {items.map((item) => (
+        {items.slice(-2).map((item) => (
           <motion.div
             key={item.id}
-            className={`flex items-center gap-2 rounded-full px-3.5 py-1.5 shadow-xl ${
+            className={`flex max-w-[92%] items-center gap-2 rounded-full px-3.5 py-1.5 shadow-xl ${
               item.who === "opponent"
                 ? "border border-rose-500/40 bg-rose-950/95 text-rose-100"
                 : "border border-amber-400/40 bg-amber-950/95 text-amber-100"
@@ -41,7 +41,7 @@ export function EmoteDisplay({ items }: { items: EmoteDisplayItem[] }) {
             transition={{ duration: 0.38, ease: "easeOut" }}
           >
             <span className="text-xl leading-none">{item.icon}</span>
-            <span className="text-[11px] font-bold uppercase tracking-wider opacity-90">
+            <span className="truncate text-[11px] font-bold uppercase tracking-wider opacity-90">
               {item.label}
             </span>
           </motion.div>

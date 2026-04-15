@@ -1,24 +1,20 @@
 import powerupsJson from "../../../packages/shared/powerups.json";
 
-export type PowerUpId =
-  | "freeze"
-  | "shield"
-  | "double_points"
-  | "slow_opponent"
-  | "cleanse"
-  | "steal_momentum";
+export type PowerUpId = "freeze" | "shield" | "double_points" | "hint" | "cleanse";
 
 export type PowerUpDefinition = {
   id: PowerUpId;
   name: string;
   icon: string;
   description: string;
-  type: string;
+  effectType: string;
+  target: "self" | "opponent";
   durationMs?: number;
-  earnStreak?: number;
+  maxUsesPerMatch?: number;
 };
 
 export const POWER_UPS = powerupsJson as PowerUpDefinition[];
+export const POWER_UP_IDS = POWER_UPS.map((powerUp) => powerUp.id) as PowerUpId[];
 
 export const POWER_UP_BY_ID: Record<PowerUpId, PowerUpDefinition> = POWER_UPS.reduce(
   (accumulator, powerUp) => {
@@ -35,3 +31,4 @@ export function getPowerUpMeta(id: PowerUpId | null | undefined): PowerUpDefinit
 
   return POWER_UP_BY_ID[id] ?? null;
 }
+

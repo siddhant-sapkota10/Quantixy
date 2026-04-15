@@ -31,7 +31,9 @@ export function OpponentPresence({
   youAnswered,
   isActive,
 }: Props) {
-  if (!isActive) return null;
+  if (!isActive) {
+    return <div className="flex min-h-[2.5rem] items-center justify-center py-1" aria-hidden="true" />;
+  }
 
   // Derive the display key so AnimatePresence can animate between states
   const displayKey = opponentAnswered
@@ -43,7 +45,7 @@ export function OpponentPresence({
     : "thinking";
 
   return (
-    <div className="flex min-h-[2.25rem] items-center justify-center py-1">
+    <div className="flex min-h-[2.5rem] items-center justify-center py-1">
       <AnimatePresence mode="wait">
         {displayKey === "waiting-for-you" && (
           <PresencePill key="waiting-for-you" variant="waiting">

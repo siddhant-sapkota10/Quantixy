@@ -3,51 +3,48 @@
     "id": "freeze",
     "name": "Freeze",
     "icon": "❄️",
-    "description": "Freeze the opponent's input briefly.",
-    "type": "debuff",
-    "durationMs": 1600,
-    "earnStreak": 3
-  },
-  {
-    "id": "double_points",
-    "name": "Double Points",
-    "icon": "✖️",
-    "description": "Your next answer is worth 2 points.",
-    "type": "buff",
-    "durationMs": 6000,
-    "earnStreak": 4
+    "description": "Shortly disrupt opponent input.",
+    "effectType": "debuff",
+    "target": "opponent",
+    "durationMs": 1500,
+    "maxUsesPerMatch": 1
   },
   {
     "id": "shield",
     "name": "Shield",
     "icon": "🛡️",
-    "description": "Blocks the next incoming Freeze.",
-    "type": "defense",
-    "earnStreak": 5
+    "description": "Block the next incoming negative effect.",
+    "effectType": "defense",
+    "target": "self",
+    "durationMs": 6000,
+    "maxUsesPerMatch": 1
   },
   {
-    "id": "slow_opponent",
-    "name": "Slow Opponent",
-    "icon": "🐢",
-    "description": "Opponent cannot submit for a short burst.",
-    "type": "debuff",
-    "durationMs": 1000,
-    "earnStreak": 6
+    "id": "double_points",
+    "name": "Double Points",
+    "icon": "✖️",
+    "description": "Your next correct answer is worth 2 points.",
+    "effectType": "buff",
+    "target": "self",
+    "maxUsesPerMatch": 1
+  },
+  {
+    "id": "hint",
+    "name": "Hint",
+    "icon": "💡",
+    "description": "Reveal a small clue for the current question.",
+    "effectType": "utility",
+    "target": "self",
+    "durationMs": 5000,
+    "maxUsesPerMatch": 1
   },
   {
     "id": "cleanse",
     "name": "Cleanse",
     "icon": "🧼",
-    "description": "Removes one active debuff from you.",
-    "type": "utility",
-    "earnStreak": 7
-  },
-  {
-    "id": "steal_momentum",
-    "name": "Steal Momentum",
-    "icon": "🧲",
-    "description": "Breaks opponent streak and cancels active momentum.",
-    "type": "disrupt",
-    "earnStreak": 8
+    "description": "Remove one active negative effect from yourself.",
+    "effectType": "utility",
+    "target": "self",
+    "maxUsesPerMatch": 1
   }
 ]

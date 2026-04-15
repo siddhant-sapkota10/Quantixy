@@ -5,7 +5,6 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/button";
 import { PlayerPanel } from "@/components/player-panel";
-import { PowerUpSlot } from "@/components/power-up-slot";
 import { SoundToggle } from "@/components/sound-toggle";
 import { getSupabaseClient } from "@/lib/supabase";
 import { createGameSocket, type GameSocket } from "@/lib/socket";
@@ -13,7 +12,7 @@ import { soundManager } from "@/lib/sounds";
 import { formatTopicLabel, getSafeDifficulty, getSafeTopic } from "@/lib/topics";
 import { getAvatar } from "@/lib/avatars";
 import { EMOTES, getEmoteById } from "@/lib/emotes";
-import { getPowerUpMeta, type PowerUpId } from "@/lib/powerups";
+import { getPowerUpMeta, POWER_UPS, type PowerUpId } from "@/lib/powerups";
 import { useGameAnimations } from "@/hooks/useGameAnimations";
 import { FrostBurst } from "@/components/animations/FrostBurst";
 import { FloatingLabel } from "@/components/animations/FloatingLabel";
@@ -73,6 +72,7 @@ type TimerState = {
 type UltimateState = {
   type: string;
   name: string;
+  description: string;
   charge: number;
   ready: boolean;
   used: boolean;
@@ -87,8 +87,16 @@ type UltimateState = {
   opponentTitanUntil: number;
   blackoutUntil: number;
   opponentBlackoutUntil: number;
+  overclockUntil: number;
+  opponentOverclockUntil: number;
+  fortressUntil: number;
+  opponentFortressUntil: number;
+  fortressBlocksRemaining: number;
+  opponentFortressBlocksRemaining: number;
   flashBonusRemaining: number;
   opponentFlashBonusRemaining: number;
+  novaBonusRemaining: number;
+  opponentNovaBonusRemaining: number;
   infernoPending: boolean;
   opponentInfernoPending: boolean;
 };
@@ -101,13 +109,20 @@ type FeedbackState = {
   youPulseKey: number;
   opponentPulseKey: number;
   youPowerUpAvailable: PowerUpId | null;
+  youPowerUpUsed: boolean;
   opponentPowerUpAvailable: PowerUpId | null;
+  youPowerUpsAvailable: PowerUpId[];
+  opponentPowerUpsAvailable: PowerUpId[];
+  youPowerUpsUsed: PowerUpId[];
+  opponentPowerUpsUsed: PowerUpId[];
   youShieldActive: boolean;
   opponentShieldActive: boolean;
   youSlowedUntil: number;
   opponentSlowedUntil: number;
   youDoublePointsUntil: number;
   opponentDoublePointsUntil: number;
+  hintText: string;
+  hintUntil: number;
   youAnsweredCurrent: boolean;
   opponentAnsweredCurrent: boolean;
 };
@@ -132,14 +147,15 @@ const initialTimer: TimerState = {
 };
 
 const initialUltimate: UltimateState = {
-  type: "lightning_surge",
-  name: "Lightning Surge",
+  type: "rapid_fire",
+  name: "Rapid Fire",
+  description: "",
   charge: 0,
   ready: false,
   used: false,
   implemented: true,
-  opponentType: "lightning_surge",
-  opponentName: "Lightning Surge",
+  opponentType: "rapid_fire",
+  opponentName: "Rapid Fire",
   opponentCharge: 0,
   opponentReady: false,
   opponentUsed: false,
@@ -148,8 +164,16 @@ const initialUltimate: UltimateState = {
   opponentTitanUntil: 0,
   blackoutUntil: 0,
   opponentBlackoutUntil: 0,
+  overclockUntil: 0,
+  opponentOverclockUntil: 0,
+  fortressUntil: 0,
+  opponentFortressUntil: 0,
+  fortressBlocksRemaining: 0,
+  opponentFortressBlocksRemaining: 0,
   flashBonusRemaining: 0,
   opponentFlashBonusRemaining: 0,
+  novaBonusRemaining: 0,
+  opponentNovaBonusRemaining: 0,
   infernoPending: false,
   opponentInfernoPending: false
 };
@@ -162,13 +186,20 @@ const initialFeedback: FeedbackState = {
   youPulseKey: 0,
   opponentPulseKey: 0,
   youPowerUpAvailable: null,
+  youPowerUpUsed: false,
   opponentPowerUpAvailable: null,
+  youPowerUpsAvailable: [],
+  opponentPowerUpsAvailable: [],
+  youPowerUpsUsed: [],
+  opponentPowerUpsUsed: [],
   youShieldActive: false,
   opponentShieldActive: false,
   youSlowedUntil: 0,
   opponentSlowedUntil: 0,
   youDoublePointsUntil: 0,
   opponentDoublePointsUntil: 0,
+  hintText: "",
+  hintUntil: 0,
   youAnsweredCurrent: false,
   opponentAnsweredCurrent: false
 };
@@ -258,6 +289,8 @@ export function GameClient({
   const [emoteLabels, setEmoteLabels] = useState<EmoteDisplayItem[]>([]);
   const emoteIdRef = useRef(0);
   const emoteTimestampsRef = useRef<number[]>([]);
+  const seenEmoteMessageIdsRef = useRef<Set<string>>(new Set());
+  const currentMatchRoomIdRef = useRef<string | null>(null);
   const [opponentEmoteFlashKey, setOpponentEmoteFlashKey] = useState(0);
 
   // Opponent presence / activity state
@@ -267,6 +300,8 @@ export function GameClient({
   /** Throttle: timestamp of last playerTyping emit to avoid spamming the server. */
   const lastTypingEmitRef = useRef(0);
   const [rematchRequested, setRematchRequested] = useState(false);
+  const [opponentRematchRequested, setOpponentRematchRequested] = useState(false);
+  const [rematchProgress, setRematchProgress] = useState({ requestedPlayers: 0, requiredPlayers: 2 });
   const [muted, setMuted] = useState(false);
   const [roomLobby, setRoomLobby] = useState<RoomLobbyState | null>(null);
   const [roomErrorMessage, setRoomErrorMessage] = useState<string | null>(null);
@@ -276,7 +311,13 @@ export function GameClient({
     message: string;
     ratingChange?: RatingState;
     newRatings?: RatingState;
+    peakStreak: number;
+    opponentPeakStreak: number;
   } | null>(null);
+  /** Peak answer-streak reached by local player this match. */
+  const peakYouStreakRef = useRef(0);
+  /** Peak answer-streak reached by opponent this match. */
+  const peakOpponentStreakRef = useRef(0);
 
   // Animation hook
   const {
@@ -326,11 +367,15 @@ export function GameClient({
     setEmoteBarOpen(false);
     setEmoteCooldownUntil(0);
     setEmoteLabels([]);
+    seenEmoteMessageIdsRef.current.clear();
     setRematchRequested(false);
+    setOpponentRematchRequested(false);
+    setRematchProgress({ requestedPlayers: 0, requiredPlayers: 2 });
     setRoomLobby(null);
     setRoomErrorMessage(null);
     setRoomNotice(null);
     setGameResult(null);
+    currentMatchRoomIdRef.current = null;
 
     // Mark connection failed after 20 s if the socket never fires "connect".
     // 20 s gives Render's free tier time to cold-start the server.
@@ -426,6 +471,10 @@ export function GameClient({
         ...previous,
         type: typeof payload.ultimateType === "string" ? payload.ultimateType : previous.type,
         name: typeof payload.ultimateName === "string" ? payload.ultimateName : previous.name,
+        description:
+          typeof payload.ultimateDescription === "string"
+            ? payload.ultimateDescription
+            : previous.description,
         charge: typeof payload.ultimateCharge === "number" ? payload.ultimateCharge : previous.charge,
         ready: typeof payload.ultimateReady === "boolean" ? payload.ultimateReady : previous.ready,
         used: typeof payload.ultimateUsed === "boolean" ? payload.ultimateUsed : previous.used,
@@ -468,6 +517,26 @@ export function GameClient({
           typeof payload.opponentBlackoutUntil === "number"
             ? payload.opponentBlackoutUntil
             : previous.opponentBlackoutUntil,
+        overclockUntil:
+          typeof payload.overclockUntil === "number" ? payload.overclockUntil : previous.overclockUntil,
+        opponentOverclockUntil:
+          typeof payload.opponentOverclockUntil === "number"
+            ? payload.opponentOverclockUntil
+            : previous.opponentOverclockUntil,
+        fortressUntil:
+          typeof payload.fortressUntil === "number" ? payload.fortressUntil : previous.fortressUntil,
+        opponentFortressUntil:
+          typeof payload.opponentFortressUntil === "number"
+            ? payload.opponentFortressUntil
+            : previous.opponentFortressUntil,
+        fortressBlocksRemaining:
+          typeof payload.fortressBlocksRemaining === "number"
+            ? payload.fortressBlocksRemaining
+            : previous.fortressBlocksRemaining,
+        opponentFortressBlocksRemaining:
+          typeof payload.opponentFortressBlocksRemaining === "number"
+            ? payload.opponentFortressBlocksRemaining
+            : previous.opponentFortressBlocksRemaining,
         flashBonusRemaining:
           typeof payload.flashBonusRemaining === "number"
             ? payload.flashBonusRemaining
@@ -476,6 +545,14 @@ export function GameClient({
           typeof payload.opponentFlashBonusRemaining === "number"
             ? payload.opponentFlashBonusRemaining
             : previous.opponentFlashBonusRemaining,
+        novaBonusRemaining:
+          typeof payload.novaBonusRemaining === "number"
+            ? payload.novaBonusRemaining
+            : previous.novaBonusRemaining,
+        opponentNovaBonusRemaining:
+          typeof payload.opponentNovaBonusRemaining === "number"
+            ? payload.opponentNovaBonusRemaining
+            : previous.opponentNovaBonusRemaining,
         infernoPending:
           typeof payload.infernoPending === "boolean" ? payload.infernoPending : previous.infernoPending,
         opponentInfernoPending:
@@ -510,6 +587,9 @@ export function GameClient({
     };
 
     const handleMatchFound = (payload: {
+      roomId?: string;
+      room?: string;
+      roomInfo?: { id?: string };
       yourName?: string;
       opponentName?: string;
       opponent?: { name?: string };
@@ -542,6 +622,8 @@ export function GameClient({
       opponentInfernoPending?: boolean;
     }) => {
       console.log("[client] matchFound received", payload);
+      currentMatchRoomIdRef.current =
+        payload.roomId ?? payload.room ?? payload.roomInfo?.id ?? currentMatchRoomIdRef.current;
       setYourName(payload.yourName ?? "You");
       setOpponentName(payload.opponentName ?? payload.opponent?.name ?? "Opponent");
       setYourAvatar(getAvatar(payload.yourAvatar).emoji);
@@ -551,10 +633,31 @@ export function GameClient({
       }
       setUltimate(initialUltimate);
       syncUltimateFromPayload(payload);
+      const youPowerUpsAvailable = Array.isArray((payload as { powerUpsAvailable?: PowerUpId[] }).powerUpsAvailable)
+        ? (payload as { powerUpsAvailable?: PowerUpId[] }).powerUpsAvailable ?? []
+        : [];
+      const opponentPowerUpsAvailable = Array.isArray((payload as { opponentPowerUpsAvailable?: PowerUpId[] }).opponentPowerUpsAvailable)
+        ? (payload as { opponentPowerUpsAvailable?: PowerUpId[] }).opponentPowerUpsAvailable ?? []
+        : [];
+      const youPowerUpsUsed = Array.isArray((payload as { powerUpsUsed?: PowerUpId[] }).powerUpsUsed)
+        ? (payload as { powerUpsUsed?: PowerUpId[] }).powerUpsUsed ?? []
+        : [];
+      const opponentPowerUpsUsed = Array.isArray((payload as { opponentPowerUpsUsed?: PowerUpId[] }).opponentPowerUpsUsed)
+        ? (payload as { opponentPowerUpsUsed?: PowerUpId[] }).opponentPowerUpsUsed ?? []
+        : [];
+
       setStatus("countdown");
       setCurrentQuestion("");
       setCountdownValue(null);
-      setFeedback(initialFeedback);
+      setFeedback({
+        ...initialFeedback,
+        youPowerUpsAvailable,
+        opponentPowerUpsAvailable,
+        youPowerUpsUsed,
+        opponentPowerUpsUsed,
+        youPowerUpAvailable: youPowerUpsAvailable[0] ?? null,
+        opponentPowerUpAvailable: opponentPowerUpsAvailable[0] ?? null,
+      });
       setStrikes(initialStrikes);
       setEliminated({ you: false, opponent: false });
       setTimer(initialTimer);
@@ -564,16 +667,42 @@ export function GameClient({
       setEmoteBarOpen(false);
       setEmoteCooldownUntil(0);
       setEmoteLabels([]);
+      seenEmoteMessageIdsRef.current.clear();
       setRoomErrorMessage(null);
       setRoomNotice(null);
       setRematchRequested(false);
+      setOpponentRematchRequested(false);
+      setRematchProgress({ requestedPlayers: 0, requiredPlayers: 2 });
       setGameResult(null);
       // Presence: opponent is now in-match — start as idle until first question
       setOpponentActivity("idle");
+      // Reset peak streak tracking for new match
+      peakYouStreakRef.current = 0;
+      peakOpponentStreakRef.current = 0;
     };
 
     const handleCountdown = (payload: { value: string }) => {
       console.log("[client] countdown received", payload);
+      if (payload.value === "3") {
+        setScores(initialScores);
+        setStrikes(initialStrikes);
+        setEliminated({ you: false, opponent: false });
+        setTimer(initialTimer);
+        setUltimate(initialUltimate);
+        setFeedback(initialFeedback);
+        setFrozenUntil(0);
+        setShieldBlockedUntil(0);
+        setEmoteCooldownUntil(0);
+        setEmoteLabels([]);
+        seenEmoteMessageIdsRef.current.clear();
+        setOpponentActivity("idle");
+        if (opponentTypingTimerRef.current) {
+          clearTimeout(opponentTypingTimerRef.current);
+          opponentTypingTimerRef.current = null;
+        }
+        peakYouStreakRef.current = 0;
+        peakOpponentStreakRef.current = 0;
+      }
       setStatus("countdown");
       setCurrentQuestion("");
       setAnswer("");
@@ -581,6 +710,9 @@ export function GameClient({
       setFrozenUntil(0);
       setShieldBlockedUntil(0);
       setEmoteBarOpen(false);
+      setRematchRequested(false);
+      setOpponentRematchRequested(false);
+      setRematchProgress({ requestedPlayers: 0, requiredPlayers: 2 });
 
       if (payload.value === "GO") {
         soundManager.play("go");
@@ -600,11 +732,15 @@ export function GameClient({
         youFast: false,
         opponentFast: false,
         youAnsweredCurrent: false,
-        opponentAnsweredCurrent: false
+        opponentAnsweredCurrent: false,
+        hintText: "",
+        hintUntil: 0
       }));
       setShieldBlockedUntil(0);
       setEmoteBarOpen(false);
       setRematchRequested(false);
+      setOpponentRematchRequested(false);
+      setRematchProgress({ requestedPlayers: 0, requiredPlayers: 2 });
       setGameResult(null);
       setStatus("playing");
       // Reset opponent presence to "thinking" for the new question
@@ -646,7 +782,21 @@ export function GameClient({
       syncUltimateFromPayload(payload);
     };
 
-    const pushEmoteLabel = (who: "you" | "opponent", emoteId: string) => {
+    const pushEmoteLabel = (who: "you" | "opponent", emoteId: string, clientMessageId?: string) => {
+      if (clientMessageId) {
+        const seen = seenEmoteMessageIdsRef.current;
+        if (seen.has(clientMessageId)) {
+          return;
+        }
+        seen.add(clientMessageId);
+        if (seen.size > 300) {
+          const oldest = seen.values().next().value;
+          if (oldest) {
+            seen.delete(oldest);
+          }
+        }
+      }
+
       const emote = getEmoteById(emoteId);
       const id = ++emoteIdRef.current;
 
@@ -793,6 +943,9 @@ export function GameClient({
       const nextScores = payload.scores ?? payload.playerScores;
       const streakValue = payload.streak ?? 0;
       const opponentStreakValue = payload.opponentStreak ?? 0;
+      // Track peak streaks for end-of-match summary
+      if (streakValue > peakYouStreakRef.current) peakYouStreakRef.current = streakValue;
+      if (opponentStreakValue > peakOpponentStreakRef.current) peakOpponentStreakRef.current = opponentStreakValue;
       const previousFeedback = feedbackRef.current;
 
       // Determine who scored by comparing new values against the previous score
@@ -802,9 +955,19 @@ export function GameClient({
       if (newYouScore > prevScores.you) triggerScoreGlow("you");
       if (newOpponentScore > prevScores.opponent) triggerScoreGlow("opponent");
 
-      const nextYouPowerUp = payload.powerUpAvailable ?? previousFeedback.youPowerUpAvailable;
-      const nextOpponentPowerUp =
-        payload.opponentPowerUpAvailable ?? previousFeedback.opponentPowerUpAvailable;
+      // Use "in" check to distinguish explicit null (clear) from absent (keep previous)
+      const payloadYouAvailable = (payload as { powerUpsAvailable?: PowerUpId[] }).powerUpsAvailable;
+      const payloadOpponentAvailable = (payload as { opponentPowerUpsAvailable?: PowerUpId[] }).opponentPowerUpsAvailable;
+      const nextYouPowerUp = Array.isArray(payloadYouAvailable)
+        ? payloadYouAvailable[0] ?? null
+        : "powerUpAvailable" in payload
+          ? (payload.powerUpAvailable ?? null)
+          : previousFeedback.youPowerUpAvailable;
+      const nextOpponentPowerUp = Array.isArray(payloadOpponentAvailable)
+        ? payloadOpponentAvailable[0] ?? null
+        : "opponentPowerUpAvailable" in payload
+          ? (payload.opponentPowerUpAvailable ?? null)
+          : previousFeedback.opponentPowerUpAvailable;
       const localJustEarnedPowerUp =
         !previousFeedback.youPowerUpAvailable && nextYouPowerUp;
       const opponentJustEarnedPowerUp =
@@ -829,9 +992,17 @@ export function GameClient({
         opponentStreak: payload.opponentStreak ?? 0,
         youFast: payload.fastAnswer ?? false,
         opponentFast: payload.opponentFastAnswer ?? false,
-        youPowerUpAvailable: payload.powerUpAvailable ?? previous.youPowerUpAvailable,
-        opponentPowerUpAvailable:
-          payload.opponentPowerUpAvailable ?? previous.opponentPowerUpAvailable,
+        youPowerUpAvailable: "powerUpAvailable" in payload ? (payload.powerUpAvailable ?? null) : previous.youPowerUpAvailable,
+        youPowerUpUsed: nextYouPowerUp ? false : previous.youPowerUpUsed,
+        opponentPowerUpAvailable: "opponentPowerUpAvailable" in payload ? (payload.opponentPowerUpAvailable ?? null) : previous.opponentPowerUpAvailable,
+        youPowerUpsAvailable: Array.isArray(payloadYouAvailable) ? payloadYouAvailable : previous.youPowerUpsAvailable,
+        opponentPowerUpsAvailable: Array.isArray(payloadOpponentAvailable) ? payloadOpponentAvailable : previous.opponentPowerUpsAvailable,
+        youPowerUpsUsed: Array.isArray((payload as { powerUpsUsed?: PowerUpId[] }).powerUpsUsed)
+          ? (payload as { powerUpsUsed?: PowerUpId[] }).powerUpsUsed ?? []
+          : previous.youPowerUpsUsed,
+        opponentPowerUpsUsed: Array.isArray((payload as { opponentPowerUpsUsed?: PowerUpId[] }).opponentPowerUpsUsed)
+          ? (payload as { opponentPowerUpsUsed?: PowerUpId[] }).opponentPowerUpsUsed ?? []
+          : previous.opponentPowerUpsUsed,
         youShieldActive: payload.shieldActive ?? previous.youShieldActive,
         opponentShieldActive: payload.opponentShieldActive ?? previous.opponentShieldActive,
         youSlowedUntil: payload.slowedUntil ?? previous.youSlowedUntil,
@@ -839,6 +1010,10 @@ export function GameClient({
         youDoublePointsUntil: payload.doublePointsUntil ?? previous.youDoublePointsUntil,
         opponentDoublePointsUntil:
           payload.opponentDoublePointsUntil ?? previous.opponentDoublePointsUntil,
+        hintText:
+          (payload as { hintText?: string }).hintText ?? previous.hintText,
+        hintUntil:
+          (payload as { hintUntil?: number }).hintUntil ?? previous.hintUntil,
         youAnsweredCurrent: payload.youAnswered ?? previous.youAnsweredCurrent,
         opponentAnsweredCurrent: payload.opponentAnswered ?? previous.opponentAnsweredCurrent,
         youPulseKey:
@@ -951,6 +1126,23 @@ export function GameClient({
     }) => {
       console.log("[client] ultimateApplied received", payload);
       syncUltimateFromPayload(payload);
+      setFeedback((previous) => ({
+        ...previous,
+        youShieldActive: (payload as { shieldActive?: boolean }).shieldActive ?? previous.youShieldActive,
+        opponentShieldActive:
+          (payload as { opponentShieldActive?: boolean }).opponentShieldActive ??
+          previous.opponentShieldActive,
+        youSlowedUntil: (payload as { slowedUntil?: number }).slowedUntil ?? previous.youSlowedUntil,
+        opponentSlowedUntil:
+          (payload as { opponentSlowedUntil?: number }).opponentSlowedUntil ??
+          previous.opponentSlowedUntil,
+        youDoublePointsUntil:
+          (payload as { doublePointsUntil?: number }).doublePointsUntil ??
+          previous.youDoublePointsUntil,
+        opponentDoublePointsUntil:
+          (payload as { opponentDoublePointsUntil?: number }).opponentDoublePointsUntil ??
+          previous.opponentDoublePointsUntil
+      }));
       triggerPowerUpActivated(payload.by, "shield");
 
       const labelId = ++emoteIdRef.current;
@@ -997,8 +1189,19 @@ export function GameClient({
     }) => {
       console.log("[client] ultimateEnded received", payload);
       syncUltimateFromPayload(payload);
+      setFeedback((previous) => ({
+        ...previous,
+        youShieldActive: (payload as { shieldActive?: boolean }).shieldActive ?? previous.youShieldActive,
+        opponentShieldActive:
+          (payload as { opponentShieldActive?: boolean }).opponentShieldActive ??
+          previous.opponentShieldActive,
+        youSlowedUntil: (payload as { slowedUntil?: number }).slowedUntil ?? previous.youSlowedUntil,
+        opponentSlowedUntil:
+          (payload as { opponentSlowedUntil?: number }).opponentSlowedUntil ??
+          previous.opponentSlowedUntil
+      }));
 
-      if (payload.effect === "blackout_ended" && payload.target === "you") {
+      if (payload.effect === "jam_ended" && payload.target === "you") {
         setFrozenUntil(0);
       }
     };
@@ -1019,18 +1222,30 @@ export function GameClient({
       opponentDoublePointsUntil?: number;
     }) => {
       console.log("[client] powerUpUsed received", payload);
+      const youAvailable = (payload as { powerUpsAvailable?: PowerUpId[] }).powerUpsAvailable;
+      const opponentAvailable = (payload as { opponentPowerUpsAvailable?: PowerUpId[] }).opponentPowerUpsAvailable;
       setFeedback((previous) => ({
         ...previous,
-        youPowerUpAvailable: payload.powerUpAvailable ?? previous.youPowerUpAvailable,
-        opponentPowerUpAvailable:
-          payload.opponentPowerUpAvailable ?? previous.opponentPowerUpAvailable,
+        youPowerUpAvailable: "powerUpAvailable" in payload ? (payload.powerUpAvailable ?? null) : previous.youPowerUpAvailable,
+        youPowerUpUsed: payload.by === "you" ? true : previous.youPowerUpUsed,
+        opponentPowerUpAvailable: "opponentPowerUpAvailable" in payload ? (payload.opponentPowerUpAvailable ?? null) : previous.opponentPowerUpAvailable,
+        youPowerUpsAvailable: Array.isArray(youAvailable) ? youAvailable : previous.youPowerUpsAvailable,
+        opponentPowerUpsAvailable: Array.isArray(opponentAvailable) ? opponentAvailable : previous.opponentPowerUpsAvailable,
+        youPowerUpsUsed: Array.isArray((payload as { powerUpsUsed?: PowerUpId[] }).powerUpsUsed)
+          ? (payload as { powerUpsUsed?: PowerUpId[] }).powerUpsUsed ?? []
+          : previous.youPowerUpsUsed,
+        opponentPowerUpsUsed: Array.isArray((payload as { opponentPowerUpsUsed?: PowerUpId[] }).opponentPowerUpsUsed)
+          ? (payload as { opponentPowerUpsUsed?: PowerUpId[] }).opponentPowerUpsUsed ?? []
+          : previous.opponentPowerUpsUsed,
         youShieldActive: payload.shieldActive ?? previous.youShieldActive,
         opponentShieldActive: payload.opponentShieldActive ?? previous.opponentShieldActive,
         youSlowedUntil: payload.slowedUntil ?? previous.youSlowedUntil,
         opponentSlowedUntil: payload.opponentSlowedUntil ?? previous.opponentSlowedUntil,
         youDoublePointsUntil: payload.doublePointsUntil ?? previous.youDoublePointsUntil,
         opponentDoublePointsUntil:
-          payload.opponentDoublePointsUntil ?? previous.opponentDoublePointsUntil
+          payload.opponentDoublePointsUntil ?? previous.opponentDoublePointsUntil,
+        hintText: (payload as { hintText?: string }).hintText ?? previous.hintText,
+        hintUntil: (payload as { hintUntil?: number }).hintUntil ?? previous.hintUntil
       }));
       syncUltimateFromPayload(payload);
 
@@ -1041,14 +1256,10 @@ export function GameClient({
 
         triggerFreezeHit(payload.target);
         soundManager.play("freezeHit");
-      } else if (payload.type === "slow_opponent") {
-        soundManager.play("powerReady");
       } else if (payload.type === "cleanse") {
         if (payload.target === "you") {
           setFrozenUntil(0);
         }
-        soundManager.play("shieldBlock");
-      } else if (payload.type === "steal_momentum") {
         soundManager.play("shieldBlock");
       } else {
         soundManager.play("powerReady");
@@ -1069,18 +1280,30 @@ export function GameClient({
       opponentDoublePointsUntil?: number;
     }) => {
       console.log("[client] shieldActivated received", payload);
+      const youAvailable = (payload as { powerUpsAvailable?: PowerUpId[] }).powerUpsAvailable;
+      const opponentAvailable = (payload as { opponentPowerUpsAvailable?: PowerUpId[] }).opponentPowerUpsAvailable;
       setFeedback((previous) => ({
         ...previous,
-        youPowerUpAvailable: payload.powerUpAvailable ?? previous.youPowerUpAvailable,
-        opponentPowerUpAvailable:
-          payload.opponentPowerUpAvailable ?? previous.opponentPowerUpAvailable,
+        youPowerUpAvailable: "powerUpAvailable" in payload ? (payload.powerUpAvailable ?? null) : previous.youPowerUpAvailable,
+        youPowerUpUsed: payload.by === "you" ? true : previous.youPowerUpUsed,
+        opponentPowerUpAvailable: "opponentPowerUpAvailable" in payload ? (payload.opponentPowerUpAvailable ?? null) : previous.opponentPowerUpAvailable,
+        youPowerUpsAvailable: Array.isArray(youAvailable) ? youAvailable : previous.youPowerUpsAvailable,
+        opponentPowerUpsAvailable: Array.isArray(opponentAvailable) ? opponentAvailable : previous.opponentPowerUpsAvailable,
+        youPowerUpsUsed: Array.isArray((payload as { powerUpsUsed?: PowerUpId[] }).powerUpsUsed)
+          ? (payload as { powerUpsUsed?: PowerUpId[] }).powerUpsUsed ?? []
+          : previous.youPowerUpsUsed,
+        opponentPowerUpsUsed: Array.isArray((payload as { opponentPowerUpsUsed?: PowerUpId[] }).opponentPowerUpsUsed)
+          ? (payload as { opponentPowerUpsUsed?: PowerUpId[] }).opponentPowerUpsUsed ?? []
+          : previous.opponentPowerUpsUsed,
         youShieldActive: payload.shieldActive ?? previous.youShieldActive,
         opponentShieldActive: payload.opponentShieldActive ?? previous.opponentShieldActive,
         youSlowedUntil: payload.slowedUntil ?? previous.youSlowedUntil,
         opponentSlowedUntil: payload.opponentSlowedUntil ?? previous.opponentSlowedUntil,
         youDoublePointsUntil: payload.doublePointsUntil ?? previous.youDoublePointsUntil,
         opponentDoublePointsUntil:
-          payload.opponentDoublePointsUntil ?? previous.opponentDoublePointsUntil
+          payload.opponentDoublePointsUntil ?? previous.opponentDoublePointsUntil,
+        hintText: (payload as { hintText?: string }).hintText ?? previous.hintText,
+        hintUntil: (payload as { hintUntil?: number }).hintUntil ?? previous.hintUntil
       }));
       syncUltimateFromPayload(payload);
 
@@ -1102,19 +1325,34 @@ export function GameClient({
       opponentDoublePointsUntil?: number;
     }) => {
       console.log("[client] shieldBlocked received", payload);
-      setFeedback((previous) => ({
+      const youAvailable = (payload as { powerUpsAvailable?: PowerUpId[] }).powerUpsAvailable;
+      const opponentAvailable = (payload as { opponentPowerUpsAvailable?: PowerUpId[] }).opponentPowerUpsAvailable;
+      setFeedback((previous) => {
+        const nextYouPU = "powerUpAvailable" in payload ? (payload.powerUpAvailable ?? null) : previous.youPowerUpAvailable;
+        return {
         ...previous,
-        youPowerUpAvailable: payload.powerUpAvailable ?? previous.youPowerUpAvailable,
-        opponentPowerUpAvailable:
-          payload.opponentPowerUpAvailable ?? previous.opponentPowerUpAvailable,
+        youPowerUpAvailable: nextYouPU,
+        youPowerUpUsed: !nextYouPU && !!previous.youPowerUpAvailable ? true : previous.youPowerUpUsed,
+        opponentPowerUpAvailable: "opponentPowerUpAvailable" in payload ? (payload.opponentPowerUpAvailable ?? null) : previous.opponentPowerUpAvailable,
+        youPowerUpsAvailable: Array.isArray(youAvailable) ? youAvailable : previous.youPowerUpsAvailable,
+        opponentPowerUpsAvailable: Array.isArray(opponentAvailable) ? opponentAvailable : previous.opponentPowerUpsAvailable,
+        youPowerUpsUsed: Array.isArray((payload as { powerUpsUsed?: PowerUpId[] }).powerUpsUsed)
+          ? (payload as { powerUpsUsed?: PowerUpId[] }).powerUpsUsed ?? []
+          : previous.youPowerUpsUsed,
+        opponentPowerUpsUsed: Array.isArray((payload as { opponentPowerUpsUsed?: PowerUpId[] }).opponentPowerUpsUsed)
+          ? (payload as { opponentPowerUpsUsed?: PowerUpId[] }).opponentPowerUpsUsed ?? []
+          : previous.opponentPowerUpsUsed,
         youShieldActive: payload.shieldActive ?? previous.youShieldActive,
         opponentShieldActive: payload.opponentShieldActive ?? previous.opponentShieldActive,
         youSlowedUntil: payload.slowedUntil ?? previous.youSlowedUntil,
         opponentSlowedUntil: payload.opponentSlowedUntil ?? previous.opponentSlowedUntil,
         youDoublePointsUntil: payload.doublePointsUntil ?? previous.youDoublePointsUntil,
         opponentDoublePointsUntil:
-          payload.opponentDoublePointsUntil ?? previous.opponentDoublePointsUntil
-      }));
+          payload.opponentDoublePointsUntil ?? previous.opponentDoublePointsUntil,
+        hintText: (payload as { hintText?: string }).hintText ?? previous.hintText,
+        hintUntil: (payload as { hintUntil?: number }).hintUntil ?? previous.hintUntil
+        };
+      });
       syncUltimateFromPayload(payload);
 
       if (payload.target === "you") {
@@ -1126,12 +1364,19 @@ export function GameClient({
       soundManager.play("shieldBlock");
     };
 
-    const handleEmoteReceived = (payload: {
+    const handleEmotePlayed = (payload: {
+      roomId: string;
       emoteId: string;
-      sender: "opponent" | "you";
+      senderSocketId: string;
+      clientMessageId: string;
+      sentAt: number;
     }) => {
-      console.log("[client] emoteReceived received", payload);
-      pushEmoteLabel(payload.sender, payload.emoteId);
+      console.log("[client] emotePlayed received", payload);
+      if (currentMatchRoomIdRef.current && payload.roomId !== currentMatchRoomIdRef.current) {
+        return;
+      }
+      const who = payload.senderSocketId === nextSocket.id ? "you" : "opponent";
+      pushEmoteLabel(who, payload.emoteId, payload.clientMessageId);
     };
 
     /**
@@ -1195,13 +1440,20 @@ export function GameClient({
         youFast: false,
         opponentFast: false,
         youPowerUpAvailable: null,
+        youPowerUpUsed: false,
         opponentPowerUpAvailable: null,
+        youPowerUpsAvailable: [],
+        opponentPowerUpsAvailable: [],
+        youPowerUpsUsed: [],
+        opponentPowerUpsUsed: [],
         youShieldActive: false,
         opponentShieldActive: false,
         youSlowedUntil: 0,
         opponentSlowedUntil: 0,
         youDoublePointsUntil: 0,
         opponentDoublePointsUntil: 0,
+        hintText: "",
+        hintUntil: 0,
         youAnsweredCurrent: false,
         opponentAnsweredCurrent: false
       }));
@@ -1210,6 +1462,7 @@ export function GameClient({
       setEmoteBarOpen(false);
       setEmoteCooldownUntil(0);
       setEmoteLabels([]);
+      seenEmoteMessageIdsRef.current.clear();
       setOpponentActivity("idle");
       if (opponentTypingTimerRef.current) {
         clearTimeout(opponentTypingTimerRef.current);
@@ -1221,10 +1474,29 @@ export function GameClient({
           payload.message ??
           (result === "win" ? "You Win!" : result === "loss" ? "You Lose" : "It's a Draw"),
         ratingChange: payload.ratingChange,
-        newRatings: payload.newRatings
+        newRatings: payload.newRatings,
+        peakStreak: peakYouStreakRef.current,
+        opponentPeakStreak: peakOpponentStreakRef.current,
       });
+      setRematchRequested(false);
+      setOpponentRematchRequested(false);
+      setRematchProgress({ requestedPlayers: 0, requiredPlayers: 2 });
       setStatus("finished");
       soundManager.play(result === "loss" ? "lose" : "win");
+    };
+
+    const handleRematchStatus = (payload: {
+      youRequested: boolean;
+      opponentRequested: boolean;
+      requestedPlayers: number;
+      requiredPlayers: number;
+    }) => {
+      setRematchRequested(payload.youRequested);
+      setOpponentRematchRequested(payload.opponentRequested);
+      setRematchProgress({
+        requestedPlayers: payload.requestedPlayers,
+        requiredPlayers: payload.requiredPlayers
+      });
     };
 
     const handleOpponentLeft = (payload: { message?: string }) => {
@@ -1245,10 +1517,15 @@ export function GameClient({
         opponentTypingTimerRef.current = null;
       }
       setEmoteLabels([]);
+      seenEmoteMessageIdsRef.current.clear();
       setRematchRequested(false);
+      setOpponentRematchRequested(false);
+      setRematchProgress({ requestedPlayers: 0, requiredPlayers: 2 });
       setGameResult({
         result: "loss",
-        message: payload.message ?? "Opponent left the game"
+        message: payload.message ?? "Opponent left the game",
+        peakStreak: peakYouStreakRef.current,
+        opponentPeakStreak: peakOpponentStreakRef.current
       });
       setStatus("opponent-left");
     };
@@ -1274,9 +1551,10 @@ export function GameClient({
     nextSocket.on("powerUpUsed", handlePowerUpUsed);
     nextSocket.on("shieldActivated", handleShieldActivated);
     nextSocket.on("shieldBlocked", handleShieldBlocked);
-    nextSocket.on("emoteReceived", handleEmoteReceived);
+    nextSocket.on("emotePlayed", handleEmotePlayed);
     nextSocket.on("opponentTyping", handleOpponentTyping);
     nextSocket.on("gameOver", handleGameOver);
+    nextSocket.on("rematchStatus", handleRematchStatus);
     nextSocket.on("opponentLeft", handleOpponentLeft);
 
     return () => {
@@ -1302,9 +1580,10 @@ export function GameClient({
       nextSocket.off("powerUpUsed", handlePowerUpUsed);
       nextSocket.off("shieldActivated", handleShieldActivated);
       nextSocket.off("shieldBlocked", handleShieldBlocked);
-      nextSocket.off("emoteReceived", handleEmoteReceived);
+      nextSocket.off("emotePlayed", handleEmotePlayed);
       nextSocket.off("opponentTyping", handleOpponentTyping);
       nextSocket.off("gameOver", handleGameOver);
+      nextSocket.off("rematchStatus", handleRematchStatus);
       nextSocket.off("opponentLeft", handleOpponentLeft);
       nextSocket.disconnect();
       setSocket(null);
@@ -1349,34 +1628,12 @@ export function GameClient({
   };
 
   const handlePlayAgain = () => {
-    if (!socket) {
+    if (!socket || status !== "finished" || rematchRequested) {
       return;
     }
 
-    setStatus("waiting");
-    setScores(initialScores);
-    setStrikes(initialStrikes);
-    setEliminated({ you: false, opponent: false });
-    setRatings((previous) => previous);
-    setTimer(initialTimer);
-    setUltimate(initialUltimate);
-    setFeedback(initialFeedback);
-    setCurrentQuestion("Waiting for the first question...");
-    setAnswer("");
-    setCountdownValue(null);
-    setFrozenUntil(0);
-    setShieldBlockedUntil(0);
     setEmoteBarOpen(false);
-    setEmoteCooldownUntil(0);
-    setEmoteLabels([]);
-    setOpponentActivity("idle");
-    lastTypingEmitRef.current = 0;
-    if (opponentTypingTimerRef.current) {
-      clearTimeout(opponentTypingTimerRef.current);
-      opponentTypingTimerRef.current = null;
-    }
     setRematchRequested(true);
-    setGameResult(null);
     console.log("[client] requestRematch emitted");
     socket.emit("requestRematch");
   };
@@ -1390,6 +1647,7 @@ export function GameClient({
     if (socket && roomLobby) {
       socket.emit("leaveRoom");
     }
+    currentMatchRoomIdRef.current = null;
     router.push("/");
   };
 
@@ -1397,6 +1655,7 @@ export function GameClient({
     if (socket && roomLobby) {
       socket.emit("leaveRoom");
     }
+    currentMatchRoomIdRef.current = null;
     router.push("/");
   };
 
@@ -1429,12 +1688,16 @@ export function GameClient({
     setMuted(nextMuted);
   };
 
-  const handleUsePowerUp = () => {
-    if (!socket || status !== "playing" || !feedback.youPowerUpAvailable) {
+  const handleUsePowerUp = (type: PowerUpId) => {
+    if (!socket || status !== "playing") {
       return;
     }
 
-    socket.emit("usePowerUp", { type: feedback.youPowerUpAvailable });
+    if (!feedback.youPowerUpsAvailable.includes(type)) {
+      return;
+    }
+
+    socket.emit("usePowerUp", { type });
   };
 
   const handleActivateUltimate = () => {
@@ -1469,6 +1732,15 @@ export function GameClient({
     emoteTimestampsRef.current.push(now);
 
     // Optimistic UI — show immediately before server confirms
+    const clientMessageId = `${socket.id}:${now}:${Math.random().toString(36).slice(2, 9)}`;
+    const seen = seenEmoteMessageIdsRef.current;
+    seen.add(clientMessageId);
+    if (seen.size > 300) {
+      const oldest = seen.values().next().value;
+      if (oldest) {
+        seen.delete(oldest);
+      }
+    }
     const emote = getEmoteById(emoteId);
     const id = ++emoteIdRef.current;
     setEmoteLabels((previous) => [
@@ -1481,7 +1753,7 @@ export function GameClient({
 
     setEmoteCooldownUntil(now + EMOTE_COOLDOWN_MS);
     setEmoteBarOpen(false);
-    socket.emit("sendEmote", { emoteId });
+    socket.emit("sendEmote", { emoteId, clientMessageId });
   };
 
   const isFinished = status === "finished";
@@ -1498,15 +1770,31 @@ export function GameClient({
   const opponentEliminated = eliminated.opponent;
   const isShieldBlocked = shieldBlockedUntil > Date.now();
   const emoteCoolingDown = emoteCooldownUntil > Date.now();
-  const isTitanActive = ultimate.titanUntil > Date.now();
-  const isOpponentTitanActive = ultimate.opponentTitanUntil > Date.now();
-  const isBlackoutActive = ultimate.blackoutUntil > Date.now();
+  const isJamActive = ultimate.blackoutUntil > Date.now();
+  const isRapidFireActive = ultimate.overclockUntil > Date.now();
+  const isOpponentRapidFireActive = ultimate.opponentOverclockUntil > Date.now();
+  const isGuardianShieldActive = ultimate.fortressUntil > Date.now() && ultimate.fortressBlocksRemaining > 0;
+  const isOpponentGuardianShieldActive =
+    ultimate.opponentFortressUntil > Date.now() && ultimate.opponentFortressBlocksRemaining > 0;
+  const isHintActive = feedback.hintUntil > Date.now() && Boolean(feedback.hintText);
   const canUseUltimate =
     isActiveGameplay && ultimate.ready && !ultimate.used && ultimate.implemented && !youEliminated;
   const hasDoublePoints = feedback.youDoublePointsUntil > Date.now();
   const opponentHasDoublePoints = feedback.opponentDoublePointsUntil > Date.now();
   const roomPlayerCount = roomLobby?.players.length ?? 0;
   const roomReady = roomPlayerCount === 2;
+  const rematchCtaLabel = rematchRequested
+    ? "Waiting for opponent..."
+    : opponentRematchRequested
+      ? "Accept Rematch"
+      : "Play Again";
+  const rematchStatusText = rematchRequested && !opponentRematchRequested
+    ? "Waiting for opponent to accept rematch..."
+    : !rematchRequested && opponentRematchRequested
+      ? "Opponent wants a rematch."
+      : rematchProgress.requestedPlayers > 0 && rematchProgress.requestedPlayers < rematchProgress.requiredPlayers
+        ? `${rematchProgress.requestedPlayers}/${rematchProgress.requiredPlayers} players ready`
+        : " ";
   const timerLabel = `00:${String(Math.max(0, timer.secondsLeft)).padStart(2, "0")}`;
 
   /**
@@ -1526,10 +1814,12 @@ export function GameClient({
       ? { text: "BLOCKED 🛡️",        color: "text-emerald-200", large: true  }
       : isSlowed
       ? { text: "Slowed 🐢",          color: "text-amber-200",   large: false }
-      : isBlackoutActive
-      ? { text: "Blackout Active",    color: "text-violet-200",  large: false }
-      : isTitanActive
-      ? { text: "Iron Will Active",   color: "text-emerald-200", large: false }
+      : isJamActive
+      ? { text: "Jam Active",    color: "text-violet-200",  large: false }
+      : isRapidFireActive
+      ? { text: "Rapid Fire",   color: "text-cyan-200", large: false }
+      : isGuardianShieldActive
+      ? { text: "Guardian Shield",   color: "text-teal-200", large: false }
       : youEliminated
       ? { text: "Eliminated ✕",       color: "text-rose-300",    large: false }
       : null
@@ -1538,14 +1828,16 @@ export function GameClient({
   const secondaryStatus = (() => {
     if (!isActiveGameplay) return null;
     const parts = [
-      isOpponentTitanActive                                 && "Opp. Iron Will",
-      !isFrozen && !isTitanActive && feedback.youShieldActive && "Shield Active 🛡️",
+      isOpponentRapidFireActive                             && "Opp. Rapid Fire",
+      isOpponentGuardianShieldActive                        && "Opp. Guardian Shield",
+      !isFrozen && feedback.youShieldActive && "Shield Active",
       !isFrozen && feedback.opponentShieldActive            && "Opponent Shielded",
-      hasDoublePoints                                       && "2× Points Active",
-      opponentHasDoublePoints                               && "Opp. 2× Points",
+      hasDoublePoints                                       && "2x Points Active",
+      opponentHasDoublePoints                               && "Opp. 2x Points",
       !youEliminated && opponentEliminated                  && "Opponent Eliminated",
+      isHintActive                                          && "Hint Active",
     ].filter(Boolean) as string[];
-    return parts.length > 0 ? parts.join("  ·  ") : null;
+    return parts.length > 0 ? parts.join("  |  ") : null;
   })();
 
   const getStreakLabel = (streak: number) => {
@@ -1625,9 +1917,83 @@ export function GameClient({
   // Emotes are rendered by EmoteDisplay (separate from FloatingLabel)
   const youEmoteItems = emoteLabels.filter((item) => item.who === "you");
   const opponentEmoteItems = emoteLabels.filter((item) => item.who === "opponent");
+  const renderPowerUpGrid = ({
+    readyIds,
+    usedIds,
+    tone,
+    onUse
+  }: {
+    readyIds: PowerUpId[];
+    usedIds: PowerUpId[];
+    tone: "you" | "opponent";
+    onUse?: (id: PowerUpId) => void;
+  }) => (
+    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-2">
+      <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+        Powerups
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {POWER_UPS.map((powerUp) => {
+          const ready = readyIds.includes(powerUp.id);
+          const used = usedIds.includes(powerUp.id);
+          const clickable = Boolean(onUse) && ready;
+          const readyClass =
+            tone === "you"
+              ? "border-sky-400/40 bg-sky-500/10 text-sky-100 hover:border-sky-300"
+              : "border-rose-400/35 bg-rose-500/10 text-rose-100";
+
+          return (
+            <button
+              key={powerUp.id}
+              type="button"
+              onClick={() => onUse?.(powerUp.id)}
+              disabled={!clickable}
+              aria-label={`${powerUp.name} ${ready ? "ready" : used ? "used" : "unavailable"}`}
+              className={`min-h-[3.4rem] rounded-xl border px-2 py-1.5 text-left text-[11px] transition ${
+                ready
+                  ? readyClass
+                  : used
+                  ? "border-slate-700 bg-slate-900/60 text-slate-500"
+                  : "border-slate-800 bg-slate-950/70 text-slate-400"
+              } ${clickable ? "" : "cursor-default"}`}
+            >
+              <p className={`truncate font-semibold ${used ? "line-through decoration-slate-600" : ""}`}>
+                {powerUp.icon} {powerUp.name}
+              </p>
+              <p className="mt-0.5 uppercase tracking-[0.18em] text-[10px]">
+                {ready ? "Ready" : used ? "Used" : "Unavailable"}
+              </p>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const localUltimateStateLabel =
+    ultimate.type === "rapid_fire"
+      ? `Bonus: ${isRapidFireActive ? "Active" : "Idle"}`
+      : ultimate.type === "jam"
+      ? `Jam: ${isJamActive ? "Active" : "Ready"}`
+      : ultimate.type === "shield"
+      ? `Blocks: ${ultimate.fortressBlocksRemaining}`
+      : ultimate.type === "double"
+      ? `Double: ${ultimate.infernoPending ? "Armed" : "Spent"}`
+      : " ";
+
+  const opponentUltimateStateLabel =
+    ultimate.opponentType === "rapid_fire"
+      ? `Bonus: ${isOpponentRapidFireActive ? "Active" : "Idle"}`
+      : ultimate.opponentType === "jam"
+      ? `Jam: ${ultimate.opponentBlackoutUntil > Date.now() ? "Active" : "Ready"}`
+      : ultimate.opponentType === "shield"
+      ? `Blocks: ${ultimate.opponentFortressBlocksRemaining}`
+      : ultimate.opponentType === "double"
+      ? `Double: ${ultimate.opponentInfernoPending ? "Armed" : "Spent"}`
+      : " ";
 
   return (
-    <section className="relative w-full max-w-4xl rounded-[2rem] border border-white/10 bg-slate-950/70 p-4 shadow-glow backdrop-blur sm:p-6 md:p-10">
+    <section className="relative w-full max-w-5xl rounded-[2rem] border border-white/10 bg-slate-950/70 p-3 shadow-glow backdrop-blur sm:p-5 md:p-7 lg:p-8">
       {/* Game-over overlays (win glow / lose vignette) */}
       <GameOverOverlay result={isFinished ? (gameResult?.result ?? null) : null} />
 
@@ -1649,21 +2015,21 @@ export function GameClient({
 
       <SoundToggle muted={muted} onToggle={handleToggleSound} />
 
-      <div className="flex flex-col gap-5 sm:gap-6 md:gap-8">
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.25em] text-sky-300">
+      <div className="flex flex-col gap-4 sm:gap-5 lg:gap-6">
+        <div className="space-y-2.5 sm:space-y-3">
+          <div className="flex min-h-[1.5rem] flex-wrap items-center gap-x-3 gap-y-1 text-xs uppercase tracking-[0.2em] text-sky-300">
             <span>Topic: {topicLabel}</span>
             <span>Difficulty: {difficultyLabel}</span>
             <span>Time: {timerLabel}</span>
           </div>
 
-          <h1 className="text-2xl font-black tracking-tight text-white sm:text-3xl md:text-4xl lg:text-5xl">
+          <h1 className="min-h-[2.5rem] text-2xl font-black tracking-tight text-white sm:min-h-[3rem] sm:text-3xl md:min-h-[3.5rem] md:text-4xl lg:text-5xl">
             {statusHeading[status]}
           </h1>
 
-          <p className="text-sm text-slate-300 sm:text-base md:text-lg">{statusCopy[status]}</p>
-          {isActiveGameplay ? (
-            <div className="mt-2 sm:mt-3">
+          <p className="min-h-[1.5rem] text-sm text-slate-300 sm:min-h-[1.75rem] sm:text-base md:text-lg">{statusCopy[status]}</p>
+          <div className="mt-2 min-h-[2.75rem]">
+            {isActiveGameplay ? (
               <EmoteBar
                 emotes={EMOTES}
                 open={emoteBarOpen}
@@ -1673,18 +2039,20 @@ export function GameClient({
                 cooldownUntil={emoteCooldownUntil}
                 disabled={!isActiveGameplay}
               />
-            </div>
-          ) : null}
+            ) : (
+              <div aria-hidden="true" className="h-11" />
+            )}
+          </div>
         </div>
 
         {/* Player panels */}
         <div
-          className={`grid gap-3 rounded-3xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4 md:grid-cols-[1fr_auto_1fr] md:items-start md:gap-4 md:p-6 ${
+          className={`grid gap-3 rounded-3xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4 md:grid-cols-[minmax(0,1fr)_3rem_minmax(0,1fr)] md:items-stretch md:gap-4 md:p-5 lg:p-6 ${
             isFrozen ? "ring-2 ring-sky-300/30 bg-sky-500/10" : ""
           }`}
         >
           {/* You */}
-          <div className="relative flex flex-col gap-2 sm:gap-3">
+          <div className="relative grid min-h-[34rem] grid-rows-[auto_2.5rem_minmax(11rem,auto)_minmax(8.5rem,auto)] gap-2 sm:min-h-[35rem] sm:gap-3">
             <PlayerPanel
               label={yourName}
               score={scores.you}
@@ -1704,16 +2072,21 @@ export function GameClient({
               shieldBlockFlashKey={animState.youShieldBlockFlashKey}
               powerUpGlowKey={animState.youPowerUpGlowKey}
             />
-            {/* Symmetry spacer — matches OpponentPresence min-height in opponent column */}
-            <div className="min-h-[2.25rem]" aria-hidden="true" />
-            <PowerUpSlot
-              type={feedback.youPowerUpAvailable}
-              onUse={handleUsePowerUp}
-              disabled={!isActiveGameplay}
-              pulseKey={animState.youPowerUpGlowKey}
-              align="left"
-            />
-            <div className="rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2">
+            {/* Symmetry spacer - matches OpponentPresence min-height in opponent column */}
+            <div className="min-h-[2.5rem]" aria-hidden="true" />
+            <div className="min-h-[11rem]">
+              {renderPowerUpGrid({
+                readyIds: feedback.youPowerUpsAvailable,
+                usedIds: feedback.youPowerUpsUsed,
+                tone: "you",
+                onUse: isActiveGameplay ? handleUsePowerUp : undefined
+              })}
+            </div>
+            <div
+              className={`min-h-[8.5rem] rounded-xl border bg-slate-950/70 px-3 py-2 ${
+                canUseUltimate ? "border-emerald-500/40" : "border-slate-800"
+              }`}
+            >
               <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-slate-400">
                 <span>{ultimate.name}</span>
                 <span>{Math.round(ultimate.charge)}%</span>
@@ -1725,6 +2098,13 @@ export function GameClient({
                   transition={{ duration: 0.2 }}
                 />
               </div>
+              <p className="mt-1 h-8 overflow-hidden text-[10px] text-slate-400">
+                {ultimate.description}
+              </p>
+              <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-slate-400">{localUltimateStateLabel}</p>
+              <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-slate-300">
+                {ultimate.used ? "Used" : ultimate.ready ? "Ready" : "Charging"}
+              </p>
               <Button
                 className={`mt-2 w-full py-2 text-xs ${canUseUltimate ? "shadow-lg shadow-emerald-500/20" : ""}`}
                 onClick={handleActivateUltimate}
@@ -1735,8 +2115,8 @@ export function GameClient({
                   : !ultimate.implemented
                   ? "Ultimate Soon"
                   : ultimate.ready
-                  ? "Activate Ultimate"
-                  : "Charging..."}
+                  ? "Ready - Activate Ultimate"
+                  : `Charging ${Math.round(ultimate.charge)}%`}
               </Button>
             </div>
             <FloatingLabel items={youFloatingItems} />
@@ -1748,7 +2128,7 @@ export function GameClient({
           </div>
 
           {/* Opponent */}
-          <div className="relative flex flex-col gap-2 sm:gap-3">
+          <div className="relative grid min-h-[34rem] grid-rows-[auto_2.5rem_minmax(11rem,auto)_minmax(8.5rem,auto)] gap-2 sm:min-h-[35rem] sm:gap-3">
             <PlayerPanel
               label={opponentName}
               score={scores.opponent}
@@ -1774,13 +2154,18 @@ export function GameClient({
               youAnswered={feedback.youAnsweredCurrent}
               isActive={isActiveGameplay}
             />
-            <PowerUpSlot
-              type={feedback.opponentPowerUpAvailable}
-              disabled
-              pulseKey={animState.opponentPowerUpGlowKey}
-              align="right"
-            />
-            <div className="rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2">
+            <div className="min-h-[11rem]">
+              {renderPowerUpGrid({
+                readyIds: feedback.opponentPowerUpsAvailable,
+                usedIds: feedback.opponentPowerUpsUsed,
+                tone: "opponent"
+              })}
+            </div>
+            <div
+              className={`min-h-[8.5rem] rounded-xl border bg-slate-950/70 px-3 py-2 ${
+                ultimate.opponentReady && !ultimate.opponentUsed ? "border-rose-500/40" : "border-slate-800"
+              }`}
+            >
               <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-slate-400">
                 <span>{ultimate.opponentName}</span>
                 <span>{Math.round(ultimate.opponentCharge)}%</span>
@@ -1792,6 +2177,7 @@ export function GameClient({
                   transition={{ duration: 0.2 }}
                 />
               </div>
+              <p className="mt-1 text-center text-[10px] uppercase tracking-[0.18em] text-slate-400">{opponentUltimateStateLabel}</p>
               <p className="mt-2 text-center text-[10px] uppercase tracking-[0.18em] text-slate-400">
                 {ultimate.opponentUsed
                   ? "Used"
@@ -1948,16 +2334,18 @@ export function GameClient({
                   {isCountdown ? "Countdown" : isWaitingState ? "Match Status" : "Current Question"}
                 </p>
 
-                {isCountdown ? (
-                  <CountdownDisplay value={countdownValue} />
-                ) : (
-                  <p className="mt-3 text-xl font-black tracking-tight text-white sm:mt-4 sm:text-3xl md:text-5xl">
-                    {isWaitingState ? statusHeading[status] : currentQuestion}
-                  </p>
-                )}
+                <div className="mt-3 flex min-h-[6.5rem] items-center justify-center sm:min-h-[7.5rem]">
+                  {isCountdown ? (
+                    <CountdownDisplay value={countdownValue} />
+                  ) : (
+                    <p className="max-h-[7rem] overflow-hidden text-xl font-black tracking-tight text-white sm:max-h-[8rem] sm:text-3xl md:max-h-[9rem] md:text-5xl">
+                      {isWaitingState ? statusHeading[status] : currentQuestion}
+                    </p>
+                  )}
+                </div>
 
                 {/* Fixed-height status slot — never causes layout shift */}
-                <div className="mt-3 flex min-h-[2.75rem] flex-col items-center justify-center gap-0.5">
+                <div className="mt-3 flex min-h-[3rem] flex-col items-center justify-center gap-0.5">
                   {primaryStatus ? (
                     <p
                       className={`font-black uppercase tracking-[0.22em] ${
@@ -1980,37 +2368,41 @@ export function GameClient({
               </div>
             </motion.div>
 
-            {status === "playing" ? (
-              <form className="space-y-3 transition-all duration-300" onSubmit={handleSubmit}>
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium uppercase tracking-[0.2em] text-slate-400">
-                    Your Answer
-                  </span>
-                  <input
-                    type="text"
-                    value={answer}
-                    onChange={(event) => handleAnswerChange(event.target.value)}
-                    placeholder={
-                      isFrozen
-                        ? "Frozen..."
-                        : isBlackoutActive
-                        ? "Blackout..."
-                        : isSlowed
-                        ? "Slowed..."
-                        : youEliminated
-                        ? "Eliminated"
-                        : "Type your answer and press Enter"
-                    }
-                    disabled={isFrozen || isBlackoutActive || isSlowed || youEliminated}
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-900/80 px-4 py-4 text-slate-100 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/35 disabled:cursor-not-allowed disabled:opacity-60"
-                  />
-                </label>
+            <div className="min-h-[9.5rem]">
+              {status === "playing" ? (
+                <form className="space-y-3 transition-all duration-300" onSubmit={handleSubmit}>
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium uppercase tracking-[0.2em] text-slate-400">
+                      Your Answer
+                    </span>
+                    <input
+                      type="text"
+                      value={answer}
+                      onChange={(event) => handleAnswerChange(event.target.value)}
+                      placeholder={
+                        isFrozen
+                          ? "Frozen..."
+                        : isJamActive
+                        ? "Jammed..."
+                          : isSlowed
+                          ? "Slowed..."
+                          : youEliminated
+                          ? "Eliminated"
+                          : "Type your answer and press Enter"
+                      }
+                      disabled={isFrozen || isJamActive || isSlowed || youEliminated}
+                      className="h-14 w-full rounded-2xl border border-slate-700 bg-slate-900/80 px-4 text-slate-100 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/35 disabled:cursor-not-allowed disabled:opacity-60"
+                    />
+                  </label>
 
-                <Button className="w-full" type="submit" disabled={!answer.trim() || isFrozen || isBlackoutActive || isSlowed || youEliminated}>
-                  Submit Answer
-                </Button>
-              </form>
-            ) : null}
+                  <Button className="h-12 w-full" type="submit" disabled={!answer.trim() || isFrozen || isJamActive || isSlowed || youEliminated}>
+                    Submit Answer
+                  </Button>
+                </form>
+              ) : (
+                <div aria-hidden="true" className="h-[9.5rem]" />
+              )}
+            </div>
           </>
         ) : (
           /* Game over — loss gets a subtle downward drift */
@@ -2074,13 +2466,20 @@ export function GameClient({
                 <p className="mt-1 text-sm text-slate-300">New Rating: {gameResult.newRatings.you}</p>
               ) : null}
 
+              <div className="mt-4 min-h-[1.25rem] text-center text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                {rematchStatusText}
+              </div>
               <div className="mt-6 grid gap-3 sm:mt-8 md:grid-cols-2">
-                <Button className="w-full" onClick={handlePlayAgain} disabled={rematchRequested}>
-                  {rematchRequested ? "Waiting for opponent..." : "Play Again"}
+                <Button
+                  className="w-full min-h-[2.75rem]"
+                  onClick={handlePlayAgain}
+                  disabled={rematchRequested}
+                >
+                  {rematchCtaLabel}
                 </Button>
                 <Button
                   variant="secondary"
-                  className="w-full"
+                  className="w-full min-h-[2.75rem]"
                   onClick={handleChangeTopic}
                 >
                   Change Topic
@@ -2093,3 +2492,5 @@ export function GameClient({
     </section>
   );
 }
+
+

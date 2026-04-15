@@ -1,6 +1,29 @@
 const { supabaseAdmin } = require("./supabase");
+const AVATARS = require("../../../packages/shared/avatars.json");
 
 const DEFAULT_RATING = 1000;
+const VALID_AVATAR_IDS = new Set((AVATARS ?? []).map((avatar) => avatar.id));
+
+function normalizeAvatarId(value) {
+  if (typeof value === "string" && VALID_AVATAR_IDS.has(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const legacyValue = value.toLowerCase();
+    if (legacyValue === "titan" || legacyValue === "aegis" || legacyValue === "frost") {
+      return "guardian";
+    }
+    if (legacyValue === "volt") {
+      return "flash";
+    }
+    if (legacyValue === "nova") {
+      return "inferno";
+    }
+  }
+
+  return "flash";
+}
 
 function isNoRowsError(error) {
   return error && (error.code === "PGRST116" || error.details?.includes("0 rows"));
@@ -277,14 +300,14 @@ async function getLeaderboard(topic) {
   const playerMap = new Map(
     (players ?? []).map((player) => [
       player.id,
-      { username: player.display_name ?? player.username, avatarId: player.avatar_id ?? "fox" }
+      { username: player.display_name ?? player.username, avatarId: normalizeAvatarId(player.avatar_id) }
     ])
   );
 
   return ratings.map((entry) => ({
     playerId: entry.player_id,
     name: playerMap.get(entry.player_id)?.username ?? "Unknown Player",
-    avatarId: playerMap.get(entry.player_id)?.avatarId ?? "fox",
+    avatarId: playerMap.get(entry.player_id)?.avatarId ?? "flash",
     rating: entry.rating,
     topic: entry.topic
   }));
@@ -358,7 +381,7 @@ async function getProfileSummary(authUserId) {
   return {
     username: player.display_name ?? player.username,
     displayName: player.display_name ?? player.username,
-    avatarId: player.avatar_id ?? "fox",
+    avatarId: normalizeAvatarId(player.avatar_id),
     summary: {
       totalMatches: matchRows.length,
       wins,
