@@ -274,8 +274,8 @@ function AuthModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-6 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-[2rem] border border-white/10 bg-slate-950/95 p-6 shadow-glow md:p-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm sm:px-6">
+      <div className="w-full max-w-lg rounded-[2rem] border border-white/10 bg-slate-950/95 p-5 shadow-glow max-h-[90dvh] overflow-y-auto sm:p-6 md:p-8">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm uppercase tracking-[0.2em] text-slate-400">Authentication</p>
@@ -298,7 +298,7 @@ function AuthModal({
           <button
             type="button"
             onClick={onClose}
-            className="px-2 py-1 text-sm text-slate-300 underline-offset-4 transition hover:text-sky-300 hover:underline"
+            className="shrink-0 rounded-xl px-3 py-2.5 text-sm text-slate-300 underline-offset-4 transition hover:text-sky-300 hover:underline"
           >
             Close
           </button>
@@ -323,7 +323,7 @@ function AuthModal({
                 setForgotOpen(false);
                 setPendingVerificationEmail(null);
               }}
-              className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+              className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
                 authMode === "login"
                   ? "bg-sky-500/20 text-sky-200"
                   : "text-slate-300 hover:bg-slate-900/70"
@@ -340,7 +340,7 @@ function AuthModal({
                 setForgotOpen(false);
                 setPendingVerificationEmail(null);
               }}
-              className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+              className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
                 authMode === "signup"
                   ? "bg-sky-500/20 text-sky-200"
                   : "text-slate-300 hover:bg-slate-900/70"
@@ -354,7 +354,7 @@ function AuthModal({
           {!forgotOpen ? (
             <Button
               variant="secondary"
-              className="w-full py-4 text-lg font-bold"
+              className="w-full font-bold"
               onClick={handleGoogleSignIn}
               disabled={authBusy || loading}
             >
@@ -562,6 +562,15 @@ export function HomeHero() {
     router.push("/play");
   };
 
+  const handlePlayVsAi = () => {
+    if (!user) {
+      openAuthModal("login");
+      return;
+    }
+
+    router.push("/play?mode=ai");
+  };
+
   const handleGuestContinue = async () => {
     if (user) {
       router.push("/play");
@@ -603,26 +612,36 @@ export function HomeHero() {
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, ease: "easeOut" }}
-        className="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-slate-950/70 p-8 shadow-glow backdrop-blur md:p-12"
+        className="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-slate-950/70 p-5 shadow-glow backdrop-blur sm:p-8 md:p-12"
       >
-        <div className="space-y-4 text-center">
+        <div className="space-y-3 text-center sm:space-y-4">
           <span className="inline-flex rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-sky-200">
             Multiplayer Math Arena
           </span>
-          <h1 className="text-5xl font-black tracking-tight text-white md:text-6xl">
+          <h1 className="text-3xl font-black tracking-tight text-white sm:text-5xl md:text-6xl">
             MathBattle
           </h1>
-          <p className="text-lg text-slate-300 md:text-xl">Real-time multiplayer math</p>
+          <p className="text-base text-slate-300 sm:text-lg md:text-xl">Real-time multiplayer math</p>
         </div>
 
-        <div className="mt-12 space-y-4 text-center">
-          <Button
-            className="w-full py-5 text-xl font-black shadow-lg shadow-sky-500/20"
-            onClick={handlePlayNow}
-            disabled={loading}
-          >
-            Play Now
-          </Button>
+        <div className="mt-8 space-y-4 text-center sm:mt-12">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Button
+              className="w-full py-4 text-lg font-black shadow-lg shadow-sky-500/20 sm:py-5 sm:text-xl"
+              onClick={handlePlayNow}
+              disabled={loading}
+            >
+              Play Online
+            </Button>
+            <Button
+              variant="secondary"
+              className="w-full py-4 text-lg font-bold sm:py-5 sm:text-xl"
+              onClick={handlePlayVsAi}
+              disabled={loading}
+            >
+              Play vs AI 🤖
+            </Button>
+          </div>
 
           {user ? (
             <div className="flex items-center justify-center gap-3 rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-left">

@@ -1,10 +1,18 @@
 import { PageShell } from "@/components/page-shell";
 import { PlaySetup } from "@/components/play-setup";
 
-export default function PlayPage() {
+type PlayPageProps = {
+  searchParams: {
+    mode?: string;
+  };
+};
+
+export default function PlayPage({ searchParams }: PlayPageProps) {
+  const mode = searchParams.mode === "ai" ? "ai" : "pvp";
+
   return (
     <PageShell className="flex items-center justify-center">
-      <PlaySetup />
+      <PlaySetup mode={mode} />
     </PageShell>
   );
 }

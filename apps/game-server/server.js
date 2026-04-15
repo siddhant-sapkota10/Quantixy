@@ -4,6 +4,7 @@ const { createServer } = require("node:http");
 const { Server } = require("socket.io");
 const { URL } = require("node:url");
 const EMOTES = require("../../packages/shared/emotes.json");
+const POWER_UPS = require("../../packages/shared/powerups.json");
 const { verifyAccessToken } = require("./lib/supabase");
 const {
   generateQuestion,
@@ -35,18 +36,28 @@ console.log("[server] PORT =", PORT);
 console.log("[server] ALLOWED_ORIGINS =", ALLOWED_ORIGINS);
 const MATCH_DURATION_MS = 60000;
 const TIMER_UPDATE_INTERVAL_MS = 1000;
-const FREEZE_DURATION_MS = 2000;
+const QUESTION_DURATION_MS = 9000;
+const FREEZE_DURATION_MS = 1600;
+const SLOW_DURATION_MS = 1000;
+const DOUBLE_POINTS_DURATION_MS = 6000;
+const POWER_UP_COOLDOWN_MS = 3500;
+const MAX_POWER_UP_USES_PER_MATCH = 3;
 const EMOTE_COOLDOWN_MS = 1500;
-const FREEZE_STREAK_THRESHOLD = 3;
-const SHIELD_STREAK_THRESHOLD = 5;
 const COUNTDOWN_STEPS = ["3", "2", "1", "GO"];
 const COUNTDOWN_INTERVAL_MS = 1000;
 const FAST_ANSWER_MS = 2000;
 const K_FACTOR = 32;
+const ROOM_CODE_LENGTH = 6;
+const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 const topicQueues = new Map();
 const activeGames = new Map();
+const customRooms = new Map();
 const VALID_EMOTE_IDS = new Set(EMOTES.map((emote) => emote.id));
+const POWER_UP_BY_ID = new Map(POWER_UPS.map((powerUp) => [powerUp.id, powerUp]));
+const POWER_UP_EARN_ORDER = [...POWER_UPS]
+  .filter((powerUp) => Number.isFinite(powerUp.earnStreak))
+  .sort((a, b) => (b.earnStreak ?? 0) - (a.earnStreak ?? 0));
 let roomCounter = 1;
 
 function getAllowedOrigin(request) {
@@ -154,6 +165,30 @@ function getGuestName(socketId) {
   return `Guest-${socketId.slice(0, 4)}`;
 }
 
+function normalizeRoomCode(value) {
+  return String(value ?? "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, ROOM_CODE_LENGTH);
+}
+
+function generateRoomCode() {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    let code = "";
+
+    for (let index = 0; index < ROOM_CODE_LENGTH; index += 1) {
+      const randomIndex = Math.floor(Math.random() * ROOM_CODE_ALPHABET.length);
+      code += ROOM_CODE_ALPHABET[randomIndex];
+    }
+
+    if (!customRooms.has(code)) {
+      return code;
+    }
+  }
+
+  return null;
+}
+
 function calculateEloChange(playerRating, opponentRating, actualScore) {
   const expectedScore = 1 / (1 + 10 ** ((opponentRating - playerRating) / 400));
   return Math.round(K_FACTOR * (actualScore - expectedScore));
@@ -179,6 +214,13 @@ function clearMatchTimer(game) {
   }
 }
 
+function clearQuestionTimer(game) {
+  if (game.questionTimeout) {
+    clearTimeout(game.questionTimeout);
+    game.questionTimeout = null;
+  }
+}
+
 function buildScoreMap(players) {
   return Object.fromEntries(players.map((player) => [player.socketId, 0]));
 }
@@ -195,33 +237,38 @@ function buildShieldMap(players) {
   return Object.fromEntries(players.map((player) => [player.socketId, false]));
 }
 
-function buildEffectTimerMap(players) {
-  return Object.fromEntries(players.map((player) => [player.socketId, null]));
+function buildSlowMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, 0]));
+}
+
+function buildDoublePointsMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, 0]));
+}
+
+function buildPowerUpCooldownMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, 0]));
+}
+
+function buildPowerUpUsesMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, 0]));
+}
+
+function buildQuestionCompletionMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, false]));
 }
 
 function buildEmoteCooldownMap(players) {
   return Object.fromEntries(players.map((player) => [player.socketId, 0]));
 }
 
-function clearEffectTimers(game) {
-  if (!game.effectTimers) {
-    return;
-  }
-
-  for (const timer of Object.values(game.effectTimers)) {
-    if (timer) {
-      clearTimeout(timer);
-    }
-  }
-
-  game.effectTimers = buildEffectTimerMap(game.players);
-}
-
 function clearMatchEffects(game) {
-  clearEffectTimers(game);
   game.powerUps = buildPowerUpMap(game.players);
   game.freezeUntil = buildFreezeMap(game.players);
   game.shieldActive = buildShieldMap(game.players);
+  game.slowUntil = buildSlowMap(game.players);
+  game.doublePointsUntil = buildDoublePointsMap(game.players);
+  game.powerUpCooldownUntil = buildPowerUpCooldownMap(game.players);
+  game.powerUpUsesCount = buildPowerUpUsesMap(game.players);
   game.emoteCooldownUntil = buildEmoteCooldownMap(game.players);
 }
 
@@ -239,10 +286,139 @@ function getOpponent(game, socketId) {
   return game.players.find((player) => player.socketId !== socketId) ?? null;
 }
 
+function buildRoomLobbyPayload(room, socketId) {
+  const isHost = room.hostSocketId === socketId;
+
+  return {
+    roomCode: room.roomCode,
+    topic: room.topic,
+    difficulty: room.difficulty,
+    status: room.status,
+    isHost,
+    canStart: isHost && room.players.length === 2 && room.status !== "in-game",
+    players: room.players.map((player) => ({
+      socketId: player.socketId,
+      name: player.name,
+      avatar: player.avatar,
+      isHost: player.socketId === room.hostSocketId
+    }))
+  };
+}
+
+function emitRoomUpdated(room) {
+  for (const player of room.players) {
+    io.to(player.socketId).emit("roomUpdated", buildRoomLobbyPayload(room, player.socketId));
+  }
+}
+
+function isActiveUntil(value) {
+  return typeof value === "number" && value > Date.now();
+}
+
+function getDurationForPowerUp(type) {
+  const configuredDuration = POWER_UP_BY_ID.get(type)?.durationMs;
+
+  if (Number.isFinite(configuredDuration)) {
+    return configuredDuration;
+  }
+
+  if (type === "freeze") {
+    return FREEZE_DURATION_MS;
+  }
+
+  if (type === "slow_opponent") {
+    return SLOW_DURATION_MS;
+  }
+
+  if (type === "double_points") {
+    return DOUBLE_POINTS_DURATION_MS;
+  }
+
+  return 0;
+}
+
+function pickEarnedPowerUp(streak) {
+  for (const powerUp of POWER_UP_EARN_ORDER) {
+    if (streak >= (powerUp.earnStreak ?? Number.MAX_SAFE_INTEGER)) {
+      return powerUp.id;
+    }
+  }
+
+  return null;
+}
+
+function buildPlayerPowerState(game, socketId) {
+  const opponent = getOpponent(game, socketId);
+  const opponentId = opponent?.socketId;
+
+  return {
+    powerUpAvailable: game.powerUps[socketId] ?? null,
+    opponentPowerUpAvailable: opponentId ? game.powerUps[opponentId] ?? null : null,
+    shieldActive: !!game.shieldActive[socketId],
+    opponentShieldActive: opponentId ? !!game.shieldActive[opponentId] : false,
+    slowedUntil: game.slowUntil[socketId] ?? 0,
+    opponentSlowedUntil: opponentId ? game.slowUntil[opponentId] ?? 0 : 0,
+    doublePointsUntil: game.doublePointsUntil[socketId] ?? 0,
+    opponentDoublePointsUntil: opponentId ? game.doublePointsUntil[opponentId] ?? 0 : 0
+  };
+}
+
+function markPowerUpUsed(game, socketId) {
+  game.powerUpUsesCount[socketId] = (game.powerUpUsesCount[socketId] ?? 0) + 1;
+}
+
+function emitQuestionState(roomId) {
+  const game = activeGames.get(roomId);
+
+  if (!game) {
+    return;
+  }
+
+  for (const player of game.players) {
+    const opponent = getOpponent(game, player.socketId);
+
+    if (!opponent) {
+      continue;
+    }
+
+    const winner =
+      !game.questionWinnerSocketId
+        ? null
+        : game.questionWinnerSocketId === player.socketId
+          ? "you"
+          : "opponent";
+
+    io.to(player.socketId).emit("questionState", {
+      youAnswered: !!game.questionCompleted[player.socketId],
+      opponentAnswered: !!game.questionCompleted[opponent.socketId],
+      winner
+    });
+  }
+}
+
+function maybeAdvanceQuestion(roomId) {
+  const game = activeGames.get(roomId);
+
+  if (!game || game.phase !== "playing") {
+    return;
+  }
+
+  const allCompleted = game.players.every((player) => game.questionCompleted[player.socketId]);
+
+  if (!allCompleted) {
+    return;
+  }
+
+  clearQuestionTimer(game);
+  emitNewQuestion(roomId);
+}
+
 function resetGameState(game) {
   game.questionIndex = 0;
   game.answeredCurrentQuestion = false;
   game.currentQuestion = null;
+  game.questionCompleted = buildQuestionCompletionMap(game.players);
+  game.questionWinnerSocketId = null;
   game.questionSentAt = null;
   game.startedAt = null;
   game.endsAt = null;
@@ -252,8 +428,12 @@ function resetGameState(game) {
   game.powerUps = buildPowerUpMap(game.players);
   game.freezeUntil = buildFreezeMap(game.players);
   game.shieldActive = buildShieldMap(game.players);
+  game.slowUntil = buildSlowMap(game.players);
+  game.doublePointsUntil = buildDoublePointsMap(game.players);
+  game.powerUpCooldownUntil = buildPowerUpCooldownMap(game.players);
+  game.powerUpUsesCount = buildPowerUpUsesMap(game.players);
   game.emoteCooldownUntil = buildEmoteCooldownMap(game.players);
-  clearEffectTimers(game);
+  clearQuestionTimer(game);
   clearMatchTimer(game);
   game.rematchRequests = new Set();
 }
@@ -278,11 +458,24 @@ function emitNewQuestion(roomId) {
   game.currentQuestion = currentQuestion;
   game.questionSentAt = Date.now();
   game.answeredCurrentQuestion = false;
+  game.questionCompleted = buildQuestionCompletionMap(game.players);
+  game.questionWinnerSocketId = null;
   game.phase = "playing";
+  clearQuestionTimer(game);
+  game.questionTimeout = setTimeout(() => {
+    const activeGame = activeGames.get(roomId);
+
+    if (!activeGame || activeGame.phase !== "playing") {
+      return;
+    }
+
+    emitNewQuestion(roomId);
+  }, QUESTION_DURATION_MS);
 
   const payload = { question: currentQuestion.prompt };
   console.log(`[server] newQuestion emitted -> room=${roomId}`, payload);
   io.to(roomId).emit("newQuestion", payload);
+  emitQuestionState(roomId);
 }
 
 function startMatchTimer(roomId) {
@@ -323,6 +516,7 @@ function startCountdown(roomId) {
   }
 
   clearCountdown(game);
+  clearQuestionTimer(game);
   game.phase = "countdown";
   game.currentQuestion = null;
   game.answeredCurrentQuestion = true;
@@ -363,6 +557,7 @@ async function finishGame(roomId) {
   }
 
   clearCountdown(game);
+  clearQuestionTimer(game);
   clearMatchEffects(game);
   game.phase = "finished";
   game.currentQuestion = null;
@@ -466,23 +661,47 @@ async function finishGame(roomId) {
       }
     });
   }
+
+  if (game.customRoomCode) {
+    const customRoom = customRooms.get(game.customRoomCode);
+
+    if (customRoom) {
+      customRoom.status = "finished";
+      emitRoomUpdated(customRoom);
+    }
+  }
 }
 
-function handleCorrectAnswer(roomId, playerSocketId) {
+function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
   const game = activeGames.get(roomId);
 
-  if (!game || game.phase !== "playing" || game.answeredCurrentQuestion) {
+  if (!game || game.phase !== "playing") {
     return;
   }
 
+  if (game.questionCompleted[playerSocketId]) {
+    return;
+  }
+
+  game.questionCompleted[playerSocketId] = true;
+  const isFirstCorrect = !game.questionWinnerSocketId;
+
+  if (!isFirstCorrect) {
+    emitQuestionState(roomId);
+    maybeAdvanceQuestion(roomId);
+    return;
+  }
+
+  game.questionWinnerSocketId = playerSocketId;
   game.answeredCurrentQuestion = true;
-  game.scores[playerSocketId] = (game.scores[playerSocketId] ?? 0) + 1;
+  game.scores[playerSocketId] = (game.scores[playerSocketId] ?? 0) + pointsAwarded;
   game.streaks[playerSocketId] = (game.streaks[playerSocketId] ?? 0) + 1;
+
   if (!game.powerUps[playerSocketId] && !game.shieldActive[playerSocketId]) {
-    if (game.streaks[playerSocketId] >= SHIELD_STREAK_THRESHOLD) {
-      game.powerUps[playerSocketId] = "shield";
-    } else if (game.streaks[playerSocketId] >= FREEZE_STREAK_THRESHOLD) {
-      game.powerUps[playerSocketId] = "freeze";
+    const earnedPowerUp = pickEarnedPowerUp(game.streaks[playerSocketId]);
+
+    if (earnedPowerUp) {
+      game.powerUps[playerSocketId] = earnedPowerUp;
     }
   }
 
@@ -508,10 +727,10 @@ function handleCorrectAnswer(roomId, playerSocketId) {
     opponentStreak: game.streaks[playerTwoSocketId],
     fastAnswer: scorerSocketId === playerOneSocketId ? fastAnswer : false,
     opponentFastAnswer: scorerSocketId === playerTwoSocketId ? fastAnswer : false,
-    powerUpAvailable: game.powerUps[playerOneSocketId],
-    opponentPowerUpAvailable: game.powerUps[playerTwoSocketId],
-    shieldActive: game.shieldActive[playerOneSocketId],
-    opponentShieldActive: game.shieldActive[playerTwoSocketId]
+    pointsAwarded: scorerSocketId === playerOneSocketId ? pointsAwarded : 0,
+    youAnswered: !!game.questionCompleted[playerOneSocketId],
+    opponentAnswered: !!game.questionCompleted[playerTwoSocketId],
+    ...buildPlayerPowerState(game, playerOneSocketId)
   });
 
   io.to(playerTwoSocketId).emit("pointScored", {
@@ -523,15 +742,14 @@ function handleCorrectAnswer(roomId, playerSocketId) {
     opponentStreak: game.streaks[playerOneSocketId],
     fastAnswer: scorerSocketId === playerTwoSocketId ? fastAnswer : false,
     opponentFastAnswer: scorerSocketId === playerOneSocketId ? fastAnswer : false,
-    powerUpAvailable: game.powerUps[playerTwoSocketId],
-    opponentPowerUpAvailable: game.powerUps[playerOneSocketId],
-    shieldActive: game.shieldActive[playerTwoSocketId],
-    opponentShieldActive: game.shieldActive[playerOneSocketId]
+    pointsAwarded: scorerSocketId === playerTwoSocketId ? pointsAwarded : 0,
+    youAnswered: !!game.questionCompleted[playerTwoSocketId],
+    opponentAnswered: !!game.questionCompleted[playerOneSocketId],
+    ...buildPlayerPowerState(game, playerTwoSocketId)
   });
 
-  if (game.phase === "playing") {
-    emitNewQuestion(roomId);
-  }
+  emitQuestionState(roomId);
+  maybeAdvanceQuestion(roomId);
 }
 
 function handleIncorrectAnswer(roomId, playerSocketId) {
@@ -567,6 +785,44 @@ function removeFromQueues(socketId) {
   }
 }
 
+function removeFromCustomRoom(socket, options = {}) {
+  const roomCode = socket.data.customRoomCode;
+
+  if (!roomCode) {
+    return;
+  }
+
+  const room = customRooms.get(roomCode);
+  socket.data.customRoomCode = undefined;
+
+  if (!room) {
+    return;
+  }
+
+  room.players = room.players.filter((player) => player.socketId !== socket.id);
+
+  if (room.players.length === 0) {
+    customRooms.delete(roomCode);
+    return;
+  }
+
+  if (!room.players.some((player) => player.socketId === room.hostSocketId)) {
+    room.hostSocketId = room.players[0].socketId;
+  }
+
+  if (room.status !== "in-game") {
+    room.status = room.players.length === 2 ? "ready" : "waiting";
+  }
+
+  emitRoomUpdated(room);
+
+  if (options.notifyRemaining && room.players[0]) {
+    io.to(room.players[0].socketId).emit("roomError", {
+      message: "The other player left the room."
+    });
+  }
+}
+
 function removeFromGame(socket) {
   const roomId = socket.data.roomId;
 
@@ -581,9 +837,11 @@ function removeFromGame(socket) {
   }
 
   clearCountdown(game);
+  clearQuestionTimer(game);
   clearMatchEffects(game);
 
   const remainingPlayer = game.players.find((player) => player.socketId !== socket.id);
+  const customRoomCode = game.customRoomCode;
 
   if (remainingPlayer) {
     console.log(`[server] opponentLeft emitted -> room=${roomId}`, {
@@ -598,50 +856,65 @@ function removeFromGame(socket) {
     if (remainingSocket) {
       remainingSocket.leave(roomId);
       remainingSocket.data.roomId = undefined;
+      if (customRoomCode) {
+        remainingSocket.data.customRoomCode = customRoomCode;
+      }
     }
   }
 
   activeGames.delete(roomId);
+  socket.data.roomId = undefined;
+
+  if (!customRoomCode) {
+    return;
+  }
+
+  const customRoom = customRooms.get(customRoomCode);
+
+  if (!customRoom) {
+    return;
+  }
+
+  customRoom.players = customRoom.players.filter((player) => player.socketId === remainingPlayer?.socketId);
+
+  if (!remainingPlayer) {
+    customRooms.delete(customRoomCode);
+    return;
+  }
+
+  customRoom.hostSocketId = remainingPlayer.socketId;
+  customRoom.status = "waiting";
+  emitRoomUpdated(customRoom);
 }
 
-async function queuePlayer(socket, topic, difficulty, accessToken) {
-  removeFromQueues(socket.id);
-
-  socket.data.roomId = undefined;
-  socket.data.topic = topic;
-  socket.data.difficulty = difficulty;
+async function resolveSocketPlayer(socket, topic, accessToken) {
   const authUser = await verifyAccessToken(accessToken);
   const player = await findOrCreatePlayerFromAuthUser(authUser);
   const rating = await getOrCreateRating(player.id, topic);
-  const queueKey = `${topic}:${difficulty}`;
-  const queue = topicQueues.get(queueKey) ?? [];
-  const queuedPlayer = {
+
+  return {
     socketId: socket.id,
     playerId: player.id,
     name: player.display_name ?? player.username,
     rating: rating.rating,
     avatar: player.avatar_id ?? "fox"
   };
+}
 
-  queue.push(queuedPlayer);
-  topicQueues.set(queueKey, queue);
-
-  if (queue.length < 2) {
-    return;
-  }
-
-  const players = queue.splice(0, 2);
-  topicQueues.set(queueKey, queue);
-
-  const roomId = `room-${roomCounter++}`;
+function createActiveGame(players, topic, difficulty, customRoomCode = null) {
+  const roomId = customRoomCode ? `custom-${customRoomCode}` : `room-${roomCounter++}`;
   const game = {
     roomId,
     topic,
     difficulty,
+    customRoomCode,
     players,
     questionIndex: 0,
     answeredCurrentQuestion: false,
     currentQuestion: null,
+    questionCompleted: buildQuestionCompletionMap(players),
+    questionWinnerSocketId: null,
+    questionTimeout: null,
     questionSentAt: null,
     startedAt: null,
     endsAt: null,
@@ -651,8 +924,11 @@ async function queuePlayer(socket, topic, difficulty, accessToken) {
     powerUps: buildPowerUpMap(players),
     freezeUntil: buildFreezeMap(players),
     shieldActive: buildShieldMap(players),
+    slowUntil: buildSlowMap(players),
+    doublePointsUntil: buildDoublePointsMap(players),
+    powerUpCooldownUntil: buildPowerUpCooldownMap(players),
+    powerUpUsesCount: buildPowerUpUsesMap(players),
     emoteCooldownUntil: buildEmoteCooldownMap(players),
-    effectTimers: buildEffectTimerMap(players),
     rematchRequests: new Set(),
     countdownInterval: null,
     matchTimerInterval: null
@@ -669,13 +945,17 @@ async function queuePlayer(socket, topic, difficulty, accessToken) {
 
     playerSocket.join(roomId);
     playerSocket.data.roomId = roomId;
+    if (customRoomCode) {
+      playerSocket.data.customRoomCode = customRoomCode;
+    }
     playerSocket.data.topic = topic;
     playerSocket.data.difficulty = difficulty;
   }
 
   console.log(`[server] matchFound emitted -> room=${roomId}`, {
     players: players.map((entry) => entry.socketId),
-    topic
+    topic,
+    customRoomCode
   });
 
   io.to(players[0].socketId).emit("matchFound", {
@@ -707,6 +987,154 @@ async function queuePlayer(socket, topic, difficulty, accessToken) {
   startCountdown(roomId);
 }
 
+function leaveCurrentState(socket) {
+  removeFromQueues(socket.id);
+
+  if (socket.data.roomId) {
+    removeFromGame(socket);
+  }
+
+  if (socket.data.customRoomCode) {
+    removeFromCustomRoom(socket);
+  }
+}
+
+async function queuePlayer(socket, topic, difficulty, accessToken) {
+  leaveCurrentState(socket);
+  socket.data.topic = topic;
+  socket.data.difficulty = difficulty;
+  const queuedPlayer = await resolveSocketPlayer(socket, topic, accessToken);
+  const queueKey = `${topic}:${difficulty}`;
+  const queue = topicQueues.get(queueKey) ?? [];
+
+  queue.push(queuedPlayer);
+  topicQueues.set(queueKey, queue);
+
+  if (queue.length < 2) {
+    return;
+  }
+
+  const players = queue.splice(0, 2);
+  topicQueues.set(queueKey, queue);
+  createActiveGame(players, topic, difficulty, null);
+}
+
+async function createCustomRoom(socket, topic, difficulty, accessToken) {
+  leaveCurrentState(socket);
+
+  const roomCode = generateRoomCode();
+
+  if (!roomCode) {
+    socket.emit("roomError", {
+      message: "Could not create a room right now. Please try again."
+    });
+    return;
+  }
+
+  const hostPlayer = await resolveSocketPlayer(socket, topic, accessToken);
+  const room = {
+    roomCode,
+    hostSocketId: socket.id,
+    topic,
+    difficulty,
+    status: "waiting",
+    players: [hostPlayer]
+  };
+
+  customRooms.set(roomCode, room);
+  socket.data.customRoomCode = roomCode;
+  socket.data.topic = topic;
+  socket.data.difficulty = difficulty;
+
+  const payload = buildRoomLobbyPayload(room, socket.id);
+  socket.emit("roomCreated", payload);
+  emitRoomUpdated(room);
+}
+
+async function joinCustomRoom(socket, roomCodeInput, accessToken) {
+  const roomCode = normalizeRoomCode(roomCodeInput);
+
+  if (roomCode.length !== ROOM_CODE_LENGTH) {
+    socket.emit("roomError", { message: "Enter a valid room code." });
+    return;
+  }
+
+  const room = customRooms.get(roomCode);
+
+  if (!room) {
+    socket.emit("roomError", { message: "Room not found." });
+    return;
+  }
+
+  if (room.status === "in-game") {
+    socket.emit("roomError", { message: "Room is currently in-game." });
+    return;
+  }
+
+  if (!room.players.some((player) => player.socketId === socket.id) && room.players.length >= 2) {
+    socket.emit("roomError", { message: "Room is full." });
+    return;
+  }
+
+  leaveCurrentState(socket);
+
+  let joiningPlayer = room.players.find((player) => player.socketId === socket.id);
+
+  if (!joiningPlayer) {
+    joiningPlayer = await resolveSocketPlayer(socket, room.topic, accessToken);
+    room.players.push(joiningPlayer);
+  }
+
+  room.status = room.players.length === 2 ? "ready" : "waiting";
+  socket.data.customRoomCode = roomCode;
+  socket.data.topic = room.topic;
+  socket.data.difficulty = room.difficulty;
+
+  socket.emit("roomJoined", buildRoomLobbyPayload(room, socket.id));
+  emitRoomUpdated(room);
+}
+
+function startCustomRoomMatch(socket) {
+  const roomCode = socket.data.customRoomCode;
+
+  if (!roomCode) {
+    socket.emit("roomError", { message: "You are not in a custom room." });
+    return;
+  }
+
+  const room = customRooms.get(roomCode);
+
+  if (!room) {
+    socket.emit("roomError", { message: "Room no longer exists." });
+    socket.data.customRoomCode = undefined;
+    return;
+  }
+
+  if (room.hostSocketId !== socket.id) {
+    socket.emit("roomError", { message: "Only the host can start the match." });
+    return;
+  }
+
+  if (room.players.length < 2) {
+    socket.emit("roomError", { message: "Waiting for a second player." });
+    return;
+  }
+
+  const bothConnected = room.players.every((player) => io.sockets.sockets.has(player.socketId));
+
+  if (!bothConnected) {
+    room.players = room.players.filter((player) => io.sockets.sockets.has(player.socketId));
+    room.status = room.players.length === 2 ? "ready" : "waiting";
+    emitRoomUpdated(room);
+    socket.emit("roomError", { message: "Waiting for a second player." });
+    return;
+  }
+
+  room.status = "in-game";
+  emitRoomUpdated(room);
+  createActiveGame(room.players.slice(0, 2), room.topic, room.difficulty, room.roomCode);
+}
+
 function useFreezePowerUp(roomId, playerSocketId) {
   const game = activeGames.get(roomId);
 
@@ -724,13 +1152,15 @@ function useFreezePowerUp(roomId, playerSocketId) {
     return;
   }
 
-  if ((game.freezeUntil[opponent.socketId] ?? 0) > Date.now()) {
+  if (isActiveUntil(game.freezeUntil[opponent.socketId]) || isActiveUntil(game.slowUntil[opponent.socketId])) {
     return;
   }
 
   if (game.shieldActive[opponent.socketId]) {
     game.powerUps[playerSocketId] = null;
     game.shieldActive[opponent.socketId] = false;
+    game.powerUpCooldownUntil[playerSocketId] = Date.now() + POWER_UP_COOLDOWN_MS;
+    markPowerUpUsed(game, playerSocketId);
 
     console.log(`[server] shieldBlocked emitted -> room=${roomId}`, {
       attacker: playerSocketId,
@@ -741,42 +1171,24 @@ function useFreezePowerUp(roomId, playerSocketId) {
       by: "opponent",
       target: "opponent",
       blockedType: "freeze",
-      powerUpAvailable: false,
-      opponentPowerUpAvailable: game.powerUps[opponent.socketId],
-      shieldActive: false,
-      opponentShieldActive: false
+      ...buildPlayerPowerState(game, playerSocketId)
     });
 
     io.to(opponent.socketId).emit("shieldBlocked", {
       by: "you",
       target: "you",
       blockedType: "freeze",
-      powerUpAvailable: game.powerUps[opponent.socketId],
-      opponentPowerUpAvailable: false,
-      shieldActive: false,
-      opponentShieldActive: false
+      ...buildPlayerPowerState(game, opponent.socketId)
     });
 
     return;
   }
 
   game.powerUps[playerSocketId] = null;
-  game.freezeUntil[opponent.socketId] = Date.now() + FREEZE_DURATION_MS;
-
-  if (game.effectTimers[opponent.socketId]) {
-    clearTimeout(game.effectTimers[opponent.socketId]);
-  }
-
-  game.effectTimers[opponent.socketId] = setTimeout(() => {
-    const activeGame = activeGames.get(roomId);
-
-    if (!activeGame) {
-      return;
-    }
-
-    activeGame.freezeUntil[opponent.socketId] = 0;
-    activeGame.effectTimers[opponent.socketId] = null;
-  }, FREEZE_DURATION_MS);
+  const durationMs = getDurationForPowerUp("freeze");
+  game.freezeUntil[opponent.socketId] = Date.now() + durationMs;
+  game.powerUpCooldownUntil[playerSocketId] = Date.now() + POWER_UP_COOLDOWN_MS;
+  markPowerUpUsed(game, playerSocketId);
 
   console.log(`[server] powerUpUsed emitted -> room=${roomId}`, {
     type: "freeze",
@@ -788,22 +1200,16 @@ function useFreezePowerUp(roomId, playerSocketId) {
     type: "freeze",
     by: "you",
     target: "opponent",
-    durationMs: FREEZE_DURATION_MS,
-    powerUpAvailable: false,
-    opponentPowerUpAvailable: game.powerUps[opponent.socketId],
-    shieldActive: game.shieldActive[playerSocketId],
-    opponentShieldActive: game.shieldActive[opponent.socketId]
+    durationMs,
+    ...buildPlayerPowerState(game, playerSocketId)
   });
 
   io.to(opponent.socketId).emit("powerUpUsed", {
     type: "freeze",
     by: "opponent",
     target: "you",
-    durationMs: FREEZE_DURATION_MS,
-    powerUpAvailable: game.powerUps[opponent.socketId],
-    opponentPowerUpAvailable: false,
-    shieldActive: game.shieldActive[opponent.socketId],
-    opponentShieldActive: game.shieldActive[playerSocketId]
+    durationMs,
+    ...buildPlayerPowerState(game, opponent.socketId)
   });
 }
 
@@ -822,24 +1228,182 @@ function useShieldPowerUp(roomId, playerSocketId) {
 
   game.powerUps[playerSocketId] = null;
   game.shieldActive[playerSocketId] = true;
+  game.powerUpCooldownUntil[playerSocketId] = Date.now() + POWER_UP_COOLDOWN_MS;
+  markPowerUpUsed(game, playerSocketId);
 
   io.to(playerSocketId).emit("shieldActivated", {
     by: "you",
-    powerUpAvailable: false,
-    opponentPowerUpAvailable: opponent ? game.powerUps[opponent.socketId] : null,
-    shieldActive: true,
-    opponentShieldActive: opponent ? game.shieldActive[opponent.socketId] : false
+    ...buildPlayerPowerState(game, playerSocketId)
   });
 
   if (opponent) {
     io.to(opponent.socketId).emit("shieldActivated", {
       by: "opponent",
-      powerUpAvailable: game.powerUps[opponent.socketId],
-      opponentPowerUpAvailable: false,
-      shieldActive: game.shieldActive[opponent.socketId],
-      opponentShieldActive: true
+      ...buildPlayerPowerState(game, opponent.socketId)
     });
   }
+}
+
+function useDoublePointsPowerUp(roomId, playerSocketId) {
+  const game = activeGames.get(roomId);
+
+  if (!game || game.phase !== "playing") {
+    return;
+  }
+
+  if (game.powerUps[playerSocketId] !== "double_points") {
+    return;
+  }
+
+  game.powerUps[playerSocketId] = null;
+  game.doublePointsUntil[playerSocketId] = Date.now() + getDurationForPowerUp("double_points");
+  game.powerUpCooldownUntil[playerSocketId] = Date.now() + POWER_UP_COOLDOWN_MS;
+  markPowerUpUsed(game, playerSocketId);
+
+  const opponent = getOpponent(game, playerSocketId);
+  io.to(playerSocketId).emit("powerUpUsed", {
+    type: "double_points",
+    by: "you",
+    target: "you",
+    durationMs: getDurationForPowerUp("double_points"),
+    ...buildPlayerPowerState(game, playerSocketId)
+  });
+
+  if (opponent) {
+    io.to(opponent.socketId).emit("powerUpUsed", {
+      type: "double_points",
+      by: "opponent",
+      target: "opponent",
+      durationMs: getDurationForPowerUp("double_points"),
+      ...buildPlayerPowerState(game, opponent.socketId)
+    });
+  }
+}
+
+function useSlowOpponentPowerUp(roomId, playerSocketId) {
+  const game = activeGames.get(roomId);
+
+  if (!game || game.phase !== "playing") {
+    return;
+  }
+
+  if (game.powerUps[playerSocketId] !== "slow_opponent") {
+    return;
+  }
+
+  const opponent = getOpponent(game, playerSocketId);
+
+  if (!opponent) {
+    return;
+  }
+
+  if (isActiveUntil(game.freezeUntil[opponent.socketId]) || isActiveUntil(game.slowUntil[opponent.socketId])) {
+    return;
+  }
+
+  game.powerUps[playerSocketId] = null;
+  game.slowUntil[opponent.socketId] = Date.now() + getDurationForPowerUp("slow_opponent");
+  game.powerUpCooldownUntil[playerSocketId] = Date.now() + POWER_UP_COOLDOWN_MS;
+  markPowerUpUsed(game, playerSocketId);
+
+  io.to(playerSocketId).emit("powerUpUsed", {
+    type: "slow_opponent",
+    by: "you",
+    target: "opponent",
+    durationMs: getDurationForPowerUp("slow_opponent"),
+    ...buildPlayerPowerState(game, playerSocketId)
+  });
+
+  io.to(opponent.socketId).emit("powerUpUsed", {
+    type: "slow_opponent",
+    by: "opponent",
+    target: "you",
+    durationMs: getDurationForPowerUp("slow_opponent"),
+    ...buildPlayerPowerState(game, opponent.socketId)
+  });
+}
+
+function useCleansePowerUp(roomId, playerSocketId) {
+  const game = activeGames.get(roomId);
+
+  if (!game || game.phase !== "playing") {
+    return;
+  }
+
+  if (game.powerUps[playerSocketId] !== "cleanse") {
+    return;
+  }
+
+  const hadFreeze = isActiveUntil(game.freezeUntil[playerSocketId]);
+  const hadSlow = isActiveUntil(game.slowUntil[playerSocketId]);
+
+  if (!hadFreeze && !hadSlow) {
+    return;
+  }
+
+  game.powerUps[playerSocketId] = null;
+  game.freezeUntil[playerSocketId] = 0;
+  game.slowUntil[playerSocketId] = 0;
+  game.powerUpCooldownUntil[playerSocketId] = Date.now() + POWER_UP_COOLDOWN_MS;
+  markPowerUpUsed(game, playerSocketId);
+
+  const opponent = getOpponent(game, playerSocketId);
+
+  io.to(playerSocketId).emit("powerUpUsed", {
+    type: "cleanse",
+    by: "you",
+    target: "you",
+    removedEffects: [hadFreeze ? "freeze" : null, hadSlow ? "slow_opponent" : null].filter(Boolean),
+    ...buildPlayerPowerState(game, playerSocketId)
+  });
+
+  if (opponent) {
+    io.to(opponent.socketId).emit("powerUpUsed", {
+      type: "cleanse",
+      by: "opponent",
+      target: "opponent",
+      ...buildPlayerPowerState(game, opponent.socketId)
+    });
+  }
+}
+
+function useStealMomentumPowerUp(roomId, playerSocketId) {
+  const game = activeGames.get(roomId);
+
+  if (!game || game.phase !== "playing") {
+    return;
+  }
+
+  if (game.powerUps[playerSocketId] !== "steal_momentum") {
+    return;
+  }
+
+  const opponent = getOpponent(game, playerSocketId);
+
+  if (!opponent) {
+    return;
+  }
+
+  game.powerUps[playerSocketId] = null;
+  game.powerUpCooldownUntil[playerSocketId] = Date.now() + POWER_UP_COOLDOWN_MS;
+  game.streaks[opponent.socketId] = 0;
+  game.shieldActive[opponent.socketId] = false;
+  game.doublePointsUntil[opponent.socketId] = 0;
+  markPowerUpUsed(game, playerSocketId);
+
+  io.to(playerSocketId).emit("powerUpUsed", {
+    type: "steal_momentum",
+    by: "you",
+    target: "opponent",
+    ...buildPlayerPowerState(game, playerSocketId)
+  });
+
+  io.to(opponent.socketId).emit("powerUpUsed", {
+    type: "steal_momentum",
+    by: "opponent",
+    target: "you",
+    ...buildPlayerPowerState(game, opponent.socketId)
+  });
 }
 
 function handleSendEmote(roomId, playerSocketId, emoteId) {
@@ -905,6 +1469,54 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("createRoom", async (payload) => {
+    const topic = payload?.topic;
+    const difficulty = payload?.difficulty;
+    const accessToken = payload?.accessToken;
+
+    if (!topic || !isValidTopic(topic) || !difficulty || !isValidDifficulty(difficulty) || !accessToken) {
+      socket.emit("roomError", { message: "Invalid room settings." });
+      return;
+    }
+
+    try {
+      await createCustomRoom(socket, topic, difficulty, accessToken);
+    } catch (error) {
+      console.error("[server] failed to create room", error);
+      socket.emit("roomError", { message: "Unable to create room right now." });
+    }
+  });
+
+  socket.on("joinRoom", async (payload) => {
+    const roomCode = payload?.roomCode;
+    const accessToken = payload?.accessToken;
+
+    if (!roomCode || !accessToken) {
+      socket.emit("roomError", { message: "Enter a valid room code." });
+      return;
+    }
+
+    try {
+      await joinCustomRoom(socket, roomCode, accessToken);
+    } catch (error) {
+      console.error("[server] failed to join room", error);
+      socket.emit("roomError", { message: "Unable to join room right now." });
+    }
+  });
+
+  socket.on("startRoomMatch", () => {
+    startCustomRoomMatch(socket);
+  });
+
+  socket.on("leaveRoom", () => {
+    if (socket.data.roomId) {
+      removeFromGame(socket);
+      return;
+    }
+
+    removeFromCustomRoom(socket, { notifyRemaining: true });
+  });
+
   socket.on("submitAnswer", (answer) => {
     console.log(`[server] submitAnswer received -> id=${socket.id} answer=${answer}`);
 
@@ -919,15 +1531,28 @@ io.on("connection", (socket) => {
       return;
     }
 
+    if ((game.slowUntil[socket.id] ?? 0) > Date.now()) {
+      return;
+    }
+
     const currentQuestion = game.currentQuestion;
 
     if (!currentQuestion) {
       return;
     }
 
+    if (game.questionCompleted[socket.id]) {
+      return;
+    }
+
+    const hadDoublePoints = isActiveUntil(game.doublePointsUntil[socket.id]);
+
     if (normalizeAnswer(answer) === normalizeAnswer(currentQuestion.answer)) {
+      if (hadDoublePoints) {
+        game.doublePointsUntil[socket.id] = 0;
+      }
       handleMissedQuestion(roomId, socket.id);
-      handleCorrectAnswer(roomId, socket.id);
+      handleCorrectAnswer(roomId, socket.id, hadDoublePoints ? 2 : 1);
       return;
     }
 
@@ -951,6 +1576,14 @@ io.on("connection", (socket) => {
     }
 
     resetGameState(game);
+    if (game.customRoomCode) {
+      const customRoom = customRooms.get(game.customRoomCode);
+
+      if (customRoom) {
+        customRoom.status = "in-game";
+        emitRoomUpdated(customRoom);
+      }
+    }
     console.log(`[server] rematch starting -> room=${roomId}`);
     startCountdown(roomId);
   });
@@ -962,13 +1595,53 @@ io.on("connection", (socket) => {
       return;
     }
 
-    if (payload?.type === "freeze") {
+    const game = activeGames.get(roomId);
+
+    if (!game || game.phase !== "playing") {
+      return;
+    }
+
+    if ((game.powerUpCooldownUntil[socket.id] ?? 0) > Date.now()) {
+      return;
+    }
+
+    if ((game.powerUpUsesCount[socket.id] ?? 0) >= MAX_POWER_UP_USES_PER_MATCH) {
+      return;
+    }
+
+    const type = payload?.type;
+
+    if (!POWER_UP_BY_ID.has(type)) {
+      return;
+    }
+
+    if (type === "freeze") {
       useFreezePowerUp(roomId, socket.id);
       return;
     }
 
-    if (payload?.type === "shield") {
+    if (type === "shield") {
       useShieldPowerUp(roomId, socket.id);
+      return;
+    }
+
+    if (type === "double_points") {
+      useDoublePointsPowerUp(roomId, socket.id);
+      return;
+    }
+
+    if (type === "slow_opponent") {
+      useSlowOpponentPowerUp(roomId, socket.id);
+      return;
+    }
+
+    if (type === "cleanse") {
+      useCleansePowerUp(roomId, socket.id);
+      return;
+    }
+
+    if (type === "steal_momentum") {
+      useStealMomentumPowerUp(roomId, socket.id);
     }
   });
 
@@ -985,7 +1658,11 @@ io.on("connection", (socket) => {
   socket.on("disconnect", (reason) => {
     console.log(`[server] client disconnected -> id=${socket.id} reason=${reason}`);
     removeFromQueues(socket.id);
-    removeFromGame(socket);
+    if (socket.data.roomId) {
+      removeFromGame(socket);
+    } else {
+      removeFromCustomRoom(socket, { notifyRemaining: true });
+    }
   });
 });
 

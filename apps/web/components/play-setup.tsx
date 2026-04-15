@@ -23,11 +23,19 @@ const difficultyOptions = DIFFICULTIES.map((difficulty) => ({
   value: difficulty
 }));
 
-export function PlaySetup() {
+type PlaySetupProps = {
+  mode?: "pvp" | "ai";
+};
+
+type MatchMode = "quick" | "create-room" | "join-room";
+
+export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
   const router = useRouter();
   const { user, loading } = useSupabaseAuth();
   const [selectedTopic, setSelectedTopic] = useState<Topic>("arithmetic");
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>("easy");
+  const [matchMode, setMatchMode] = useState<MatchMode>("quick");
+  const [roomCode, setRoomCode] = useState("");
 
   useEffect(() => {
     if (!loading && !user) {
@@ -35,66 +43,183 @@ export function PlaySetup() {
     }
   }, [loading, router, user]);
 
+  const normalizedRoomCode = roomCode
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 6);
+
   const handleStart = () => {
-    const params = new URLSearchParams({
-      topic: selectedTopic,
-      difficulty: selectedDifficulty
-    });
+    const params = new URLSearchParams();
+
+    if (mode === "ai") {
+      params.set("mode", "ai");
+      params.set("topic", selectedTopic);
+      params.set("difficulty", selectedDifficulty);
+      router.push(`/game?${params.toString()}`);
+      return;
+    }
+
+    if (matchMode === "quick") {
+      params.set("topic", selectedTopic);
+      params.set("difficulty", selectedDifficulty);
+      router.push(`/game?${params.toString()}`);
+      return;
+    }
+
+    if (matchMode === "create-room") {
+      params.set("topic", selectedTopic);
+      params.set("difficulty", selectedDifficulty);
+      params.set("match", "room-create");
+      router.push(`/game?${params.toString()}`);
+      return;
+    }
+
+    params.set("match", "room-join");
+    params.set("roomCode", normalizedRoomCode);
     router.push(`/game?${params.toString()}`);
   };
 
+  const actionLabel =
+    mode === "ai"
+      ? "Play vs AI"
+      : matchMode === "quick"
+      ? "Start Quick Match"
+      : matchMode === "create-room"
+      ? "Create Room"
+      : "Join Room";
+
+  const actionDisabled =
+    loading ||
+    !user ||
+    (mode === "pvp" && matchMode === "join-room" && normalizedRoomCode.length !== 6);
+
   return (
-    <section className="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-slate-950/70 p-8 shadow-glow backdrop-blur md:p-12">
-      <div className="space-y-4 text-center">
-        <span className="inline-flex rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-sky-200">
-          Match Setup
+    <section className="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-slate-950/70 p-5 shadow-glow backdrop-blur sm:p-8 md:p-12">
+      <div className="space-y-3 text-center sm:space-y-4">
+        <span
+          className={`inline-flex rounded-full border px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] ${
+            mode === "ai"
+              ? "border-violet-400/30 bg-violet-500/10 text-violet-200"
+              : "border-sky-400/30 bg-sky-400/10 text-sky-200"
+          }`}
+        >
+          {mode === "ai" ? "vs AI" : "Match Setup"}
         </span>
-        <h1 className="text-4xl font-black tracking-tight text-white md:text-5xl">
-          Choose Your Topic
+        <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl md:text-5xl">
+          Choose Your Battle
         </h1>
-        <p className="text-lg text-slate-300">
-          Pick the kind of math battle you want to jump into.
+        <p className="text-base text-slate-300 sm:text-lg">
+          {mode === "ai"
+            ? "Pick a topic and face off against MathBot."
+            : "Pick quick matchmaking or set up a private room with a friend."}
         </p>
       </div>
 
-      <div className="mt-10 space-y-4">
-        <label className="block space-y-2 text-left">
-          <span className="text-sm font-medium uppercase tracking-[0.2em] text-slate-400">
-            Select Topic
-          </span>
-          <Dropdown
-            aria-label="Select a math topic"
-            value={selectedTopic}
-            onChange={(event) => setSelectedTopic(event.target.value as Topic)}
-            options={topicOptions}
-          />
-        </label>
+      <div className="mt-6 space-y-4 sm:mt-10">
+        {mode === "pvp" ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-800 bg-slate-950/70 p-1">
+            <button
+              type="button"
+              onClick={() => setMatchMode("quick")}
+              className={`rounded-xl px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] transition sm:text-sm ${
+                matchMode === "quick"
+                  ? "bg-sky-500/20 text-sky-200"
+                  : "text-slate-300 hover:bg-slate-900/70"
+              }`}
+            >
+              Quick Match
+            </button>
+            <button
+              type="button"
+              onClick={() => setMatchMode("create-room")}
+              className={`rounded-xl px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] transition sm:text-sm ${
+                matchMode === "create-room"
+                  ? "bg-sky-500/20 text-sky-200"
+                  : "text-slate-300 hover:bg-slate-900/70"
+              }`}
+            >
+              Create Room
+            </button>
+            <button
+              type="button"
+              onClick={() => setMatchMode("join-room")}
+              className={`rounded-xl px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] transition sm:text-sm ${
+                matchMode === "join-room"
+                  ? "bg-sky-500/20 text-sky-200"
+                  : "text-slate-300 hover:bg-slate-900/70"
+              }`}
+            >
+              Join Room
+            </button>
+            </div>
+            <p className="text-center text-xs text-slate-400">
+              {matchMode === "quick"
+                ? "Fast queue with random opponents."
+                : matchMode === "create-room"
+                ? "Create a private room and invite a friend."
+                : "Enter a 6-character room code to join a private room."}
+            </p>
+          </div>
+        ) : null}
 
-        <label className="block space-y-2 text-left">
-          <span className="text-sm font-medium uppercase tracking-[0.2em] text-slate-400">
-            Select Difficulty
-          </span>
-          <Dropdown
-            aria-label="Select a difficulty"
-            value={selectedDifficulty}
-            onChange={(event) => setSelectedDifficulty(event.target.value as Difficulty)}
-            options={difficultyOptions}
-          />
-        </label>
+        {mode === "pvp" && matchMode === "join-room" ? (
+          <label className="block space-y-2 text-left">
+            <span className="text-sm font-medium uppercase tracking-[0.2em] text-slate-400">
+              Room Code
+            </span>
+            <input
+              aria-label="Room code"
+              value={normalizedRoomCode}
+              onChange={(event) => setRoomCode(event.target.value)}
+              placeholder="ABC123"
+              className="w-full rounded-2xl border border-slate-700 bg-slate-900/80 px-4 py-3 text-center text-base font-semibold uppercase tracking-[0.35em] text-slate-100 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/35 sm:text-lg"
+            />
+            <div className="flex items-center justify-between text-xs text-slate-400">
+              <span>Codes are uppercase and 6 characters.</span>
+              <span>{normalizedRoomCode.length}/6</span>
+            </div>
+            {normalizedRoomCode.length > 0 && normalizedRoomCode.length < 6 ? (
+              <p className="text-xs text-amber-300">Enter the full room code to continue.</p>
+            ) : null}
+          </label>
+        ) : (
+          <>
+            <label className="block space-y-2 text-left">
+              <span className="text-sm font-medium uppercase tracking-[0.2em] text-slate-400">
+                Select Topic
+              </span>
+              <Dropdown
+                aria-label="Select a math topic"
+                value={selectedTopic}
+                onChange={(event) => setSelectedTopic(event.target.value as Topic)}
+                options={topicOptions}
+              />
+            </label>
+
+            <label className="block space-y-2 text-left">
+              <span className="text-sm font-medium uppercase tracking-[0.2em] text-slate-400">
+                Select Difficulty
+              </span>
+              <Dropdown
+                aria-label="Select a difficulty"
+                value={selectedDifficulty}
+                onChange={(event) => setSelectedDifficulty(event.target.value as Difficulty)}
+                options={difficultyOptions}
+              />
+            </label>
+          </>
+        )}
 
         <Button
-          className="w-full py-4 text-lg font-bold shadow-lg shadow-sky-500/20"
+          className="w-full py-3 text-base font-bold shadow-lg shadow-sky-500/20 sm:py-4 sm:text-lg"
           onClick={handleStart}
-          disabled={loading || !user}
+          disabled={actionDisabled}
         >
-          Enter Queue
+          {actionLabel}
         </Button>
 
-        <Button
-          variant="secondary"
-          className="w-full"
-          onClick={() => router.push("/")}
-        >
+        <Button variant="secondary" className="w-full py-3 sm:py-4" onClick={() => router.push("/")}>
           Back
         </Button>
       </div>

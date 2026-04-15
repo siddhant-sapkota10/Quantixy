@@ -56,7 +56,7 @@ export function CountdownDisplay({ value }: { value: string | null }) {
             {isGo ? (
               value
             ) : (
-              <span className="text-6xl md:text-8xl">{value}</span>
+              <span className="text-5xl sm:text-6xl md:text-8xl">{value}</span>
             )}
           </p>
         </motion.div>

@@ -35,9 +35,9 @@ export function PlayerPanel({
   powerUpGlowKey = 0,
 }: PlayerPanelProps) {
   return (
-    <div className="flex min-w-0 flex-col items-center gap-2">
+    <div className="flex min-w-0 flex-col items-center gap-1.5 sm:gap-2">
       {/* Streak / fast badges */}
-      <div className="flex min-h-[2.75rem] flex-col items-center justify-end text-center">
+      <div className="flex min-h-[2rem] flex-col items-center justify-end text-center sm:min-h-[2.75rem]">
         <AnimatePresence mode="wait">
           {streakLabel ? (
             <motion.p
@@ -86,18 +86,18 @@ export function PlayerPanel({
               : "0 0 0 rgba(56, 189, 248, 0)",
           }}
           transition={{ duration: 0.45, ease: "easeOut" }}
-          className="w-full rounded-2xl border border-slate-800 bg-slate-950/80 p-4 text-center"
+          className="w-full rounded-2xl border border-slate-800 bg-slate-950/80 p-3 text-center sm:p-4"
         >
           {avatar ? (
-            <p className="text-3xl leading-none">{avatar}</p>
+            <p className="text-2xl leading-none sm:text-3xl">{avatar}</p>
           ) : null}
-          <p className="truncate text-xs uppercase tracking-[0.25em] text-slate-400 mt-1">{label}</p>
+          <p className="mt-1 truncate text-xs uppercase tracking-[0.25em] text-slate-400">{label}</p>
           {typeof rating === "number" ? (
             <p className="mt-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">
               Rating {rating}
             </p>
           ) : null}
-          <p className="mt-2 text-4xl font-bold text-white">{score}</p>
+          <p className="mt-2 text-3xl font-bold text-white sm:text-4xl">{score}</p>
         </motion.div>
 
         {/* Score glow overlay — fires on every correct answer */}

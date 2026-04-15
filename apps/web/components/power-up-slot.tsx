@@ -1,19 +1,9 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { getPowerUpMeta, type PowerUpId } from "@/lib/powerups";
 
-type PowerUpType = "freeze" | "shield" | null;
-
-const POWER_UP_META = {
-  freeze: {
-    icon: "❄️",
-    label: "Freeze"
-  },
-  shield: {
-    icon: "🛡️",
-    label: "Shield"
-  }
-} as const;
+type PowerUpType = PowerUpId | null;
 
 type PowerUpSlotProps = {
   type: PowerUpType;
@@ -30,8 +20,11 @@ export function PowerUpSlot({
   pulseKey = 0,
   align = "left"
 }: PowerUpSlotProps) {
-  const content = type ? POWER_UP_META[type] : null;
-  const justifyClass = align === "right" ? "items-end" : "items-start";
+  const content = getPowerUpMeta(type);
+  const justifyClass =
+    align === "right"
+      ? "items-center sm:items-end"
+      : "items-center sm:items-start";
 
   return (
     <div className={`flex flex-col ${justifyClass} gap-2`}>
@@ -56,17 +49,17 @@ export function PowerUpSlot({
               : "0 0 0 rgba(125,211,252,0)"
         }}
         transition={{ duration: 0.55, ease: "easeOut" }}
-        className={`min-w-[132px] rounded-2xl border px-4 py-3 text-left transition ${
+        className={`w-full rounded-2xl border px-3 py-2 text-left transition sm:px-4 sm:py-3 ${
           type
             ? "border-sky-400/30 bg-sky-500/10 text-sky-100 hover:border-sky-300/50"
             : "border-slate-800 bg-slate-950/60 text-slate-500"
         } disabled:cursor-not-allowed disabled:opacity-80`}
       >
         {content ? (
-          <div className="flex items-center gap-3">
-            <span className="text-2xl leading-none">{content.icon}</span>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span className="text-xl leading-none sm:text-2xl">{content.icon}</span>
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-white">{content.label}</p>
+              <p className="text-sm font-semibold text-white">{content.name}</p>
               <p className="text-[11px] uppercase tracking-[0.22em] text-sky-200">
                 {onUse ? "Ready" : "Holding"}
               </p>

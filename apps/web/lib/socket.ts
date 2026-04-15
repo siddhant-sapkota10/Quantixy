@@ -1,6 +1,7 @@
 "use client";
 
 import { io, type Socket } from "socket.io-client";
+import type { PowerUpId } from "@/lib/powerups";
 
 // NEXT_PUBLIC_SERVER_URL must be set in Vercel (production) env vars.
 // For local dev it falls back to localhost:3001 via .env.local.
@@ -35,6 +36,51 @@ export type ServerToClientEvents = {
   countdown: (payload: {
     value: string;
   }) => void;
+  roomCreated: (payload: {
+    roomCode: string;
+    topic: string;
+    difficulty: string;
+    status: "waiting" | "ready" | "in-game" | "finished";
+    isHost: boolean;
+    canStart: boolean;
+    players: Array<{
+      socketId: string;
+      name: string;
+      avatar: string;
+      isHost: boolean;
+    }>;
+  }) => void;
+  roomJoined: (payload: {
+    roomCode: string;
+    topic: string;
+    difficulty: string;
+    status: "waiting" | "ready" | "in-game" | "finished";
+    isHost: boolean;
+    canStart: boolean;
+    players: Array<{
+      socketId: string;
+      name: string;
+      avatar: string;
+      isHost: boolean;
+    }>;
+  }) => void;
+  roomUpdated: (payload: {
+    roomCode: string;
+    topic: string;
+    difficulty: string;
+    status: "waiting" | "ready" | "in-game" | "finished";
+    isHost: boolean;
+    canStart: boolean;
+    players: Array<{
+      socketId: string;
+      name: string;
+      avatar: string;
+      isHost: boolean;
+    }>;
+  }) => void;
+  roomError: (payload: {
+    message: string;
+  }) => void;
   newQuestion: (payload: { question?: string } | string) => void;
   incorrectAnswer: () => void;
   pointScored: (payload: {
@@ -46,36 +92,61 @@ export type ServerToClientEvents = {
     opponentStreak?: number;
     fastAnswer?: boolean;
     opponentFastAnswer?: boolean;
-    powerUpAvailable?: "freeze" | "shield" | null;
-    opponentPowerUpAvailable?: "freeze" | "shield" | null;
+    pointsAwarded?: number;
+    youAnswered?: boolean;
+    opponentAnswered?: boolean;
+    powerUpAvailable?: PowerUpId | null;
+    opponentPowerUpAvailable?: PowerUpId | null;
     shieldActive?: boolean;
     opponentShieldActive?: boolean;
+    slowedUntil?: number;
+    opponentSlowedUntil?: number;
+    doublePointsUntil?: number;
+    opponentDoublePointsUntil?: number;
+  }) => void;
+  questionState: (payload: {
+    youAnswered: boolean;
+    opponentAnswered: boolean;
+    winner: "you" | "opponent" | null;
   }) => void;
   powerUpUsed: (payload: {
-    type: "freeze";
+    type: PowerUpId;
     by: "you" | "opponent";
     target: "you" | "opponent";
-    durationMs: number;
-    powerUpAvailable?: "freeze" | "shield" | null;
-    opponentPowerUpAvailable?: "freeze" | "shield" | null;
+    durationMs?: number;
+    removedEffects?: string[];
+    powerUpAvailable?: PowerUpId | null;
+    opponentPowerUpAvailable?: PowerUpId | null;
     shieldActive?: boolean;
     opponentShieldActive?: boolean;
+    slowedUntil?: number;
+    opponentSlowedUntil?: number;
+    doublePointsUntil?: number;
+    opponentDoublePointsUntil?: number;
   }) => void;
   shieldActivated: (payload: {
     by: "you" | "opponent";
-    powerUpAvailable?: "freeze" | "shield" | null;
-    opponentPowerUpAvailable?: "freeze" | "shield" | null;
+    powerUpAvailable?: PowerUpId | null;
+    opponentPowerUpAvailable?: PowerUpId | null;
     shieldActive?: boolean;
     opponentShieldActive?: boolean;
+    slowedUntil?: number;
+    opponentSlowedUntil?: number;
+    doublePointsUntil?: number;
+    opponentDoublePointsUntil?: number;
   }) => void;
   shieldBlocked: (payload: {
     by: "you" | "opponent";
     target: "you" | "opponent";
     blockedType: "freeze";
-    powerUpAvailable?: "freeze" | "shield" | null;
-    opponentPowerUpAvailable?: "freeze" | "shield" | null;
+    powerUpAvailable?: PowerUpId | null;
+    opponentPowerUpAvailable?: PowerUpId | null;
     shieldActive?: boolean;
     opponentShieldActive?: boolean;
+    slowedUntil?: number;
+    opponentSlowedUntil?: number;
+    doublePointsUntil?: number;
+    opponentDoublePointsUntil?: number;
   }) => void;
   gameOver: (payload: {
     winnerId?: string;
@@ -108,9 +179,13 @@ export type ServerToClientEvents = {
 
 export type ClientToServerEvents = {
   joinQueue: (payload: { topic: string; difficulty: string; accessToken?: string }) => void;
+  createRoom: (payload: { topic: string; difficulty: string; accessToken?: string }) => void;
+  joinRoom: (payload: { roomCode: string; accessToken?: string }) => void;
+  startRoomMatch: () => void;
+  leaveRoom: () => void;
   submitAnswer: (answer: string) => void;
   requestRematch: () => void;
-  usePowerUp: (payload: { type: "freeze" | "shield" }) => void;
+  usePowerUp: (payload: { type: PowerUpId }) => void;
   sendEmote: (payload: { emoteId: string }) => void;
 };
 

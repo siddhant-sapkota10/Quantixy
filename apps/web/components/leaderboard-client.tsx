@@ -95,14 +95,14 @@ export function LeaderboardClient() {
   }, [leaderboardUrl]);
 
   return (
-    <section className="w-full max-w-5xl rounded-[2rem] border border-white/10 bg-slate-950/70 p-8 shadow-glow backdrop-blur md:p-12">
-      <div className="flex flex-col gap-8">
+    <section className="w-full max-w-5xl rounded-[2rem] border border-white/10 bg-slate-950/70 p-4 shadow-glow backdrop-blur sm:p-6 md:p-12">
+      <div className="flex flex-col gap-4 sm:gap-6 md:gap-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="space-y-3">
             <span className="inline-flex rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-sky-200">
               Competitive Rankings
             </span>
-            <h1 className="text-4xl font-black tracking-tight text-white md:text-5xl">Leaderboard</h1>
+            <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl md:text-5xl">Leaderboard</h1>
             <p className="text-slate-300">Top ratings persisted from completed matches.</p>
           </div>
 
@@ -119,20 +119,20 @@ export function LeaderboardClient() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/70">
-          <div className="grid grid-cols-[80px_1.5fr_140px_1fr] gap-4 border-b border-slate-800 px-6 py-4 text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
+        <div className="overflow-x-auto rounded-3xl border border-slate-800 bg-slate-900/70">
+          <div className="grid min-w-[320px] grid-cols-[44px_1fr_72px] gap-2 border-b border-slate-800 px-3 py-3 text-xs font-semibold uppercase tracking-[0.25em] text-slate-400 sm:grid-cols-[80px_1.5fr_140px_1fr] sm:gap-4 sm:px-6 sm:py-4">
             <span>Rank</span>
             <span>Player</span>
             <span>Rating</span>
-            <span>Topic</span>
+            <span className="hidden sm:block">Topic</span>
           </div>
 
           {loading ? (
-            <div className="px-6 py-10 text-center text-slate-300">Loading leaderboard...</div>
+            <div className="px-4 py-8 text-center sm:px-6 text-slate-300">Loading leaderboard...</div>
           ) : error ? (
-            <div className="px-6 py-10 text-center text-rose-300">{error}</div>
+            <div className="px-4 py-8 text-center sm:px-6 text-rose-300">{error}</div>
           ) : entries.length === 0 ? (
-            <div className="px-6 py-10 text-center text-slate-300">No ratings yet. Play a few matches first.</div>
+            <div className="px-4 py-8 text-center sm:px-6 text-slate-300">No ratings yet. Play a few matches first.</div>
           ) : (
             <div>
               {entries.map((entry, index) => {
@@ -141,17 +141,17 @@ export function LeaderboardClient() {
                 return (
                   <div
                     key={`${entry.topic}-${entry.playerId}`}
-                    className={`grid grid-cols-[80px_1.5fr_140px_1fr] gap-4 border-b border-slate-800/80 px-6 py-4 text-sm last:border-b-0 ${
+                    className={`grid min-w-[320px] grid-cols-[44px_1fr_72px] gap-2 border-b border-slate-800/80 px-3 py-3 text-sm last:border-b-0 sm:grid-cols-[80px_1.5fr_140px_1fr] sm:gap-4 sm:px-6 sm:py-4 ${
                       isTopThree ? "bg-sky-500/5" : ""
                     }`}
                   >
                     <span className={`font-bold ${isTopThree ? "text-sky-300" : "text-slate-300"}`}>#{index + 1}</span>
-                    <span className="flex min-w-0 items-center gap-3 font-semibold text-white">
-                      <span className="text-2xl leading-none">{getAvatar(entry.avatarId).icon}</span>
+                    <span className="flex min-w-0 items-center gap-2 font-semibold text-white sm:gap-3">
+                      <span className="text-xl leading-none sm:text-2xl">{getAvatar(entry.avatarId).icon}</span>
                       <span className="truncate">{entry.name}</span>
                     </span>
                     <span className="font-bold text-slate-100">{entry.rating}</span>
-                    <span className="text-slate-400">{formatTopicLabel(entry.topic as Topic)}</span>
+                    <span className="hidden text-slate-400 sm:block">{formatTopicLabel(entry.topic as Topic)}</span>
                   </div>
                 );
               })}

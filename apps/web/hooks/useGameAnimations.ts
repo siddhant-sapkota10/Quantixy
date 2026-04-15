@@ -2,17 +2,18 @@
 
 import { useCallback, useRef, useState } from "react";
 import { useAnimation, type AnimationControls } from "framer-motion";
+import type { PowerUpId } from "@/lib/powerups";
 
 export type ShieldBlockedLabel = { id: number; who: "you" | "opponent" };
 export type PowerUpActivatedLabel = {
   id: number;
   who: "you" | "opponent";
-  type: "freeze" | "shield";
+  type: PowerUpId;
 };
 export type PowerUpReadyLabel = {
   id: number;
   who: "you" | "opponent";
-  type: "freeze" | "shield";
+  type: PowerUpId;
 };
 
 export type GameAnimationState = {
@@ -81,7 +82,7 @@ export function useGameAnimations() {
 
   /** Called when a player activates any power-up (freeze used OR shield activated). */
   const triggerPowerUpActivated = useCallback(
-    (who: "you" | "opponent", type: "freeze" | "shield") => {
+    (who: "you" | "opponent", type: PowerUpId) => {
       const id = ++labelIdRef.current;
       setPowerUpActivatedLabels((prev) => [...prev, { id, who, type }]);
       setTimeout(() => {
@@ -107,7 +108,7 @@ export function useGameAnimations() {
   }, []);
 
   const triggerPowerUpReady = useCallback(
-    (who: "you" | "opponent", type: "freeze" | "shield") => {
+    (who: "you" | "opponent", type: PowerUpId) => {
       const id = ++labelIdRef.current;
       setPowerUpReadyLabels((prev) => [...prev, { id, who, type }]);
       setTimeout(() => {
