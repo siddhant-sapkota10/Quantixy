@@ -3,15 +3,36 @@
 import { io, type Socket } from "socket.io-client";
 import type { PowerUpId } from "@/lib/powerups";
 
-// NEXT_PUBLIC_SERVER_URL must be set in Vercel (production) env vars.
-// For local dev it falls back to localhost:3001 via .env.local.
 const socketUrl =
   process.env.NEXT_PUBLIC_SERVER_URL ??
   (typeof window !== "undefined" ? window.location.origin : undefined);
 
 if (typeof window !== "undefined") {
-  console.log("[socket] server URL →", socketUrl ?? "(none — check NEXT_PUBLIC_SERVER_URL)");
+  console.log("[socket] server URL ->", socketUrl ?? "(none - check NEXT_PUBLIC_SERVER_URL)");
 }
+
+type UltimateStatePayload = {
+  ultimateType?: string;
+  ultimateName?: string;
+  ultimateCharge?: number;
+  ultimateReady?: boolean;
+  ultimateUsed?: boolean;
+  ultimateImplemented?: boolean;
+  opponentUltimateType?: string;
+  opponentUltimateName?: string;
+  opponentUltimateCharge?: number;
+  opponentUltimateReady?: boolean;
+  opponentUltimateUsed?: boolean;
+  opponentUltimateImplemented?: boolean;
+  titanUntil?: number;
+  opponentTitanUntil?: number;
+  blackoutUntil?: number;
+  opponentBlackoutUntil?: number;
+  flashBonusRemaining?: number;
+  opponentFlashBonusRemaining?: number;
+  infernoPending?: boolean;
+  opponentInfernoPending?: boolean;
+};
 
 export type ServerToClientEvents = {
   authRequired: (payload: { message?: string }) => void;
@@ -29,13 +50,9 @@ export type ServerToClientEvents = {
       you: number;
       opponent: number;
     };
-  }) => void;
-  timerUpdate: (payload: {
-    secondsLeft: number;
-  }) => void;
-  countdown: (payload: {
-    value: string;
-  }) => void;
+  } & UltimateStatePayload) => void;
+  timerUpdate: (payload: { secondsLeft: number } & UltimateStatePayload) => void;
+  countdown: (payload: { value: string }) => void;
   roomCreated: (payload: {
     roomCode: string;
     topic: string;
@@ -78,15 +95,10 @@ export type ServerToClientEvents = {
       isHost: boolean;
     }>;
   }) => void;
-  roomError: (payload: {
-    message: string;
-  }) => void;
+  roomError: (payload: { message: string }) => void;
   newQuestion: (payload: { question?: string } | string) => void;
   incorrectAnswer: (payload: { strikes: number; eliminated: boolean }) => void;
-  opponentStrike: (payload: {
-    opponentStrikes: number;
-    opponentEliminated: boolean;
-  }) => void;
+  opponentStrike: (payload: { opponentStrikes: number; opponentEliminated: boolean }) => void;
   liveLeaderboard: (payload: {
     entries: Array<{
       socketId: string;
@@ -96,20 +108,11 @@ export type ServerToClientEvents = {
       strikes: number;
       eliminated: boolean;
     }>;
-    scores?: {
-      you: number;
-      opponent: number;
-    };
-    strikes?: {
-      you: number;
-      opponent: number;
-    };
-    eliminated?: {
-      you: boolean;
-      opponent: boolean;
-    };
+    scores?: { you: number; opponent: number };
+    strikes?: { you: number; opponent: number };
+    eliminated?: { you: boolean; opponent: boolean };
     updatedAt: number;
-  }) => void;
+  } & UltimateStatePayload) => void;
   pointScored: (payload: {
     scores?: { you?: number; opponent?: number };
     playerScores?: { you?: number; opponent?: number };
@@ -134,20 +137,35 @@ export type ServerToClientEvents = {
     opponentSlowedUntil?: number;
     doublePointsUntil?: number;
     opponentDoublePointsUntil?: number;
-  }) => void;
+  } & UltimateStatePayload) => void;
   questionState: (payload: {
     youAnswered: boolean;
     opponentAnswered: boolean;
     winner: "you" | "opponent" | null;
     youEliminated?: boolean;
     opponentEliminated?: boolean;
-  }) => void;
+  } & UltimateStatePayload) => void;
+  ultimateApplied: (payload: {
+    by: "you" | "opponent";
+    target: "you" | "opponent";
+    type: string;
+    effect: string;
+    durationMs?: number;
+    questionsRemaining?: number;
+  } & UltimateStatePayload) => void;
+  ultimateEnded: (payload: {
+    by: "you" | "opponent";
+    target: "you" | "opponent";
+    type: string;
+    effect: string;
+  } & UltimateStatePayload) => void;
   powerUpUsed: (payload: {
     type: PowerUpId;
     by: "you" | "opponent";
     target: "you" | "opponent";
     durationMs?: number;
     removedEffects?: string[];
+    blockedBy?: string;
     powerUpAvailable?: PowerUpId | null;
     opponentPowerUpAvailable?: PowerUpId | null;
     shieldActive?: boolean;
@@ -156,7 +174,7 @@ export type ServerToClientEvents = {
     opponentSlowedUntil?: number;
     doublePointsUntil?: number;
     opponentDoublePointsUntil?: number;
-  }) => void;
+  } & UltimateStatePayload) => void;
   shieldActivated: (payload: {
     by: "you" | "opponent";
     powerUpAvailable?: PowerUpId | null;
@@ -167,7 +185,7 @@ export type ServerToClientEvents = {
     opponentSlowedUntil?: number;
     doublePointsUntil?: number;
     opponentDoublePointsUntil?: number;
-  }) => void;
+  } & UltimateStatePayload) => void;
   shieldBlocked: (payload: {
     by: "you" | "opponent";
     target: "you" | "opponent";
@@ -180,7 +198,7 @@ export type ServerToClientEvents = {
     opponentSlowedUntil?: number;
     doublePointsUntil?: number;
     opponentDoublePointsUntil?: number;
-  }) => void;
+  } & UltimateStatePayload) => void;
   gameOver: (payload: {
     winnerId?: string;
     winnerName?: string;
@@ -201,13 +219,8 @@ export type ServerToClientEvents = {
       opponent: number;
     };
   }) => void;
-  opponentLeft: (payload: {
-    message?: string;
-  }) => void;
-  emoteReceived: (payload: {
-    emoteId: string;
-    sender: "opponent" | "you";
-  }) => void;
+  opponentLeft: (payload: { message?: string }) => void;
+  emoteReceived: (payload: { emoteId: string; sender: "opponent" | "you" }) => void;
 };
 
 export type ClientToServerEvents = {
@@ -219,6 +232,7 @@ export type ClientToServerEvents = {
   submitAnswer: (answer: string) => void;
   requestRematch: () => void;
   usePowerUp: (payload: { type: PowerUpId }) => void;
+  activateUltimate: () => void;
   sendEmote: (payload: { emoteId: string }) => void;
 };
 
@@ -230,9 +244,6 @@ export const createGameSocket = (): GameSocket => {
   }
 
   return io(socketUrl, {
-    // Start with HTTP long-polling so the Engine.IO session handshake always succeeds
-    // through Render's proxy, then automatically upgrade to WebSocket.
-    // "websocket" first skips the handshake and fails on most reverse proxies.
     transports: ["polling", "websocket"],
     autoConnect: true,
     reconnectionAttempts: 5,
@@ -240,3 +251,4 @@ export const createGameSocket = (): GameSocket => {
     timeout: 20000
   });
 };
+

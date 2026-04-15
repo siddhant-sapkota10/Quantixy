@@ -67,6 +67,29 @@ type TimerState = {
   secondsLeft: number;
 };
 
+type UltimateState = {
+  type: string;
+  name: string;
+  charge: number;
+  ready: boolean;
+  used: boolean;
+  implemented: boolean;
+  opponentType: string;
+  opponentName: string;
+  opponentCharge: number;
+  opponentReady: boolean;
+  opponentUsed: boolean;
+  opponentImplemented: boolean;
+  titanUntil: number;
+  opponentTitanUntil: number;
+  blackoutUntil: number;
+  opponentBlackoutUntil: number;
+  flashBonusRemaining: number;
+  opponentFlashBonusRemaining: number;
+  infernoPending: boolean;
+  opponentInfernoPending: boolean;
+};
+
 type FeedbackState = {
   youStreak: number;
   opponentStreak: number;
@@ -103,6 +126,29 @@ const initialStrikes: StrikeState = {
 
 const initialTimer: TimerState = {
   secondsLeft: 60
+};
+
+const initialUltimate: UltimateState = {
+  type: "lightning_surge",
+  name: "Lightning Surge",
+  charge: 0,
+  ready: false,
+  used: false,
+  implemented: true,
+  opponentType: "lightning_surge",
+  opponentName: "Lightning Surge",
+  opponentCharge: 0,
+  opponentReady: false,
+  opponentUsed: false,
+  opponentImplemented: true,
+  titanUntil: 0,
+  opponentTitanUntil: 0,
+  blackoutUntil: 0,
+  opponentBlackoutUntil: 0,
+  flashBonusRemaining: 0,
+  opponentFlashBonusRemaining: 0,
+  infernoPending: false,
+  opponentInfernoPending: false
 };
 
 const initialFeedback: FeedbackState = {
@@ -191,6 +237,7 @@ export function GameClient({
   const [strikes, setStrikes] = useState<StrikeState>(initialStrikes);
   const [eliminated, setEliminated] = useState({ you: false, opponent: false });
   const [timer, setTimer] = useState<TimerState>(initialTimer);
+  const [ultimate, setUltimate] = useState<UltimateState>(initialUltimate);
   const [feedback, setFeedback] = useState<FeedbackState>(initialFeedback);
   const feedbackRef = useRef(initialFeedback);
   const scoresRef = useRef(initialScores);
@@ -253,6 +300,7 @@ export function GameClient({
     setStrikes(initialStrikes);
     setEliminated({ you: false, opponent: false });
     setTimer(initialTimer);
+    setUltimate(initialUltimate);
     setFeedback(initialFeedback);
     setCurrentQuestion("Waiting for the first question...");
     setAnswer("");
@@ -361,6 +409,70 @@ export function GameClient({
       setCurrentQuestion("Waiting for match start...");
     };
 
+    const syncUltimateFromPayload = (payload: Record<string, unknown>) => {
+      setUltimate((previous) => ({
+        ...previous,
+        type: typeof payload.ultimateType === "string" ? payload.ultimateType : previous.type,
+        name: typeof payload.ultimateName === "string" ? payload.ultimateName : previous.name,
+        charge: typeof payload.ultimateCharge === "number" ? payload.ultimateCharge : previous.charge,
+        ready: typeof payload.ultimateReady === "boolean" ? payload.ultimateReady : previous.ready,
+        used: typeof payload.ultimateUsed === "boolean" ? payload.ultimateUsed : previous.used,
+        implemented:
+          typeof payload.ultimateImplemented === "boolean"
+            ? payload.ultimateImplemented
+            : previous.implemented,
+        opponentType:
+          typeof payload.opponentUltimateType === "string"
+            ? payload.opponentUltimateType
+            : previous.opponentType,
+        opponentName:
+          typeof payload.opponentUltimateName === "string"
+            ? payload.opponentUltimateName
+            : previous.opponentName,
+        opponentCharge:
+          typeof payload.opponentUltimateCharge === "number"
+            ? payload.opponentUltimateCharge
+            : previous.opponentCharge,
+        opponentReady:
+          typeof payload.opponentUltimateReady === "boolean"
+            ? payload.opponentUltimateReady
+            : previous.opponentReady,
+        opponentUsed:
+          typeof payload.opponentUltimateUsed === "boolean"
+            ? payload.opponentUltimateUsed
+            : previous.opponentUsed,
+        opponentImplemented:
+          typeof payload.opponentUltimateImplemented === "boolean"
+            ? payload.opponentUltimateImplemented
+            : previous.opponentImplemented,
+        titanUntil: typeof payload.titanUntil === "number" ? payload.titanUntil : previous.titanUntil,
+        opponentTitanUntil:
+          typeof payload.opponentTitanUntil === "number"
+            ? payload.opponentTitanUntil
+            : previous.opponentTitanUntil,
+        blackoutUntil:
+          typeof payload.blackoutUntil === "number" ? payload.blackoutUntil : previous.blackoutUntil,
+        opponentBlackoutUntil:
+          typeof payload.opponentBlackoutUntil === "number"
+            ? payload.opponentBlackoutUntil
+            : previous.opponentBlackoutUntil,
+        flashBonusRemaining:
+          typeof payload.flashBonusRemaining === "number"
+            ? payload.flashBonusRemaining
+            : previous.flashBonusRemaining,
+        opponentFlashBonusRemaining:
+          typeof payload.opponentFlashBonusRemaining === "number"
+            ? payload.opponentFlashBonusRemaining
+            : previous.opponentFlashBonusRemaining,
+        infernoPending:
+          typeof payload.infernoPending === "boolean" ? payload.infernoPending : previous.infernoPending,
+        opponentInfernoPending:
+          typeof payload.opponentInfernoPending === "boolean"
+            ? payload.opponentInfernoPending
+            : previous.opponentInfernoPending
+      }));
+    };
+
     const handleRoomCreated = (payload: RoomLobbyState) => {
       console.log("[client] roomCreated received", payload);
       applyRoomLobby(payload);
@@ -396,6 +508,26 @@ export function GameClient({
         you: number;
         opponent: number;
       };
+      ultimateType?: string;
+      ultimateName?: string;
+      ultimateCharge?: number;
+      ultimateReady?: boolean;
+      ultimateUsed?: boolean;
+      ultimateImplemented?: boolean;
+      opponentUltimateType?: string;
+      opponentUltimateName?: string;
+      opponentUltimateCharge?: number;
+      opponentUltimateReady?: boolean;
+      opponentUltimateUsed?: boolean;
+      opponentUltimateImplemented?: boolean;
+      titanUntil?: number;
+      opponentTitanUntil?: number;
+      blackoutUntil?: number;
+      opponentBlackoutUntil?: number;
+      flashBonusRemaining?: number;
+      opponentFlashBonusRemaining?: number;
+      infernoPending?: boolean;
+      opponentInfernoPending?: boolean;
     }) => {
       console.log("[client] matchFound received", payload);
       setYourName(payload.yourName ?? "You");
@@ -405,6 +537,8 @@ export function GameClient({
       if (payload.ratings) {
         setRatings(payload.ratings);
       }
+      setUltimate(initialUltimate);
+      syncUltimateFromPayload(payload);
       setStatus("countdown");
       setCurrentQuestion("");
       setCountdownValue(null);
@@ -412,6 +546,7 @@ export function GameClient({
       setStrikes(initialStrikes);
       setEliminated({ you: false, opponent: false });
       setTimer(initialTimer);
+      setUltimate(initialUltimate);
       setFrozenUntil(0);
       setShieldBlockedUntil(0);
       setEmoteBarOpen(false);
@@ -460,11 +595,34 @@ export function GameClient({
       setStatus("playing");
     };
 
-    const handleTimerUpdate = (payload: { secondsLeft: number }) => {
+    const handleTimerUpdate = (payload: {
+      secondsLeft: number;
+      ultimateType?: string;
+      ultimateName?: string;
+      ultimateCharge?: number;
+      ultimateReady?: boolean;
+      ultimateUsed?: boolean;
+      ultimateImplemented?: boolean;
+      opponentUltimateType?: string;
+      opponentUltimateName?: string;
+      opponentUltimateCharge?: number;
+      opponentUltimateReady?: boolean;
+      opponentUltimateUsed?: boolean;
+      opponentUltimateImplemented?: boolean;
+      titanUntil?: number;
+      opponentTitanUntil?: number;
+      blackoutUntil?: number;
+      opponentBlackoutUntil?: number;
+      flashBonusRemaining?: number;
+      opponentFlashBonusRemaining?: number;
+      infernoPending?: boolean;
+      opponentInfernoPending?: boolean;
+    }) => {
       console.log("[client] timerUpdate received", payload);
       setTimer({
         secondsLeft: payload.secondsLeft
       });
+      syncUltimateFromPayload(payload);
     };
 
     const pushEmoteLabel = (who: "you" | "opponent", emoteId: string) => {
@@ -530,6 +688,26 @@ export function GameClient({
       scores?: { you: number; opponent: number };
       strikes?: { you: number; opponent: number };
       eliminated?: { you: boolean; opponent: boolean };
+      ultimateType?: string;
+      ultimateName?: string;
+      ultimateCharge?: number;
+      ultimateReady?: boolean;
+      ultimateUsed?: boolean;
+      ultimateImplemented?: boolean;
+      opponentUltimateType?: string;
+      opponentUltimateName?: string;
+      opponentUltimateCharge?: number;
+      opponentUltimateReady?: boolean;
+      opponentUltimateUsed?: boolean;
+      opponentUltimateImplemented?: boolean;
+      titanUntil?: number;
+      opponentTitanUntil?: number;
+      blackoutUntil?: number;
+      opponentBlackoutUntil?: number;
+      flashBonusRemaining?: number;
+      opponentFlashBonusRemaining?: number;
+      infernoPending?: boolean;
+      opponentInfernoPending?: boolean;
     }) => {
       console.log("[client] liveLeaderboard received", payload);
       if (payload.scores) {
@@ -541,6 +719,7 @@ export function GameClient({
       if (payload.eliminated) {
         setEliminated(payload.eliminated);
       }
+      syncUltimateFromPayload(payload);
     };
 
     const handlePointScored = (payload: {
@@ -565,6 +744,26 @@ export function GameClient({
       opponentSlowedUntil?: number;
       doublePointsUntil?: number;
       opponentDoublePointsUntil?: number;
+      ultimateType?: string;
+      ultimateName?: string;
+      ultimateCharge?: number;
+      ultimateReady?: boolean;
+      ultimateUsed?: boolean;
+      ultimateImplemented?: boolean;
+      opponentUltimateType?: string;
+      opponentUltimateName?: string;
+      opponentUltimateCharge?: number;
+      opponentUltimateReady?: boolean;
+      opponentUltimateUsed?: boolean;
+      opponentUltimateImplemented?: boolean;
+      titanUntil?: number;
+      opponentTitanUntil?: number;
+      blackoutUntil?: number;
+      opponentBlackoutUntil?: number;
+      flashBonusRemaining?: number;
+      opponentFlashBonusRemaining?: number;
+      infernoPending?: boolean;
+      opponentInfernoPending?: boolean;
       youAnswered?: boolean;
       opponentAnswered?: boolean;
     }) => {
@@ -601,6 +800,7 @@ export function GameClient({
         you: payload.youEliminated ?? previous.you,
         opponent: payload.opponentEliminated ?? previous.opponent
       }));
+      syncUltimateFromPayload(payload);
 
       setFeedback((previous) => ({
         youStreak: payload.streak ?? 0,
@@ -662,6 +862,26 @@ export function GameClient({
       winner: "you" | "opponent" | null;
       youEliminated?: boolean;
       opponentEliminated?: boolean;
+      ultimateType?: string;
+      ultimateName?: string;
+      ultimateCharge?: number;
+      ultimateReady?: boolean;
+      ultimateUsed?: boolean;
+      ultimateImplemented?: boolean;
+      opponentUltimateType?: string;
+      opponentUltimateName?: string;
+      opponentUltimateCharge?: number;
+      opponentUltimateReady?: boolean;
+      opponentUltimateUsed?: boolean;
+      opponentUltimateImplemented?: boolean;
+      titanUntil?: number;
+      opponentTitanUntil?: number;
+      blackoutUntil?: number;
+      opponentBlackoutUntil?: number;
+      flashBonusRemaining?: number;
+      opponentFlashBonusRemaining?: number;
+      infernoPending?: boolean;
+      opponentInfernoPending?: boolean;
     }) => {
       console.log("[client] questionState received", payload);
       if (payload.youAnswered) {
@@ -676,6 +896,89 @@ export function GameClient({
         you: payload.youEliminated ?? previous.you,
         opponent: payload.opponentEliminated ?? previous.opponent
       }));
+      syncUltimateFromPayload(payload);
+    };
+
+    const handleUltimateApplied = (payload: {
+      by: "you" | "opponent";
+      target: "you" | "opponent";
+      type: string;
+      effect: string;
+      durationMs?: number;
+      questionsRemaining?: number;
+      ultimateType?: string;
+      ultimateName?: string;
+      ultimateCharge?: number;
+      ultimateReady?: boolean;
+      ultimateUsed?: boolean;
+      ultimateImplemented?: boolean;
+      opponentUltimateType?: string;
+      opponentUltimateName?: string;
+      opponentUltimateCharge?: number;
+      opponentUltimateReady?: boolean;
+      opponentUltimateUsed?: boolean;
+      opponentUltimateImplemented?: boolean;
+      titanUntil?: number;
+      opponentTitanUntil?: number;
+      blackoutUntil?: number;
+      opponentBlackoutUntil?: number;
+      flashBonusRemaining?: number;
+      opponentFlashBonusRemaining?: number;
+      infernoPending?: boolean;
+      opponentInfernoPending?: boolean;
+    }) => {
+      console.log("[client] ultimateApplied received", payload);
+      syncUltimateFromPayload(payload);
+      triggerPowerUpActivated(payload.by, "shield");
+
+      const labelId = ++emoteIdRef.current;
+      const ultimateLabel = `${payload.type.replace(/_/g, " ").toUpperCase()}`;
+      setEmoteLabels((previous) => [
+        ...previous,
+        { id: labelId, who: payload.by, text: `ULTIMATE: ${ultimateLabel}` }
+      ]);
+      setTimeout(() => {
+        setEmoteLabels((previous) => previous.filter((entry) => entry.id !== labelId));
+      }, 1400);
+
+      if (payload.effect === "input_disabled" && payload.target === "you" && payload.durationMs) {
+        setFrozenUntil(Date.now() + payload.durationMs);
+        triggerFreezeHit("you");
+      }
+    };
+
+    const handleUltimateEnded = (payload: {
+      by: "you" | "opponent";
+      target: "you" | "opponent";
+      type: string;
+      effect: string;
+      ultimateType?: string;
+      ultimateName?: string;
+      ultimateCharge?: number;
+      ultimateReady?: boolean;
+      ultimateUsed?: boolean;
+      ultimateImplemented?: boolean;
+      opponentUltimateType?: string;
+      opponentUltimateName?: string;
+      opponentUltimateCharge?: number;
+      opponentUltimateReady?: boolean;
+      opponentUltimateUsed?: boolean;
+      opponentUltimateImplemented?: boolean;
+      titanUntil?: number;
+      opponentTitanUntil?: number;
+      blackoutUntil?: number;
+      opponentBlackoutUntil?: number;
+      flashBonusRemaining?: number;
+      opponentFlashBonusRemaining?: number;
+      infernoPending?: boolean;
+      opponentInfernoPending?: boolean;
+    }) => {
+      console.log("[client] ultimateEnded received", payload);
+      syncUltimateFromPayload(payload);
+
+      if (payload.effect === "blackout_ended" && payload.target === "you") {
+        setFrozenUntil(0);
+      }
     };
 
     const handlePowerUpUsed = (payload: {
@@ -707,6 +1010,7 @@ export function GameClient({
         opponentDoublePointsUntil:
           payload.opponentDoublePointsUntil ?? previous.opponentDoublePointsUntil
       }));
+      syncUltimateFromPayload(payload);
 
       if (payload.type === "freeze") {
         if (payload.target === "you" && payload.durationMs) {
@@ -756,6 +1060,7 @@ export function GameClient({
         opponentDoublePointsUntil:
           payload.opponentDoublePointsUntil ?? previous.opponentDoublePointsUntil
       }));
+      syncUltimateFromPayload(payload);
 
       // Animate: power-up glow + floating label on the activating player's panel
       triggerPowerUpActivated(payload.by, "shield");
@@ -788,6 +1093,7 @@ export function GameClient({
         opponentDoublePointsUntil:
           payload.opponentDoublePointsUntil ?? previous.opponentDoublePointsUntil
       }));
+      syncUltimateFromPayload(payload);
 
       if (payload.target === "you") {
         setShieldBlockedUntil(Date.now() + 1800);
@@ -844,6 +1150,7 @@ export function GameClient({
       setTimer({
         secondsLeft: 0
       });
+      setUltimate(initialUltimate);
       setFeedback((previous) => ({
         ...previous,
         youFast: false,
@@ -883,6 +1190,7 @@ export function GameClient({
       setCountdownValue(null);
       setFeedback(initialFeedback);
       setTimer(initialTimer);
+      setUltimate(initialUltimate);
       setFrozenUntil(0);
       setShieldBlockedUntil(0);
       setEmoteBarOpen(false);
@@ -912,6 +1220,8 @@ export function GameClient({
     nextSocket.on("liveLeaderboard", handleLiveLeaderboard);
     nextSocket.on("pointScored", handlePointScored);
     nextSocket.on("questionState", handleQuestionState);
+    nextSocket.on("ultimateApplied", handleUltimateApplied);
+    nextSocket.on("ultimateEnded", handleUltimateEnded);
     nextSocket.on("powerUpUsed", handlePowerUpUsed);
     nextSocket.on("shieldActivated", handleShieldActivated);
     nextSocket.on("shieldBlocked", handleShieldBlocked);
@@ -937,6 +1247,8 @@ export function GameClient({
       nextSocket.off("liveLeaderboard", handleLiveLeaderboard);
       nextSocket.off("pointScored", handlePointScored);
       nextSocket.off("questionState", handleQuestionState);
+      nextSocket.off("ultimateApplied", handleUltimateApplied);
+      nextSocket.off("ultimateEnded", handleUltimateEnded);
       nextSocket.off("powerUpUsed", handlePowerUpUsed);
       nextSocket.off("shieldActivated", handleShieldActivated);
       nextSocket.off("shieldBlocked", handleShieldBlocked);
@@ -976,6 +1288,7 @@ export function GameClient({
     setEliminated({ you: false, opponent: false });
     setRatings((previous) => previous);
     setTimer(initialTimer);
+    setUltimate(initialUltimate);
     setFeedback(initialFeedback);
     setCurrentQuestion("Waiting for the first question...");
     setAnswer("");
@@ -1047,6 +1360,18 @@ export function GameClient({
     socket.emit("usePowerUp", { type: feedback.youPowerUpAvailable });
   };
 
+  const handleActivateUltimate = () => {
+    if (!socket || status !== "playing") {
+      return;
+    }
+
+    if (!ultimate.ready || ultimate.used || !ultimate.implemented || youEliminated) {
+      return;
+    }
+
+    socket.emit("activateUltimate");
+  };
+
   const handleSendEmote = (emoteId: string) => {
     if (!socket || status !== "playing" || emoteCooldownUntil > Date.now()) {
       return;
@@ -1081,6 +1406,11 @@ export function GameClient({
   const opponentEliminated = eliminated.opponent;
   const isShieldBlocked = shieldBlockedUntil > Date.now();
   const emoteCoolingDown = emoteCooldownUntil > Date.now();
+  const isTitanActive = ultimate.titanUntil > Date.now();
+  const isOpponentTitanActive = ultimate.opponentTitanUntil > Date.now();
+  const isBlackoutActive = ultimate.blackoutUntil > Date.now();
+  const canUseUltimate =
+    isActiveGameplay && ultimate.ready && !ultimate.used && ultimate.implemented && !youEliminated;
   const hasDoublePoints = feedback.youDoublePointsUntil > Date.now();
   const opponentHasDoublePoints = feedback.opponentDoublePointsUntil > Date.now();
   const roomPlayerCount = roomLobby?.players.length ?? 0;
@@ -1283,6 +1613,32 @@ export function GameClient({
               pulseKey={animState.youPowerUpGlowKey}
               align="left"
             />
+            <div className="rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2">
+              <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-slate-400">
+                <span>{ultimate.name}</span>
+                <span>{Math.round(ultimate.charge)}%</span>
+              </div>
+              <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-800">
+                <motion.div
+                  className={`h-full ${ultimate.ready ? "bg-emerald-400" : "bg-sky-400"}`}
+                  animate={{ width: `${Math.max(0, Math.min(100, ultimate.charge))}%` }}
+                  transition={{ duration: 0.2 }}
+                />
+              </div>
+              <Button
+                className={`mt-2 w-full py-2 text-xs ${canUseUltimate ? "shadow-lg shadow-emerald-500/20" : ""}`}
+                onClick={handleActivateUltimate}
+                disabled={!canUseUltimate}
+              >
+                {ultimate.used
+                  ? "Ultimate Used"
+                  : !ultimate.implemented
+                  ? "Ultimate Soon"
+                  : ultimate.ready
+                  ? "Activate Ultimate"
+                  : "Charging..."}
+              </Button>
+            </div>
             <FloatingLabel items={youFloatingItems} />
           </div>
 
@@ -1317,6 +1673,28 @@ export function GameClient({
               pulseKey={animState.opponentPowerUpGlowKey}
               align="right"
             />
+            <div className="rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2">
+              <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-slate-400">
+                <span>{ultimate.opponentName}</span>
+                <span>{Math.round(ultimate.opponentCharge)}%</span>
+              </div>
+              <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-800">
+                <motion.div
+                  className={`h-full ${ultimate.opponentReady ? "bg-rose-400" : "bg-slate-500"}`}
+                  animate={{ width: `${Math.max(0, Math.min(100, ultimate.opponentCharge))}%` }}
+                  transition={{ duration: 0.2 }}
+                />
+              </div>
+              <p className="mt-2 text-center text-[10px] uppercase tracking-[0.18em] text-slate-400">
+                {ultimate.opponentUsed
+                  ? "Used"
+                  : !ultimate.opponentImplemented
+                  ? "Soon"
+                  : ultimate.opponentReady
+                  ? "Ready"
+                  : "Charging"}
+              </p>
+            </div>
             <FloatingLabel items={opponentFloatingItems} />
           </div>
         </div>
@@ -1466,6 +1844,21 @@ export function GameClient({
                     Slowed 🐢
                   </p>
                 ) : null}
+                {isBlackoutActive ? (
+                  <p className="mt-2 text-sm font-semibold uppercase tracking-[0.22em] text-violet-200">
+                    Blackout Active
+                  </p>
+                ) : null}
+                {isTitanActive ? (
+                  <p className="mt-2 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-200">
+                    Iron Will Active
+                  </p>
+                ) : null}
+                {isOpponentTitanActive ? (
+                  <p className="mt-2 text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">
+                    Opponent Iron Will
+                  </p>
+                ) : null}
                 {isShieldBlocked ? (
                   <p className="mt-4 text-2xl font-black uppercase tracking-[0.25em] text-emerald-200">
                     BLOCKED 🛡️
@@ -1531,18 +1924,20 @@ export function GameClient({
                     placeholder={
                       isFrozen
                         ? "Frozen..."
+                        : isBlackoutActive
+                        ? "Blackout..."
                         : isSlowed
                         ? "Slowed..."
                         : youEliminated
                         ? "Eliminated"
                         : "Type your answer and press Enter"
                     }
-                    disabled={isFrozen || isSlowed || youEliminated}
+                    disabled={isFrozen || isBlackoutActive || isSlowed || youEliminated}
                     className="w-full rounded-2xl border border-slate-700 bg-slate-900/80 px-4 py-4 text-slate-100 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/35 disabled:cursor-not-allowed disabled:opacity-60"
                   />
                 </label>
 
-                <Button className="w-full" type="submit" disabled={!answer.trim() || isFrozen || isSlowed || youEliminated}>
+                <Button className="w-full" type="submit" disabled={!answer.trim() || isFrozen || isBlackoutActive || isSlowed || youEliminated}>
                   Submit Answer
                 </Button>
               </form>
