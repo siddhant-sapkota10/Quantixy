@@ -129,6 +129,7 @@ type FeedbackState = {
   hintUntil: number;
   youAnsweredCurrent: boolean;
   opponentAnsweredCurrent: boolean;
+  questionWinner: "you" | "opponent" | null;
 };
 
 const initialScores: ScoreState = {
@@ -205,7 +206,8 @@ const initialFeedback: FeedbackState = {
   hintText: "",
   hintUntil: 0,
   youAnsweredCurrent: false,
-  opponentAnsweredCurrent: false
+  opponentAnsweredCurrent: false,
+  questionWinner: null
 };
 
 function formatRoomCode(code: string) {
@@ -743,6 +745,7 @@ export function GameClient({
         opponentFast: false,
         youAnsweredCurrent: false,
         opponentAnsweredCurrent: false,
+        questionWinner: null,
         hintText: "",
         hintUntil: 0
       }));
@@ -1026,6 +1029,7 @@ export function GameClient({
           (payload as { hintUntil?: number }).hintUntil ?? previous.hintUntil,
         youAnsweredCurrent: payload.youAnswered ?? previous.youAnsweredCurrent,
         opponentAnsweredCurrent: payload.opponentAnswered ?? previous.opponentAnsweredCurrent,
+        questionWinner: previous.questionWinner,
         youPulseKey:
           (payload.fastAnswer ?? false) || (payload.streak ?? 0) > previous.youStreak
             ? previous.youPulseKey + 1
@@ -1097,7 +1101,8 @@ export function GameClient({
       setFeedback((previous) => ({
         ...previous,
         youAnsweredCurrent: payload.youAnswered,
-        opponentAnsweredCurrent: payload.opponentAnswered
+        opponentAnsweredCurrent: payload.opponentAnswered,
+        questionWinner: payload.winner ?? previous.questionWinner
       }));
       setEliminated((previous) => ({
         you: payload.youEliminated ?? previous.you,
@@ -1465,7 +1470,8 @@ export function GameClient({
         hintText: "",
         hintUntil: 0,
         youAnsweredCurrent: false,
-        opponentAnsweredCurrent: false
+        opponentAnsweredCurrent: false,
+        questionWinner: null
       }));
       setFrozenUntil(0);
       setShieldBlockedUntil(0);
@@ -1813,6 +1819,8 @@ export function GameClient({
       ? { text: "Guardian Shield",  color: "text-teal-200",    large: false }
       : youEliminated
       ? { text: "Eliminated ✕",     color: "text-rose-300",    large: false }
+      : feedback.youAnsweredCurrent
+      ? { text: "Waiting...",        color: "text-slate-400",   large: false }
       : null
     : null;
 
@@ -1822,6 +1830,7 @@ export function GameClient({
       isOpponentRapidFireActive      && "Opp. Rapid Fire",
       isOpponentGuardianShieldActive && "Opp. Guardian Shield",
       !youEliminated && opponentEliminated && "Opponent Eliminated",
+      !feedback.youAnsweredCurrent && feedback.opponentAnsweredCurrent && "Opponent answered — still your turn",
     ].filter(Boolean) as string[];
     return parts.length > 0 ? parts.join("  |  ") : null;
   })();
@@ -2347,14 +2356,16 @@ export function GameClient({
                           ? "Jammed..."
                           : youEliminated
                           ? "Eliminated"
+                          : feedback.youAnsweredCurrent
+                          ? "Waiting for opponent..."
                           : "Type your answer and press Enter"
                       }
-                      disabled={isJamActive || youEliminated}
+                      disabled={isJamActive || youEliminated || feedback.youAnsweredCurrent}
                       className="h-14 w-full rounded-2xl border border-slate-700 bg-slate-900/80 px-4 text-slate-100 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/35 disabled:cursor-not-allowed disabled:opacity-60"
                     />
                   </label>
 
-                  <Button className="h-12 w-full" type="submit" disabled={!answer.trim() || isJamActive || youEliminated}>
+                  <Button className="h-12 w-full" type="submit" disabled={!answer.trim() || isJamActive || youEliminated || feedback.youAnsweredCurrent}>
                     Submit Answer
                   </Button>
                 </form>

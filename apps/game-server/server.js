@@ -425,7 +425,7 @@ function buildPlayerQuestionState(players) {
     players.map((player) => [
       player.socketId,
       {
-        index: 0,
+        // No per-player index — question progression is room-level (game.questionIndex).
         answered: false,
         questionSentAt: null,
         currentQuestion: null,
@@ -772,6 +772,10 @@ function emitQuestionState(roomId) {
     return;
   }
 
+  // Players always share the same question; winnersByIndex tracks who scored first.
+  const questionIndex = game.questionIndex;
+  const winnerSocketId = game.questionWinnersByIndex[questionIndex] ?? null;
+
   for (const player of game.players) {
     const opponent = getOpponent(game, player.socketId);
 
@@ -781,8 +785,6 @@ function emitQuestionState(roomId) {
 
     const youState = game.playerQuestionState[player.socketId];
     const opponentState = game.playerQuestionState[opponent.socketId];
-    const sameQuestion = youState?.index === opponentState?.index;
-    const winnerSocketId = sameQuestion ? game.questionWinnersByIndex[youState?.index ?? -1] : null;
     const winner =
       !winnerSocketId
         ? null
@@ -792,7 +794,7 @@ function emitQuestionState(roomId) {
 
     io.to(player.socketId).emit("questionState", {
       youAnswered: !!youState?.answered,
-      opponentAnswered: sameQuestion ? !!opponentState?.answered : false,
+      opponentAnswered: !!opponentState?.answered,
       winner,
       youEliminated: !!game.eliminated[player.socketId],
       opponentEliminated: !!game.eliminated[opponent.socketId],
@@ -803,6 +805,7 @@ function emitQuestionState(roomId) {
 
 function resetGameState(game) {
   game.questionBank = [];
+  game.questionIndex = 0;
   game.questionWinnersByIndex = {};
   game.playerQuestionState = buildPlayerQuestionState(game.players);
   game.questionTimeouts = Object.fromEntries(game.players.map((player) => [player.socketId, null]));
@@ -864,7 +867,8 @@ function emitNewQuestionToPlayer(roomId, socketId) {
     return;
   }
 
-  const question = ensureQuestionAtIndex(game, questionState.index);
+  // All players share the same question index — per-player state tracks completion only.
+  const question = ensureQuestionAtIndex(game, game.questionIndex);
   if (!question) {
     return;
   }
@@ -878,7 +882,7 @@ function emitNewQuestionToPlayer(roomId, socketId) {
   clearPlayerQuestionTimer(game, socketId);
 
   const payload = { question: question.prompt, token: questionState.generation };
-  console.log(`[server] newQuestion emitted -> room=${roomId} player=${socketId} token=${questionState.generation}`, payload);
+  console.log(`[server] newQuestion emitted -> room=${roomId} player=${socketId} qi=${game.questionIndex} token=${questionState.generation}`);
   io.to(socketId).emit("newQuestion", payload);
   emitQuestionState(roomId);
 }
@@ -1118,9 +1122,11 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     return;
   }
 
+  // Mark this player done with the current question.
   questionState.answered = true;
   clearPlayerQuestionTimer(game, playerSocketId);
-  const questionIndex = questionState.index;
+
+  const questionIndex = game.questionIndex;
   const existingWinner = game.questionWinnersByIndex[questionIndex] ?? null;
   const isFirstCorrect = !existingWinner;
   const fastAnswer =
@@ -1130,8 +1136,8 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
   let awardedPoints = 0;
 
   if (isFirstCorrect) {
+    // First correct answer wins the point.
     game.questionWinnersByIndex[questionIndex] = playerSocketId;
-    handleMissedQuestion(roomId, playerSocketId);
     awardedPoints = pointsAwarded;
 
     if (game.infernoPending[playerSocketId]) {
@@ -1144,67 +1150,96 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     }
 
     game.scores[playerSocketId] = (game.scores[playerSocketId] ?? 0) + awardedPoints;
-    game.streaks[playerSocketId] = (game.streaks[playerSocketId] ?? 0) + 1;
-    const streakBonus = game.streaks[playerSocketId] >= 3 ? ULTIMATE_STREAK_BONUS_CHARGE : 0;
-    increaseUltimateCharge(game, playerSocketId, ULTIMATE_CORRECT_CHARGE + streakBonus);
   }
+
+  // Any correct answer (first or second) advances streak and ultimate charge.
+  game.streaks[playerSocketId] = (game.streaks[playerSocketId] ?? 0) + 1;
+  const streakBonus = game.streaks[playerSocketId] >= 3 ? ULTIMATE_STREAK_BONUS_CHARGE : 0;
+  increaseUltimateCharge(game, playerSocketId, ULTIMATE_CORRECT_CHARGE + streakBonus);
 
   const playerOneSocketId = game.players[0].socketId;
   const playerTwoSocketId = game.players[1].socketId;
   const scorerSocketId = playerSocketId;
 
-  if (isFirstCorrect) {
-    console.log(`[server] pointScored emitted -> room=${roomId}`, {
-      scorer: playerSocketId,
-      questionIndex,
-      scores: game.scores,
-      streaks: game.streaks,
-      fastAnswer
-    });
+  console.log(`[server] correct answer -> room=${roomId}`, {
+    player: playerSocketId,
+    isFirstCorrect,
+    awardedPoints,
+    questionIndex,
+    scores: game.scores,
+    fastAnswer
+  });
 
-    io.to(playerOneSocketId).emit("pointScored", {
-      scores: {
-        you: game.scores[playerOneSocketId],
-        opponent: game.scores[playerTwoSocketId]
-      },
-      streak: game.streaks[playerOneSocketId],
-      opponentStreak: game.streaks[playerTwoSocketId],
-      fastAnswer: scorerSocketId === playerOneSocketId ? fastAnswer : false,
-      opponentFastAnswer: scorerSocketId === playerTwoSocketId ? fastAnswer : false,
-      pointsAwarded: scorerSocketId === playerOneSocketId ? awardedPoints : 0,
-      strikes: game.strikes[playerOneSocketId] ?? 0,
-      opponentStrikes: game.strikes[playerTwoSocketId] ?? 0,
-      youEliminated: !!game.eliminated[playerOneSocketId],
-      opponentEliminated: !!game.eliminated[playerTwoSocketId],
-      youAnswered: false,
-      opponentAnswered: false,
-      ...buildPlayerPowerState(game, playerOneSocketId)
-    });
+  // Always emit pointScored so both clients get the score/streak update and
+  // play the correct-answer sound. awardedPoints is 0 for the second player.
+  io.to(playerOneSocketId).emit("pointScored", {
+    scores: {
+      you: game.scores[playerOneSocketId],
+      opponent: game.scores[playerTwoSocketId]
+    },
+    streak: game.streaks[playerOneSocketId],
+    opponentStreak: game.streaks[playerTwoSocketId],
+    fastAnswer: scorerSocketId === playerOneSocketId ? fastAnswer : false,
+    opponentFastAnswer: scorerSocketId === playerTwoSocketId ? fastAnswer : false,
+    pointsAwarded: scorerSocketId === playerOneSocketId ? awardedPoints : 0,
+    strikes: game.strikes[playerOneSocketId] ?? 0,
+    opponentStrikes: game.strikes[playerTwoSocketId] ?? 0,
+    youEliminated: !!game.eliminated[playerOneSocketId],
+    opponentEliminated: !!game.eliminated[playerTwoSocketId],
+    ...buildPlayerPowerState(game, playerOneSocketId)
+  });
 
-    io.to(playerTwoSocketId).emit("pointScored", {
-      scores: {
-        you: game.scores[playerTwoSocketId],
-        opponent: game.scores[playerOneSocketId]
-      },
-      streak: game.streaks[playerTwoSocketId],
-      opponentStreak: game.streaks[playerOneSocketId],
-      fastAnswer: scorerSocketId === playerTwoSocketId ? fastAnswer : false,
-      opponentFastAnswer: scorerSocketId === playerOneSocketId ? fastAnswer : false,
-      pointsAwarded: scorerSocketId === playerTwoSocketId ? awardedPoints : 0,
-      strikes: game.strikes[playerTwoSocketId] ?? 0,
-      opponentStrikes: game.strikes[playerOneSocketId] ?? 0,
-      youEliminated: !!game.eliminated[playerTwoSocketId],
-      opponentEliminated: !!game.eliminated[playerOneSocketId],
-      youAnswered: false,
-      opponentAnswered: false,
-      ...buildPlayerPowerState(game, playerTwoSocketId)
-    });
-  }
+  io.to(playerTwoSocketId).emit("pointScored", {
+    scores: {
+      you: game.scores[playerTwoSocketId],
+      opponent: game.scores[playerOneSocketId]
+    },
+    streak: game.streaks[playerTwoSocketId],
+    opponentStreak: game.streaks[playerOneSocketId],
+    fastAnswer: scorerSocketId === playerTwoSocketId ? fastAnswer : false,
+    opponentFastAnswer: scorerSocketId === playerOneSocketId ? fastAnswer : false,
+    pointsAwarded: scorerSocketId === playerTwoSocketId ? awardedPoints : 0,
+    strikes: game.strikes[playerTwoSocketId] ?? 0,
+    opponentStrikes: game.strikes[playerOneSocketId] ?? 0,
+    youEliminated: !!game.eliminated[playerTwoSocketId],
+    opponentEliminated: !!game.eliminated[playerOneSocketId],
+    ...buildPlayerPowerState(game, playerTwoSocketId)
+  });
 
-  questionState.index += 1;
-  emitNewQuestionToPlayer(roomId, playerSocketId);
+  // Broadcast the new per-player completion state (youAnswered / opponentAnswered / winner).
   emitQuestionState(roomId);
   emitLiveLeaderboard(roomId);
+
+  // Once every non-eliminated player has answered, advance the shared question.
+  const allAnswered = game.players
+    .filter((p) => !game.eliminated[p.socketId])
+    .every((p) => !!game.playerQuestionState[p.socketId]?.answered);
+
+  if (allAnswered) {
+    advanceRoomQuestion(roomId);
+  }
+}
+
+/**
+ * Advance the shared room question index and push the new question to every
+ * active player simultaneously. Called only when all non-eliminated players
+ * have correctly answered the current question.
+ */
+function advanceRoomQuestion(roomId) {
+  const game = activeGames.get(roomId);
+
+  if (!game || game.phase !== "playing") {
+    return;
+  }
+
+  game.questionIndex += 1;
+  console.log(`[server] advanceRoomQuestion -> room=${roomId} qi=${game.questionIndex}`);
+
+  for (const player of game.players) {
+    if (!game.eliminated[player.socketId]) {
+      emitNewQuestionToPlayer(roomId, player.socketId);
+    }
+  }
 }
 
 function handleIncorrectAnswer(roomId, playerSocketId) {
@@ -1426,6 +1461,7 @@ function createActiveGame(players, topic, difficulty, customRoomCode = null) {
     customRoomCode,
     players,
     questionBank: [],
+    questionIndex: 0,
     questionWinnersByIndex: {},
     playerQuestionState: buildPlayerQuestionState(players),
     questionTimeouts: Object.fromEntries(players.map((player) => [player.socketId, null])),
