@@ -11,7 +11,7 @@ export default function PlayPage({ searchParams }: PlayPageProps) {
   const mode = searchParams.mode === "ai" ? "ai" : "pvp";
 
   return (
-    <PageShell className="flex items-center justify-center">
+    <PageShell className="flex items-start justify-center sm:items-center">
       <PlaySetup mode={mode} />
     </PageShell>
   );

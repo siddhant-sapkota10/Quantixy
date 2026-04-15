@@ -94,7 +94,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
     (mode === "pvp" && matchMode === "join-room" && normalizedRoomCode.length !== 6);
 
   return (
-    <section className="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-slate-950/70 p-5 shadow-glow backdrop-blur sm:p-8 md:p-12">
+    <section className="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-slate-950/70 p-4 shadow-glow backdrop-blur sm:p-7 md:p-10">
       <div className="space-y-3 text-center sm:space-y-4">
         <span
           className={`inline-flex rounded-full border px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] ${
@@ -115,14 +115,14 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
         </p>
       </div>
 
-      <div className="mt-6 space-y-4 sm:mt-10">
+      <div className="mt-6 space-y-4 sm:mt-8 sm:space-y-5">
         {mode === "pvp" ? (
           <div className="space-y-3">
-            <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-800 bg-slate-950/70 p-1">
+            <div className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-800 bg-slate-950/70 p-1 sm:grid-cols-3">
             <button
               type="button"
               onClick={() => setMatchMode("quick")}
-              className={`rounded-xl px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] transition sm:text-sm ${
+              className={`rounded-xl px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] transition sm:text-sm ${
                 matchMode === "quick"
                   ? "bg-sky-500/20 text-sky-200"
                   : "text-slate-300 hover:bg-slate-900/70"
@@ -133,7 +133,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
             <button
               type="button"
               onClick={() => setMatchMode("create-room")}
-              className={`rounded-xl px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] transition sm:text-sm ${
+              className={`rounded-xl px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] transition sm:text-sm ${
                 matchMode === "create-room"
                   ? "bg-sky-500/20 text-sky-200"
                   : "text-slate-300 hover:bg-slate-900/70"
@@ -144,7 +144,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
             <button
               type="button"
               onClick={() => setMatchMode("join-room")}
-              className={`rounded-xl px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] transition sm:text-sm ${
+              className={`rounded-xl px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] transition sm:text-sm ${
                 matchMode === "join-room"
                   ? "bg-sky-500/20 text-sky-200"
                   : "text-slate-300 hover:bg-slate-900/70"
@@ -211,17 +211,22 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
           </>
         )}
 
-        <Button
-          className="w-full py-3 text-base font-bold shadow-lg shadow-sky-500/20 sm:py-4 sm:text-lg"
-          onClick={handleStart}
-          disabled={actionDisabled}
-        >
-          {actionLabel}
-        </Button>
-
-        <Button variant="secondary" className="w-full py-3 sm:py-4" onClick={() => router.push("/")}>
-          Back
-        </Button>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+          <Button
+            className="w-full py-3 text-base font-bold shadow-lg shadow-sky-500/20 sm:py-4 sm:text-lg"
+            onClick={handleStart}
+            disabled={actionDisabled}
+          >
+            {actionLabel}
+          </Button>
+          <Button
+            variant="secondary"
+            className="w-full py-3 font-semibold sm:py-4"
+            onClick={() => router.push("/")}
+          >
+            Back
+          </Button>
+        </div>
       </div>
     </section>
   );

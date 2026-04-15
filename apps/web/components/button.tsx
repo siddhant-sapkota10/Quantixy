@@ -24,9 +24,11 @@ export function Button({
   disabled,
   ...props
 }: ButtonProps) {
+  const shouldFillWidth = className?.includes("w-full");
+
   return (
     <motion.span
-      className="inline-flex"
+      className={cn("inline-flex", shouldFillWidth && "w-full")}
       whileHover={disabled ? undefined : { scale: 1.02 }}
       whileTap={disabled ? undefined : { scale: 0.98 }}
       transition={{ duration: 0.18, ease: "easeOut" }}

@@ -16,7 +16,7 @@ export default function GamePage({ searchParams }: GamePageProps) {
   const isAi = searchParams.mode === "ai";
 
   return (
-    <PageShell className="flex items-center justify-center">
+    <PageShell className="flex items-start justify-center sm:items-center">
       {isAi ? (
         <AiGameClient
           initialTopic={searchParams.topic}

@@ -3,7 +3,7 @@ import { PageShell } from "@/components/page-shell";
 
 export default function HomePage() {
   return (
-    <PageShell className="flex items-center justify-center">
+    <PageShell className="flex items-start justify-center sm:items-center">
       <HomeHero />
     </PageShell>
   );

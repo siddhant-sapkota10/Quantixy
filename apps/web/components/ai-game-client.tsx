@@ -466,7 +466,7 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
         </div>
 
         {/* Player panels */}
-        <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2 rounded-3xl border border-slate-800 bg-slate-900/70 p-3 sm:gap-4 sm:p-4 md:p-6">
+        <div className="grid gap-3 rounded-3xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4 md:grid-cols-[1fr_auto_1fr] md:items-end md:gap-4 md:p-6">
           {/* You */}
           <div className="relative flex flex-col gap-2 sm:gap-3">
             <PlayerPanel

@@ -10,7 +10,7 @@ export function PageShell({ children, className }: PageShellProps) {
   return (
     <main
       className={cn(
-        "min-h-screen bg-hero-grid px-4 py-6 text-slate-100 sm:px-6 sm:py-10",
+        "min-h-screen bg-hero-grid px-3 py-4 text-slate-100 sm:px-6 sm:py-8 lg:px-8 lg:py-10",
         className
       )}
     >

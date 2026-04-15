@@ -1679,7 +1679,7 @@ export function GameClient({
 
         {/* Player panels */}
         <div
-          className={`grid grid-cols-[1fr_auto_1fr] gap-2 items-start rounded-3xl border border-slate-800 bg-slate-900/70 p-3 sm:gap-4 sm:p-4 md:p-6 ${
+          className={`grid gap-3 rounded-3xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4 md:grid-cols-[1fr_auto_1fr] md:items-start md:gap-4 md:p-6 ${
             isFrozen ? "ring-2 ring-sky-300/30 bg-sky-500/10" : ""
           }`}
         >
