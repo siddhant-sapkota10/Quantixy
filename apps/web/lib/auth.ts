@@ -367,6 +367,10 @@ export function getReadableAuthError(message: string) {
     return "Choose a stronger password.";
   }
 
+  if (normalized.includes("new password should be different from the old password")) {
+    return "Use a different password than your current one.";
+  }
+
   if (normalized.includes("invalid email")) {
     return "Enter a valid email address.";
   }
