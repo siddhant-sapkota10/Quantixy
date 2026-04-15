@@ -293,10 +293,15 @@ export const createGameSocket = (): GameSocket => {
   }
 
   return io(socketUrl, {
-    transports: ["polling", "websocket"],
+    // Prefer WebSocket over long-polling.  WebSocket upgrades are a single
+    // HTTP request with an Upgrade header; there is no back-and-forth polling
+    // cycle, so a momentary server hiccup is far less likely to surface as a
+    // CORS error.  Polling is kept as a fallback for restrictive networks.
+    transports: ["websocket", "polling"],
     autoConnect: true,
-    reconnectionAttempts: 5,
-    reconnectionDelay: 2000,
+    reconnectionAttempts: 10,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
     timeout: 20000
   });
 };

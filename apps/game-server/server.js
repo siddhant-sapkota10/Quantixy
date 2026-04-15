@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = (process.env.CORS_ORIGIN || "")
 const RESOLVED_ALLOWED_ORIGINS = ALLOWED_ORIGINS.length > 0 ? ALLOWED_ORIGINS : DEFAULT_ALLOWED_ORIGINS;
 const ALLOW_VERCEL_PREVIEWS = process.env.CORS_ALLOW_VERCEL_PREVIEWS === "true";
 
-console.log("MATHBATTLE BACKEND LIVE VERSION A2");
+console.log("MATHBATTLE BACKEND LIVE VERSION A3");
 console.log("[server] PORT =", PORT);
 console.log("[server] ALLOWED_ORIGINS =", RESOLVED_ALLOWED_ORIGINS);
 console.log("[server] CORS_ALLOW_VERCEL_PREVIEWS =", ALLOW_VERCEL_PREVIEWS);
@@ -178,6 +178,10 @@ async function handleHttpRequest(request, response) {
 }
 
 const httpServer = createServer((request, response) => {
+  // Socket.IO's engine handles all /socket.io/* paths internally.
+  // Returning here lets engine.io's listener (added when `new Server(httpServer)`
+  // is called below) take over without our handler prematurely closing the response.
+  if (request.url?.startsWith("/socket.io")) return;
   void handleHttpRequest(request, response);
 });
 
@@ -1456,6 +1460,7 @@ function createActiveGame(players, topic, difficulty, customRoomCode = null) {
     powerUpCooldownUntil: buildPowerUpCooldownMap(players),
     powerUpUsesCount: buildPowerUpUsesMap(players),
     emoteCooldownUntil: buildEmoteCooldownMap(players),
+    emoteTimestamps: Object.fromEntries(players.map((player) => [player.socketId, []])),
     rematchRequests: new Set(),
     countdownInterval: null,
     matchTimerInterval: null
@@ -2366,6 +2371,19 @@ io.on("connection", (socket) => {
       removeFromCustomRoom(socket, { notifyRemaining: true });
     }
   });
+});
+
+// Keep the process alive if a rogue event handler throws or rejects.
+// Without these, a single TypeError (e.g. missing game state field) crashes
+// the entire server and causes Render to restart it — producing a window where
+// all requests return 502 with no CORS headers, which browsers surface as a
+// CORS policy error even though the CORS config itself is correct.
+process.on("uncaughtException", (error) => {
+  console.error("[server] uncaughtException — server kept alive:", error);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("[server] unhandledRejection — server kept alive:", reason);
 });
 
 httpServer.listen(PORT, HOST, () => {
