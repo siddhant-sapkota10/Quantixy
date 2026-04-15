@@ -20,6 +20,9 @@ import { FloatingLabel } from "@/components/animations/FloatingLabel";
 import { CountdownDisplay } from "@/components/animations/CountdownDisplay";
 import { GameOverOverlay } from "@/components/animations/GameOverOverlay";
 import { SnowfallOverlay } from "@/components/animations/SnowfallOverlay";
+import { EmoteBar } from "@/components/EmoteBar";
+import { EmoteDisplay, type EmoteDisplayItem } from "@/components/EmoteDisplay";
+import { OpponentPresence, type OpponentActivity } from "@/components/OpponentPresence";
 
 type GameStatus =
   | "connecting"
@@ -252,8 +255,17 @@ export function GameClient({
   const [shieldBlockedUntil, setShieldBlockedUntil] = useState(0);
   const [emoteBarOpen, setEmoteBarOpen] = useState(false);
   const [emoteCooldownUntil, setEmoteCooldownUntil] = useState(0);
-  const [emoteLabels, setEmoteLabels] = useState<Array<{ id: number; who: "you" | "opponent"; text: string }>>([]);
+  const [emoteLabels, setEmoteLabels] = useState<EmoteDisplayItem[]>([]);
   const emoteIdRef = useRef(0);
+  const emoteTimestampsRef = useRef<number[]>([]);
+  const [opponentEmoteFlashKey, setOpponentEmoteFlashKey] = useState(0);
+
+  // Opponent presence / activity state
+  const [opponentActivity, setOpponentActivity] = useState<OpponentActivity>("idle");
+  /** Auto-reverts "typing" back to "thinking" if no new typing events arrive. */
+  const opponentTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Throttle: timestamp of last playerTyping emit to avoid spamming the server. */
+  const lastTypingEmitRef = useRef(0);
   const [rematchRequested, setRematchRequested] = useState(false);
   const [muted, setMuted] = useState(false);
   const [roomLobby, setRoomLobby] = useState<RoomLobbyState | null>(null);
@@ -556,6 +568,8 @@ export function GameClient({
       setRoomNotice(null);
       setRematchRequested(false);
       setGameResult(null);
+      // Presence: opponent is now in-match — start as idle until first question
+      setOpponentActivity("idle");
     };
 
     const handleCountdown = (payload: { value: string }) => {
@@ -593,6 +607,13 @@ export function GameClient({
       setRematchRequested(false);
       setGameResult(null);
       setStatus("playing");
+      // Reset opponent presence to "thinking" for the new question
+      setOpponentActivity("thinking");
+      if (opponentTypingTimerRef.current) {
+        clearTimeout(opponentTypingTimerRef.current);
+        opponentTypingTimerRef.current = null;
+      }
+      lastTypingEmitRef.current = 0;
     };
 
     const handleTimerUpdate = (payload: {
@@ -631,16 +652,17 @@ export function GameClient({
 
       setEmoteLabels((previous) => [
         ...previous,
-        {
-          id,
-          who,
-          text: `${emote.icon} ${emote.label}`
-        }
+        { id, who, icon: emote.icon, label: emote.label }
       ]);
+
+      // Flash the opponent panel when they emote
+      if (who === "opponent") {
+        setOpponentEmoteFlashKey((k) => k + 1);
+      }
 
       setTimeout(() => {
         setEmoteLabels((previous) => previous.filter((item) => item.id !== id));
-      }, 1500);
+      }, 2000);
     };
 
     const handleIncorrectAnswer = (payload: { strikes?: number; eliminated?: boolean }) => {
@@ -1112,6 +1134,23 @@ export function GameClient({
       pushEmoteLabel(payload.sender, payload.emoteId);
     };
 
+    /**
+     * Opponent sent a typing event — show "Typing…" presence and auto-revert
+     * to "thinking" after 4 s if no further events arrive.
+     */
+    const handleOpponentTyping = () => {
+      setOpponentActivity("typing");
+      if (opponentTypingTimerRef.current) {
+        clearTimeout(opponentTypingTimerRef.current);
+      }
+      opponentTypingTimerRef.current = setTimeout(() => {
+        setOpponentActivity((current) =>
+          current === "typing" ? "thinking" : current
+        );
+        opponentTypingTimerRef.current = null;
+      }, 4000);
+    };
+
     const handleGameOver = (payload: {
       result?: string;
       message?: string;
@@ -1171,6 +1210,11 @@ export function GameClient({
       setEmoteBarOpen(false);
       setEmoteCooldownUntil(0);
       setEmoteLabels([]);
+      setOpponentActivity("idle");
+      if (opponentTypingTimerRef.current) {
+        clearTimeout(opponentTypingTimerRef.current);
+        opponentTypingTimerRef.current = null;
+      }
       setGameResult({
         result,
         message:
@@ -1195,6 +1239,11 @@ export function GameClient({
       setShieldBlockedUntil(0);
       setEmoteBarOpen(false);
       setEmoteCooldownUntil(0);
+      setOpponentActivity("idle");
+      if (opponentTypingTimerRef.current) {
+        clearTimeout(opponentTypingTimerRef.current);
+        opponentTypingTimerRef.current = null;
+      }
       setEmoteLabels([]);
       setRematchRequested(false);
       setGameResult({
@@ -1226,6 +1275,7 @@ export function GameClient({
     nextSocket.on("shieldActivated", handleShieldActivated);
     nextSocket.on("shieldBlocked", handleShieldBlocked);
     nextSocket.on("emoteReceived", handleEmoteReceived);
+    nextSocket.on("opponentTyping", handleOpponentTyping);
     nextSocket.on("gameOver", handleGameOver);
     nextSocket.on("opponentLeft", handleOpponentLeft);
 
@@ -1253,6 +1303,7 @@ export function GameClient({
       nextSocket.off("shieldActivated", handleShieldActivated);
       nextSocket.off("shieldBlocked", handleShieldBlocked);
       nextSocket.off("emoteReceived", handleEmoteReceived);
+      nextSocket.off("opponentTyping", handleOpponentTyping);
       nextSocket.off("gameOver", handleGameOver);
       nextSocket.off("opponentLeft", handleOpponentLeft);
       nextSocket.disconnect();
@@ -1267,9 +1318,29 @@ export function GameClient({
       return;
     }
 
+    // Reset typing throttle so next question triggers fresh emit
+    lastTypingEmitRef.current = 0;
+
     console.log(`[client] submitAnswer emitted -> ${trimmedAnswer}`);
     socket.emit("submitAnswer", trimmedAnswer);
     setAnswer("");
+  };
+
+  /**
+   * Throttled handler for answer input changes.
+   * Emits playerTyping at most once per 3 s while the input has content.
+   * Never emits when the input is cleared (opponent sees nothing = cleared).
+   */
+  const handleAnswerChange = (value: string) => {
+    setAnswer(value);
+
+    if (!socket || status !== "playing" || eliminated.you || !value) return;
+
+    const now = Date.now();
+    if (now - lastTypingEmitRef.current > 3000) {
+      socket.emit("playerTyping");
+      lastTypingEmitRef.current = now;
+    }
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -1298,6 +1369,12 @@ export function GameClient({
     setEmoteBarOpen(false);
     setEmoteCooldownUntil(0);
     setEmoteLabels([]);
+    setOpponentActivity("idle");
+    lastTypingEmitRef.current = 0;
+    if (opponentTypingTimerRef.current) {
+      clearTimeout(opponentTypingTimerRef.current);
+      opponentTypingTimerRef.current = null;
+    }
     setRematchRequested(true);
     setGameResult(null);
     console.log("[client] requestRematch emitted");
@@ -1372,22 +1449,37 @@ export function GameClient({
     socket.emit("activateUltimate");
   };
 
+  const EMOTE_COOLDOWN_MS = 1500;
+  const EMOTE_BURST_WINDOW_MS = 5000;
+  const EMOTE_BURST_LIMIT = 3;
+
   const handleSendEmote = (emoteId: string) => {
     if (!socket || status !== "playing" || emoteCooldownUntil > Date.now()) {
       return;
     }
 
+    // Client-side burst guard: max 3 emotes per 5 seconds
+    const now = Date.now();
+    emoteTimestampsRef.current = emoteTimestampsRef.current.filter(
+      (t) => now - t < EMOTE_BURST_WINDOW_MS
+    );
+    if (emoteTimestampsRef.current.length >= EMOTE_BURST_LIMIT) {
+      return;
+    }
+    emoteTimestampsRef.current.push(now);
+
+    // Optimistic UI — show immediately before server confirms
     const emote = getEmoteById(emoteId);
     const id = ++emoteIdRef.current;
     setEmoteLabels((previous) => [
       ...previous,
-      { id, who: "you", text: `${emote.icon} ${emote.label}` }
+      { id, who: "you", icon: emote.icon, label: emote.label }
     ]);
     setTimeout(() => {
       setEmoteLabels((previous) => previous.filter((item) => item.id !== id));
-    }, 1500);
+    }, 2000);
 
-    setEmoteCooldownUntil(Date.now() + 1500);
+    setEmoteCooldownUntil(now + EMOTE_COOLDOWN_MS);
     setEmoteBarOpen(false);
     socket.emit("sendEmote", { emoteId });
   };
@@ -1462,14 +1554,6 @@ export function GameClient({
         className: "px-4 py-2 text-base md:text-lg"
       };
       }),
-    ...emoteLabels
-      .filter((item) => item.who === "you")
-      .map((item) => ({
-        id: item.id,
-        text: item.text,
-        color: "#fef08a",
-        duration: 1.5
-      })),
   ];
   const opponentFloatingItems = [
     ...animState.shieldBlockedLabels
@@ -1497,15 +1581,11 @@ export function GameClient({
         className: "px-4 py-2 text-base md:text-lg"
       };
       }),
-    ...emoteLabels
-      .filter((item) => item.who === "opponent")
-      .map((item) => ({
-        id: item.id,
-        text: item.text,
-        color: "#fef08a",
-        duration: 1.5
-      })),
   ];
+
+  // Emotes are rendered by EmoteDisplay (separate from FloatingLabel)
+  const youEmoteItems = emoteLabels.filter((item) => item.who === "you");
+  const opponentEmoteItems = emoteLabels.filter((item) => item.who === "opponent");
 
   return (
     <section className="relative w-full max-w-4xl rounded-[2rem] border border-white/10 bg-slate-950/70 p-4 shadow-glow backdrop-blur sm:p-6 md:p-10">
@@ -1544,37 +1624,16 @@ export function GameClient({
 
           <p className="text-sm text-slate-300 sm:text-base md:text-lg">{statusCopy[status]}</p>
           {isActiveGameplay ? (
-            <div className="mt-2 flex flex-wrap items-center gap-2 sm:mt-3 sm:gap-3">
-              <Button
-                className="rounded-full bg-slate-800 px-4 py-2.5 text-xs text-slate-100 hover:bg-slate-700"
-                onClick={() => setEmoteBarOpen((open) => !open)}
-                disabled={emoteCoolingDown}
-              >
-                {emoteCoolingDown ? "Emote Cooldown" : "Emotes"}
-              </Button>
-              <AnimatePresence>
-                {emoteBarOpen ? (
-                  <motion.div
-                    initial={{ opacity: 0, y: -8, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                    transition={{ duration: 0.18 }}
-                    className="flex flex-wrap gap-2 rounded-2xl border border-slate-800 bg-slate-900/90 px-3 py-3"
-                  >
-                    {EMOTES.map((emote) => (
-                      <button
-                        key={emote.id}
-                        type="button"
-                        onClick={() => handleSendEmote(emote.id)}
-                        className="rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-sm text-slate-100 transition hover:border-sky-400/40 hover:bg-slate-900"
-                      >
-                        <span className="mr-2">{emote.icon}</span>
-                        <span>{emote.label}</span>
-                      </button>
-                    ))}
-                  </motion.div>
-                ) : null}
-              </AnimatePresence>
+            <div className="mt-2 sm:mt-3">
+              <EmoteBar
+                emotes={EMOTES}
+                open={emoteBarOpen}
+                onToggle={() => setEmoteBarOpen((o) => !o)}
+                onSend={handleSendEmote}
+                coolingDown={emoteCoolingDown}
+                cooldownUntil={emoteCooldownUntil}
+                disabled={!isActiveGameplay}
+              />
             </div>
           ) : null}
         </div>
@@ -1640,6 +1699,7 @@ export function GameClient({
               </Button>
             </div>
             <FloatingLabel items={youFloatingItems} />
+            <EmoteDisplay items={youEmoteItems} />
           </div>
 
           <div className="flex items-center justify-center self-center pb-0 text-xs font-semibold uppercase tracking-[0.35em] text-slate-500 sm:text-sm">
@@ -1666,6 +1726,12 @@ export function GameClient({
               scoreGlowKey={animState.opponentScoreGlowKey}
               shieldBlockFlashKey={animState.opponentShieldBlockFlashKey}
               powerUpGlowKey={animState.opponentPowerUpGlowKey}
+            />
+            <OpponentPresence
+              activity={opponentActivity}
+              opponentAnswered={feedback.opponentAnsweredCurrent}
+              youAnswered={feedback.youAnsweredCurrent}
+              isActive={isActiveGameplay}
             />
             <PowerUpSlot
               type={feedback.opponentPowerUpAvailable}
@@ -1696,6 +1762,21 @@ export function GameClient({
               </p>
             </div>
             <FloatingLabel items={opponentFloatingItems} />
+            <EmoteDisplay items={opponentEmoteItems} />
+            {/* Emote flash: brief rose glow when opponent taunts */}
+            {opponentEmoteFlashKey > 0 && (
+              <motion.div
+                key={`oef-${opponentEmoteFlashKey}`}
+                className="pointer-events-none absolute inset-0 z-10 rounded-3xl"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: [0, 0.3, 0] }}
+                transition={{ duration: 0.65, ease: "easeOut" }}
+                style={{
+                  background:
+                    "radial-gradient(ellipse at 50% 30%, rgba(251,113,133,0.55) 0%, transparent 72%)",
+                }}
+              />
+            )}
           </div>
         </div>
 
@@ -1884,11 +1965,7 @@ export function GameClient({
                     Opponent Has Double Points
                   </p>
                 ) : null}
-                {isActiveGameplay && !hasAnsweredCurrent && opponentAnsweredCurrent ? (
-                  <p className="mt-2 text-sm font-semibold uppercase tracking-[0.2em] text-amber-200">
-                    Opponent answered - your turn
-                  </p>
-                ) : null}
+                {/* Opponent "answered" pressure cue is now in OpponentPresence below their panel */}
                 {isActiveGameplay && youEliminated ? (
                   <p className="mt-2 text-sm font-semibold uppercase tracking-[0.2em] text-rose-300">
                     Eliminated (3 strikes)
@@ -1920,7 +1997,7 @@ export function GameClient({
                   <input
                     type="text"
                     value={answer}
-                    onChange={(event) => setAnswer(event.target.value)}
+                    onChange={(event) => handleAnswerChange(event.target.value)}
                     placeholder={
                       isFrozen
                         ? "Frozen..."

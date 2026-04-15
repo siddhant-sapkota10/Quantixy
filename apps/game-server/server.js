@@ -49,6 +49,8 @@ const DOUBLE_POINTS_DURATION_MS = 6000;
 const POWER_UP_COOLDOWN_MS = 3500;
 const MAX_POWER_UP_USES_PER_MATCH = 3;
 const EMOTE_COOLDOWN_MS = 1500;
+const EMOTE_BURST_WINDOW_MS = 5000;
+const EMOTE_BURST_LIMIT = 3;
 const COUNTDOWN_STEPS = ["3", "2", "1", "GO"];
 const COUNTDOWN_INTERVAL_MS = 1000;
 const FAST_ANSWER_MS = 2000;
@@ -452,6 +454,7 @@ function clearMatchEffects(game) {
   game.powerUpCooldownUntil = buildPowerUpCooldownMap(game.players);
   game.powerUpUsesCount = buildPowerUpUsesMap(game.players);
   game.emoteCooldownUntil = buildEmoteCooldownMap(game.players);
+  game.emoteTimestamps = Object.fromEntries(game.players.map((p) => [p.socketId, []]));
   clearUltimateEffects(game);
 }
 
@@ -2049,9 +2052,21 @@ function handleSendEmote(roomId, playerSocketId, emoteId) {
     return;
   }
 
-  if ((game.emoteCooldownUntil[playerSocketId] ?? 0) > Date.now()) {
+  const now = Date.now();
+
+  if ((game.emoteCooldownUntil[playerSocketId] ?? 0) > now) {
     return;
   }
+
+  // Burst guard: max EMOTE_BURST_LIMIT emotes per EMOTE_BURST_WINDOW_MS
+  const timestamps = (game.emoteTimestamps[playerSocketId] ?? []).filter(
+    (t) => now - t < EMOTE_BURST_WINDOW_MS
+  );
+  if (timestamps.length >= EMOTE_BURST_LIMIT) {
+    return;
+  }
+  timestamps.push(now);
+  game.emoteTimestamps[playerSocketId] = timestamps;
 
   const opponent = getOpponent(game, playerSocketId);
 
@@ -2059,7 +2074,7 @@ function handleSendEmote(roomId, playerSocketId, emoteId) {
     return;
   }
 
-  game.emoteCooldownUntil[playerSocketId] = Date.now() + EMOTE_COOLDOWN_MS;
+  game.emoteCooldownUntil[playerSocketId] = now + EMOTE_COOLDOWN_MS;
   console.log(`[server] emoteReceived emitted -> room=${roomId}`, {
     emoteId,
     from: playerSocketId,
@@ -2303,6 +2318,26 @@ io.on("connection", (socket) => {
     }
 
     handleSendEmote(roomId, socket.id, payload.emoteId);
+  });
+
+  /**
+   * playerTyping — client notifies server they are typing an answer.
+   * Server forwards as opponentTyping to the other player.
+   * No game state changes; purely informational for the presence UI.
+   * The client throttles this to at most once per 3 s, so the server
+   * has minimal fan-out cost.
+   */
+  socket.on("playerTyping", () => {
+    const roomId = socket.data.roomId;
+    if (!roomId) return;
+
+    const game = activeGames.get(roomId);
+    if (!game || game.phase !== "playing") return;
+
+    const opponent = getOpponent(game, socket.id);
+    if (!opponent) return;
+
+    io.to(opponent.socketId).emit("opponentTyping");
   });
 
   socket.on("disconnect", (reason) => {

@@ -221,6 +221,8 @@ export type ServerToClientEvents = {
   }) => void;
   opponentLeft: (payload: { message?: string }) => void;
   emoteReceived: (payload: { emoteId: string; sender: "opponent" | "you" }) => void;
+  /** Opponent started typing an answer — used to drive the presence indicator. */
+  opponentTyping: () => void;
 };
 
 export type ClientToServerEvents = {
@@ -234,6 +236,8 @@ export type ClientToServerEvents = {
   usePowerUp: (payload: { type: PowerUpId }) => void;
   activateUltimate: () => void;
   sendEmote: (payload: { emoteId: string }) => void;
+  /** Notify server that local player is actively typing — forwarded to opponent. */
+  playerTyping: () => void;
 };
 
 export type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
