@@ -864,7 +864,7 @@ export function GameClient({
   const submitAnswer = () => {
     const trimmedAnswer = answer.trim();
 
-    if (!socket || !trimmedAnswer || status !== "playing" || feedback.youAnsweredCurrent) {
+    if (!socket || !trimmedAnswer || status !== "playing") {
       return;
     }
 
@@ -986,7 +986,7 @@ export function GameClient({
   const isActiveGameplay = status === "playing";
   const isFrozen = frozenUntil > Date.now();
   const isSlowed = feedback.youSlowedUntil > Date.now();
-  const hasAnsweredCurrent = feedback.youAnsweredCurrent;
+  const hasAnsweredCurrent = false;
   const opponentAnsweredCurrent = feedback.opponentAnsweredCurrent;
   const isShieldBlocked = shieldBlockedUntil > Date.now();
   const emoteCoolingDown = emoteCooldownUntil > Date.now();

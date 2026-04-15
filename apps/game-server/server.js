@@ -249,10 +249,13 @@ function calculateEloChange(playerRating, opponentRating, actualScore) {
   return Math.round(K_FACTOR * (actualScore - expectedScore));
 }
 
-function getNextQuestion(game) {
-  const question = generateQuestion(game.topic, game.difficulty, game.roomId);
-  game.questionIndex += 1;
-  return question;
+function ensureQuestionAtIndex(game, index) {
+  while (game.questionBank.length <= index) {
+    const question = generateQuestion(game.topic, game.difficulty, game.roomId);
+    game.questionBank.push(question);
+  }
+
+  return game.questionBank[index];
 }
 
 function clearCountdown(game) {
@@ -269,10 +272,16 @@ function clearMatchTimer(game) {
   }
 }
 
-function clearQuestionTimer(game) {
-  if (game.questionTimeout) {
-    clearTimeout(game.questionTimeout);
-    game.questionTimeout = null;
+function clearPlayerQuestionTimer(game, socketId) {
+  if (game.questionTimeouts[socketId]) {
+    clearTimeout(game.questionTimeouts[socketId]);
+    game.questionTimeouts[socketId] = null;
+  }
+}
+
+function clearAllQuestionTimers(game) {
+  for (const player of game.players) {
+    clearPlayerQuestionTimer(game, player.socketId);
   }
 }
 
@@ -308,8 +317,19 @@ function buildPowerUpUsesMap(players) {
   return Object.fromEntries(players.map((player) => [player.socketId, 0]));
 }
 
-function buildQuestionCompletionMap(players) {
-  return Object.fromEntries(players.map((player) => [player.socketId, false]));
+function buildPlayerQuestionState(players) {
+  return Object.fromEntries(
+    players.map((player) => [
+      player.socketId,
+      {
+        index: 0,
+        answered: false,
+        questionSentAt: null,
+        currentQuestion: null,
+        generation: 0
+      }
+    ])
+  );
 }
 
 function buildEmoteCooldownMap(players) {
@@ -436,45 +456,30 @@ function emitQuestionState(roomId) {
       continue;
     }
 
+    const youState = game.playerQuestionState[player.socketId];
+    const opponentState = game.playerQuestionState[opponent.socketId];
+    const sameQuestion = youState?.index === opponentState?.index;
+    const winnerSocketId = sameQuestion ? game.questionWinnersByIndex[youState?.index ?? -1] : null;
     const winner =
-      !game.questionWinnerSocketId
+      !winnerSocketId
         ? null
-        : game.questionWinnerSocketId === player.socketId
+        : winnerSocketId === player.socketId
           ? "you"
           : "opponent";
 
     io.to(player.socketId).emit("questionState", {
-      youAnswered: !!game.questionCompleted[player.socketId],
-      opponentAnswered: !!game.questionCompleted[opponent.socketId],
+      youAnswered: !!youState?.answered,
+      opponentAnswered: sameQuestion ? !!opponentState?.answered : false,
       winner
     });
   }
 }
 
-function maybeAdvanceQuestion(roomId) {
-  const game = activeGames.get(roomId);
-
-  if (!game || game.phase !== "playing") {
-    return;
-  }
-
-  const allCompleted = game.players.every((player) => game.questionCompleted[player.socketId]);
-
-  if (!allCompleted) {
-    return;
-  }
-
-  clearQuestionTimer(game);
-  emitNewQuestion(roomId);
-}
-
 function resetGameState(game) {
-  game.questionIndex = 0;
-  game.answeredCurrentQuestion = false;
-  game.currentQuestion = null;
-  game.questionCompleted = buildQuestionCompletionMap(game.players);
-  game.questionWinnerSocketId = null;
-  game.questionSentAt = null;
+  game.questionBank = [];
+  game.questionWinnersByIndex = {};
+  game.playerQuestionState = buildPlayerQuestionState(game.players);
+  game.questionTimeouts = Object.fromEntries(game.players.map((player) => [player.socketId, null]));
   game.startedAt = null;
   game.endsAt = null;
   game.phase = "countdown";
@@ -488,12 +493,12 @@ function resetGameState(game) {
   game.powerUpCooldownUntil = buildPowerUpCooldownMap(game.players);
   game.powerUpUsesCount = buildPowerUpUsesMap(game.players);
   game.emoteCooldownUntil = buildEmoteCooldownMap(game.players);
-  clearQuestionTimer(game);
+  clearAllQuestionTimers(game);
   clearMatchTimer(game);
   game.rematchRequests = new Set();
 }
 
-function emitNewQuestion(roomId) {
+function emitNewQuestionToPlayer(roomId, socketId) {
   const game = activeGames.get(roomId);
 
   if (!game) {
@@ -504,32 +509,46 @@ function emitNewQuestion(roomId) {
     return;
   }
 
-  const currentQuestion = getNextQuestion(game);
+  const questionState = game.playerQuestionState[socketId];
 
-  if (!currentQuestion) {
+  if (!questionState) {
     return;
   }
 
-  game.currentQuestion = currentQuestion;
-  game.questionSentAt = Date.now();
-  game.answeredCurrentQuestion = false;
-  game.questionCompleted = buildQuestionCompletionMap(game.players);
-  game.questionWinnerSocketId = null;
-  game.phase = "playing";
-  clearQuestionTimer(game);
-  game.questionTimeout = setTimeout(() => {
-    const activeGame = activeGames.get(roomId);
+  const question = ensureQuestionAtIndex(game, questionState.index);
+  if (!question) {
+    return;
+  }
 
-    if (!activeGame || activeGame.phase !== "playing") {
+  questionState.currentQuestion = question;
+  questionState.answered = false;
+  questionState.questionSentAt = Date.now();
+  questionState.generation += 1;
+  const generation = questionState.generation;
+  game.phase = "playing";
+  clearPlayerQuestionTimer(game, socketId);
+
+  game.questionTimeouts[socketId] = setTimeout(() => {
+    const activeGame = activeGames.get(roomId);
+    const liveState = activeGame?.playerQuestionState?.[socketId];
+
+    if (!activeGame || activeGame.phase !== "playing" || !liveState) {
       return;
     }
 
-    emitNewQuestion(roomId);
+    if (liveState.generation !== generation || liveState.answered) {
+      return;
+    }
+
+    liveState.answered = true;
+    activeGame.streaks[socketId] = 0;
+    liveState.index += 1;
+    emitNewQuestionToPlayer(roomId, socketId);
   }, QUESTION_DURATION_MS);
 
-  const payload = { question: currentQuestion.prompt };
-  console.log(`[server] newQuestion emitted -> room=${roomId}`, payload);
-  io.to(roomId).emit("newQuestion", payload);
+  const payload = { question: question.prompt };
+  console.log(`[server] newQuestion emitted -> room=${roomId} player=${socketId}`, payload);
+  io.to(socketId).emit("newQuestion", payload);
   emitQuestionState(roomId);
 }
 
@@ -571,10 +590,8 @@ function startCountdown(roomId) {
   }
 
   clearCountdown(game);
-  clearQuestionTimer(game);
+  clearAllQuestionTimers(game);
   game.phase = "countdown";
-  game.currentQuestion = null;
-  game.answeredCurrentQuestion = true;
 
   let stepIndex = 0;
 
@@ -584,7 +601,9 @@ function startCountdown(roomId) {
     if (!value) {
       clearCountdown(game);
       startMatchTimer(roomId);
-      emitNewQuestion(roomId);
+      for (const player of game.players) {
+        emitNewQuestionToPlayer(roomId, player.socketId);
+      }
       return;
     }
 
@@ -612,12 +631,9 @@ async function finishGame(roomId) {
   }
 
   clearCountdown(game);
-  clearQuestionTimer(game);
+  clearAllQuestionTimers(game);
   clearMatchEffects(game);
   game.phase = "finished";
-  game.currentQuestion = null;
-  game.answeredCurrentQuestion = true;
-  game.questionSentAt = null;
   game.rematchRequests = new Set();
   clearMatchTimer(game);
 
@@ -734,77 +750,84 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     return;
   }
 
-  if (game.questionCompleted[playerSocketId]) {
+  const questionState = game.playerQuestionState[playerSocketId];
+
+  if (!questionState || questionState.answered) {
     return;
   }
 
-  game.questionCompleted[playerSocketId] = true;
-  const isFirstCorrect = !game.questionWinnerSocketId;
+  questionState.answered = true;
+  clearPlayerQuestionTimer(game, playerSocketId);
+  const questionIndex = questionState.index;
+  const existingWinner = game.questionWinnersByIndex[questionIndex] ?? null;
+  const isFirstCorrect = !existingWinner;
 
-  if (!isFirstCorrect) {
-    emitQuestionState(roomId);
-    maybeAdvanceQuestion(roomId);
-    return;
-  }
+  if (isFirstCorrect) {
+    game.questionWinnersByIndex[questionIndex] = playerSocketId;
+    handleMissedQuestion(roomId, playerSocketId);
+    game.scores[playerSocketId] = (game.scores[playerSocketId] ?? 0) + pointsAwarded;
+    game.streaks[playerSocketId] = (game.streaks[playerSocketId] ?? 0) + 1;
 
-  game.questionWinnerSocketId = playerSocketId;
-  game.answeredCurrentQuestion = true;
-  game.scores[playerSocketId] = (game.scores[playerSocketId] ?? 0) + pointsAwarded;
-  game.streaks[playerSocketId] = (game.streaks[playerSocketId] ?? 0) + 1;
+    if (!game.powerUps[playerSocketId] && !game.shieldActive[playerSocketId]) {
+      const earnedPowerUp = pickEarnedPowerUp(game.streaks[playerSocketId]);
 
-  if (!game.powerUps[playerSocketId] && !game.shieldActive[playerSocketId]) {
-    const earnedPowerUp = pickEarnedPowerUp(game.streaks[playerSocketId]);
-
-    if (earnedPowerUp) {
-      game.powerUps[playerSocketId] = earnedPowerUp;
+      if (earnedPowerUp) {
+        game.powerUps[playerSocketId] = earnedPowerUp;
+      }
     }
   }
 
   const playerOneSocketId = game.players[0].socketId;
   const playerTwoSocketId = game.players[1].socketId;
   const fastAnswer =
-    typeof game.questionSentAt === "number" && Date.now() - game.questionSentAt <= FAST_ANSWER_MS;
+    isFirstCorrect &&
+    typeof questionState.questionSentAt === "number" &&
+    Date.now() - questionState.questionSentAt <= FAST_ANSWER_MS;
   const scorerSocketId = playerSocketId;
 
-  console.log(`[server] pointScored emitted -> room=${roomId}`, {
-    scorer: playerSocketId,
-    scores: game.scores,
-    streaks: game.streaks,
-    fastAnswer
-  });
+  if (isFirstCorrect) {
+    console.log(`[server] pointScored emitted -> room=${roomId}`, {
+      scorer: playerSocketId,
+      questionIndex,
+      scores: game.scores,
+      streaks: game.streaks,
+      fastAnswer
+    });
 
-  io.to(playerOneSocketId).emit("pointScored", {
-    scores: {
-      you: game.scores[playerOneSocketId],
-      opponent: game.scores[playerTwoSocketId]
-    },
-    streak: game.streaks[playerOneSocketId],
-    opponentStreak: game.streaks[playerTwoSocketId],
-    fastAnswer: scorerSocketId === playerOneSocketId ? fastAnswer : false,
-    opponentFastAnswer: scorerSocketId === playerTwoSocketId ? fastAnswer : false,
-    pointsAwarded: scorerSocketId === playerOneSocketId ? pointsAwarded : 0,
-    youAnswered: !!game.questionCompleted[playerOneSocketId],
-    opponentAnswered: !!game.questionCompleted[playerTwoSocketId],
-    ...buildPlayerPowerState(game, playerOneSocketId)
-  });
+    io.to(playerOneSocketId).emit("pointScored", {
+      scores: {
+        you: game.scores[playerOneSocketId],
+        opponent: game.scores[playerTwoSocketId]
+      },
+      streak: game.streaks[playerOneSocketId],
+      opponentStreak: game.streaks[playerTwoSocketId],
+      fastAnswer: scorerSocketId === playerOneSocketId ? fastAnswer : false,
+      opponentFastAnswer: scorerSocketId === playerTwoSocketId ? fastAnswer : false,
+      pointsAwarded: scorerSocketId === playerOneSocketId ? pointsAwarded : 0,
+      youAnswered: false,
+      opponentAnswered: false,
+      ...buildPlayerPowerState(game, playerOneSocketId)
+    });
 
-  io.to(playerTwoSocketId).emit("pointScored", {
-    scores: {
-      you: game.scores[playerTwoSocketId],
-      opponent: game.scores[playerOneSocketId]
-    },
-    streak: game.streaks[playerTwoSocketId],
-    opponentStreak: game.streaks[playerOneSocketId],
-    fastAnswer: scorerSocketId === playerTwoSocketId ? fastAnswer : false,
-    opponentFastAnswer: scorerSocketId === playerOneSocketId ? fastAnswer : false,
-    pointsAwarded: scorerSocketId === playerTwoSocketId ? pointsAwarded : 0,
-    youAnswered: !!game.questionCompleted[playerTwoSocketId],
-    opponentAnswered: !!game.questionCompleted[playerOneSocketId],
-    ...buildPlayerPowerState(game, playerTwoSocketId)
-  });
+    io.to(playerTwoSocketId).emit("pointScored", {
+      scores: {
+        you: game.scores[playerTwoSocketId],
+        opponent: game.scores[playerOneSocketId]
+      },
+      streak: game.streaks[playerTwoSocketId],
+      opponentStreak: game.streaks[playerOneSocketId],
+      fastAnswer: scorerSocketId === playerTwoSocketId ? fastAnswer : false,
+      opponentFastAnswer: scorerSocketId === playerOneSocketId ? fastAnswer : false,
+      pointsAwarded: scorerSocketId === playerTwoSocketId ? pointsAwarded : 0,
+      youAnswered: false,
+      opponentAnswered: false,
+      ...buildPlayerPowerState(game, playerTwoSocketId)
+    });
+  }
 
+  questionState.index += 1;
+  emitNewQuestionToPlayer(roomId, playerSocketId);
   emitQuestionState(roomId);
-  maybeAdvanceQuestion(roomId);
 }
 
 function handleIncorrectAnswer(roomId, playerSocketId) {
@@ -824,8 +847,16 @@ function handleMissedQuestion(roomId, scorerSocketId) {
     return;
   }
 
+  const scorerState = game.playerQuestionState[scorerSocketId];
+  const scorerIndex = scorerState?.index;
+
   for (const player of game.players) {
-    if (player.socketId !== scorerSocketId) {
+    const playerState = game.playerQuestionState[player.socketId];
+    if (
+      player.socketId !== scorerSocketId &&
+      typeof scorerIndex === "number" &&
+      playerState?.index === scorerIndex
+    ) {
       game.streaks[player.socketId] = 0;
     }
   }
@@ -892,7 +923,7 @@ function removeFromGame(socket) {
   }
 
   clearCountdown(game);
-  clearQuestionTimer(game);
+  clearAllQuestionTimers(game);
   clearMatchEffects(game);
 
   const remainingPlayer = game.players.find((player) => player.socketId !== socket.id);
@@ -964,13 +995,10 @@ function createActiveGame(players, topic, difficulty, customRoomCode = null) {
     difficulty,
     customRoomCode,
     players,
-    questionIndex: 0,
-    answeredCurrentQuestion: false,
-    currentQuestion: null,
-    questionCompleted: buildQuestionCompletionMap(players),
-    questionWinnerSocketId: null,
-    questionTimeout: null,
-    questionSentAt: null,
+    questionBank: [],
+    questionWinnersByIndex: {},
+    playerQuestionState: buildPlayerQuestionState(players),
+    questionTimeouts: Object.fromEntries(players.map((player) => [player.socketId, null])),
     startedAt: null,
     endsAt: null,
     phase: "waiting",
@@ -1590,13 +1618,14 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const currentQuestion = game.currentQuestion;
+    const questionState = game.playerQuestionState[socket.id];
+    const currentQuestion = questionState?.currentQuestion;
 
-    if (!currentQuestion) {
+    if (!questionState || !currentQuestion) {
       return;
     }
 
-    if (game.questionCompleted[socket.id]) {
+    if (questionState.answered) {
       return;
     }
 
@@ -1606,7 +1635,6 @@ io.on("connection", (socket) => {
       if (hadDoublePoints) {
         game.doublePointsUntil[socket.id] = 0;
       }
-      handleMissedQuestion(roomId, socket.id);
       handleCorrectAnswer(roomId, socket.id, hadDoublePoints ? 2 : 1);
       return;
     }
