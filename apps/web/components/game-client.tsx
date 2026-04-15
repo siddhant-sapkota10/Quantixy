@@ -1041,12 +1041,12 @@ export function GameClient({
             : previous.opponentPulseKey
       }));
 
-      if (localJustEarnedPowerUp) {
+      if (POWERUPS_ENABLED && localJustEarnedPowerUp) {
         triggerPowerUpReady("you", nextYouPowerUp);
         soundManager.play("powerReady");
       }
 
-      if (opponentJustEarnedPowerUp) {
+      if (POWERUPS_ENABLED && opponentJustEarnedPowerUp) {
         triggerPowerUpReady("opponent", nextOpponentPowerUp);
       }
 
