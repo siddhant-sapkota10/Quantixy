@@ -13,6 +13,10 @@ import { formatTopicLabel, getSafeDifficulty, getSafeTopic } from "@/lib/topics"
 import { getAvatar } from "@/lib/avatars";
 import { EMOTES, getEmoteById } from "@/lib/emotes";
 import { getPowerUpMeta, POWER_UPS, type PowerUpId } from "@/lib/powerups";
+
+// Feature flag — set to true to re-enable the powerup system in live matches.
+// While false, powerup UI is hidden and powerup socket events are no-ops.
+const POWERUPS_ENABLED = false;
 import { useGameAnimations } from "@/hooks/useGameAnimations";
 import { FrostBurst } from "@/components/animations/FrostBurst";
 import { FloatingLabel } from "@/components/animations/FloatingLabel";
@@ -292,6 +296,9 @@ export function GameClient({
   const seenEmoteMessageIdsRef = useRef<Set<string>>(new Set());
   const currentMatchRoomIdRef = useRef<string | null>(null);
   const [opponentEmoteFlashKey, setOpponentEmoteFlashKey] = useState(0);
+  /** Token (server-side generation counter) of the question currently on screen.
+   *  Sent back with every submitAnswer so the server can reject stale submissions. */
+  const currentQuestionTokenRef = useRef(0);
 
   // Opponent presence / activity state
   const [opponentActivity, setOpponentActivity] = useState<OpponentActivity>("idle");
@@ -721,9 +728,12 @@ export function GameClient({
       }
     };
 
-    const handleNewQuestion = (payload: { question?: string } | string) => {
+    const handleNewQuestion = (payload: { question?: string; token?: number } | string) => {
       console.log("[client] newQuestion received", payload);
       const question = typeof payload === "string" ? payload : payload.question;
+      const token = typeof payload === "object" && payload !== null ? (payload.token ?? 0) : 0;
+      // Store the question token so stale submits can be rejected server-side.
+      currentQuestionTokenRef.current = token;
       setCurrentQuestion(question || "Get ready...");
       setAnswer("");
       setCountdownValue(null);
@@ -1600,8 +1610,8 @@ export function GameClient({
     // Reset typing throttle so next question triggers fresh emit
     lastTypingEmitRef.current = 0;
 
-    console.log(`[client] submitAnswer emitted -> ${trimmedAnswer}`);
-    socket.emit("submitAnswer", trimmedAnswer);
+    console.log(`[client] submitAnswer emitted -> ${trimmedAnswer} token=${currentQuestionTokenRef.current}`);
+    socket.emit("submitAnswer", { answer: trimmedAnswer, token: currentQuestionTokenRef.current });
     setAnswer("");
   };
 
@@ -1688,16 +1698,11 @@ export function GameClient({
     setMuted(nextMuted);
   };
 
-  const handleUsePowerUp = (type: PowerUpId) => {
-    if (!socket || status !== "playing") {
-      return;
-    }
-
-    if (!feedback.youPowerUpsAvailable.includes(type)) {
-      return;
-    }
-
-    socket.emit("usePowerUp", { type });
+  const handleUsePowerUp = (_type: PowerUpId) => {
+    if (!POWERUPS_ENABLED) return; // Powerups disabled — ultimates are the only active ability
+    if (!socket || status !== "playing") return;
+    if (!feedback.youPowerUpsAvailable.includes(_type)) return;
+    socket.emit("usePowerUp", { type: _type });
   };
 
   const handleActivateUltimate = () => {
@@ -1762,13 +1767,8 @@ export function GameClient({
   const isOpponentLeft = status === "opponent-left";
   const isWaitingState = status === "connecting" || status === "waiting";
   const isActiveGameplay = status === "playing";
-  const isFrozen = frozenUntil > Date.now();
-  const isSlowed = feedback.youSlowedUntil > Date.now();
-  const hasAnsweredCurrent = false;
-  const opponentAnsweredCurrent = feedback.opponentAnsweredCurrent;
   const youEliminated = eliminated.you;
   const opponentEliminated = eliminated.opponent;
-  const isShieldBlocked = shieldBlockedUntil > Date.now();
   const emoteCoolingDown = emoteCooldownUntil > Date.now();
   const isJamActive = ultimate.blackoutUntil > Date.now();
   const isRapidFireActive = ultimate.overclockUntil > Date.now();
@@ -1776,11 +1776,8 @@ export function GameClient({
   const isGuardianShieldActive = ultimate.fortressUntil > Date.now() && ultimate.fortressBlocksRemaining > 0;
   const isOpponentGuardianShieldActive =
     ultimate.opponentFortressUntil > Date.now() && ultimate.opponentFortressBlocksRemaining > 0;
-  const isHintActive = feedback.hintUntil > Date.now() && Boolean(feedback.hintText);
   const canUseUltimate =
     isActiveGameplay && ultimate.ready && !ultimate.used && ultimate.implemented && !youEliminated;
-  const hasDoublePoints = feedback.youDoublePointsUntil > Date.now();
-  const opponentHasDoublePoints = feedback.opponentDoublePointsUntil > Date.now();
   const roomPlayerCount = roomLobby?.players.length ?? 0;
   const roomReady = roomPlayerCount === 2;
   const rematchCtaLabel = rematchRequested
@@ -1808,34 +1805,23 @@ export function GameClient({
    * The card height stays constant regardless of which effects are active.
    */
   const primaryStatus = isActiveGameplay
-    ? isFrozen
-      ? { text: "FROZEN ❄️",         color: "text-sky-200",     large: true  }
-      : isShieldBlocked
-      ? { text: "BLOCKED 🛡️",        color: "text-emerald-200", large: true  }
-      : isSlowed
-      ? { text: "Slowed 🐢",          color: "text-amber-200",   large: false }
-      : isJamActive
-      ? { text: "Jam Active",    color: "text-violet-200",  large: false }
+    ? isJamActive
+      ? { text: "Jam Active",       color: "text-violet-200",  large: false }
       : isRapidFireActive
-      ? { text: "Rapid Fire",   color: "text-cyan-200", large: false }
+      ? { text: "Rapid Fire",       color: "text-cyan-200",    large: false }
       : isGuardianShieldActive
-      ? { text: "Guardian Shield",   color: "text-teal-200", large: false }
+      ? { text: "Guardian Shield",  color: "text-teal-200",    large: false }
       : youEliminated
-      ? { text: "Eliminated ✕",       color: "text-rose-300",    large: false }
+      ? { text: "Eliminated ✕",     color: "text-rose-300",    large: false }
       : null
     : null;
 
   const secondaryStatus = (() => {
     if (!isActiveGameplay) return null;
     const parts = [
-      isOpponentRapidFireActive                             && "Opp. Rapid Fire",
-      isOpponentGuardianShieldActive                        && "Opp. Guardian Shield",
-      !isFrozen && feedback.youShieldActive && "Shield Active",
-      !isFrozen && feedback.opponentShieldActive            && "Opponent Shielded",
-      hasDoublePoints                                       && "2x Points Active",
-      opponentHasDoublePoints                               && "Opp. 2x Points",
-      !youEliminated && opponentEliminated                  && "Opponent Eliminated",
-      isHintActive                                          && "Hint Active",
+      isOpponentRapidFireActive      && "Opp. Rapid Fire",
+      isOpponentGuardianShieldActive && "Opp. Guardian Shield",
+      !youEliminated && opponentEliminated && "Opponent Eliminated",
     ].filter(Boolean) as string[];
     return parts.length > 0 ? parts.join("  |  ") : null;
   })();
@@ -2046,13 +2032,9 @@ export function GameClient({
         </div>
 
         {/* Player panels */}
-        <div
-          className={`grid gap-3 rounded-3xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4 md:grid-cols-[minmax(0,1fr)_3rem_minmax(0,1fr)] md:items-stretch md:gap-4 md:p-5 lg:p-6 ${
-            isFrozen ? "ring-2 ring-sky-300/30 bg-sky-500/10" : ""
-          }`}
-        >
+        <div className="grid gap-3 rounded-3xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4 md:grid-cols-[minmax(0,1fr)_3rem_minmax(0,1fr)] md:items-stretch md:gap-4 md:p-5 lg:p-6">
           {/* You */}
-          <div className="relative grid min-h-[34rem] grid-rows-[auto_2.5rem_minmax(11rem,auto)_minmax(8.5rem,auto)] gap-2 sm:min-h-[35rem] sm:gap-3">
+          <div className="relative grid min-h-[22rem] grid-rows-[auto_2.5rem_minmax(8.5rem,auto)] gap-2 sm:min-h-[23rem] sm:gap-3">
             <PlayerPanel
               label={yourName}
               score={scores.you}
@@ -2065,7 +2047,7 @@ export function GameClient({
               fastActive={isActiveGameplay && feedback.youFast}
               highlighted={
                 isActiveGameplay &&
-                (feedback.youFast || !!yourStreakLabel || feedback.youShieldActive)
+                (feedback.youFast || !!yourStreakLabel)
               }
               pulseKey={feedback.youPulseKey}
               scoreGlowKey={animState.youScoreGlowKey}
@@ -2074,14 +2056,6 @@ export function GameClient({
             />
             {/* Symmetry spacer - matches OpponentPresence min-height in opponent column */}
             <div className="min-h-[2.5rem]" aria-hidden="true" />
-            <div className="min-h-[11rem]">
-              {renderPowerUpGrid({
-                readyIds: feedback.youPowerUpsAvailable,
-                usedIds: feedback.youPowerUpsUsed,
-                tone: "you",
-                onUse: isActiveGameplay ? handleUsePowerUp : undefined
-              })}
-            </div>
             <div
               className={`min-h-[8.5rem] rounded-xl border bg-slate-950/70 px-3 py-2 ${
                 canUseUltimate ? "border-emerald-500/40" : "border-slate-800"
@@ -2128,7 +2102,7 @@ export function GameClient({
           </div>
 
           {/* Opponent */}
-          <div className="relative grid min-h-[34rem] grid-rows-[auto_2.5rem_minmax(11rem,auto)_minmax(8.5rem,auto)] gap-2 sm:min-h-[35rem] sm:gap-3">
+          <div className="relative grid min-h-[22rem] grid-rows-[auto_2.5rem_minmax(8.5rem,auto)] gap-2 sm:min-h-[23rem] sm:gap-3">
             <PlayerPanel
               label={opponentName}
               score={scores.opponent}
@@ -2141,7 +2115,7 @@ export function GameClient({
               fastActive={isActiveGameplay && feedback.opponentFast}
               highlighted={
                 isActiveGameplay &&
-                (feedback.opponentFast || !!opponentStreakLabel || feedback.opponentShieldActive)
+                (feedback.opponentFast || !!opponentStreakLabel)
               }
               pulseKey={feedback.opponentPulseKey}
               scoreGlowKey={animState.opponentScoreGlowKey}
@@ -2154,13 +2128,6 @@ export function GameClient({
               youAnswered={feedback.youAnsweredCurrent}
               isActive={isActiveGameplay}
             />
-            <div className="min-h-[11rem]">
-              {renderPowerUpGrid({
-                readyIds: feedback.opponentPowerUpsAvailable,
-                usedIds: feedback.opponentPowerUpsUsed,
-                tone: "opponent"
-              })}
-            </div>
             <div
               className={`min-h-[8.5rem] rounded-xl border bg-slate-950/70 px-3 py-2 ${
                 ultimate.opponentReady && !ultimate.opponentUsed ? "border-rose-500/40" : "border-slate-800"
@@ -2320,11 +2287,7 @@ export function GameClient({
           <>
             {/* Question card — shake wrapper + frost burst overlay */}
             <motion.div animate={animState.questionShakeControls}>
-              <div
-                className={`relative rounded-[1.75rem] border border-slate-800 bg-slate-900/80 p-4 text-center transition-all duration-300 sm:p-6 ${
-                  isFrozen ? "border-sky-300/40 bg-sky-500/10" : ""
-                }`}
-              >
+              <div className="relative rounded-[1.75rem] border border-slate-800 bg-slate-900/80 p-4 text-center transition-all duration-300 sm:p-6">
                 {isActiveGameplay ? (
                   <div className="absolute right-3 top-3 rounded-full border border-slate-700 bg-slate-950/80 px-2 py-1 text-sm font-black tracking-[0.15em] text-sky-200 sm:right-5 sm:top-5 sm:px-4 sm:py-2 sm:text-lg sm:tracking-[0.2em]">
                     {timerLabel}
@@ -2380,22 +2343,18 @@ export function GameClient({
                       value={answer}
                       onChange={(event) => handleAnswerChange(event.target.value)}
                       placeholder={
-                        isFrozen
-                          ? "Frozen..."
-                        : isJamActive
-                        ? "Jammed..."
-                          : isSlowed
-                          ? "Slowed..."
+                        isJamActive
+                          ? "Jammed..."
                           : youEliminated
                           ? "Eliminated"
                           : "Type your answer and press Enter"
                       }
-                      disabled={isFrozen || isJamActive || isSlowed || youEliminated}
+                      disabled={isJamActive || youEliminated}
                       className="h-14 w-full rounded-2xl border border-slate-700 bg-slate-900/80 px-4 text-slate-100 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/35 disabled:cursor-not-allowed disabled:opacity-60"
                     />
                   </label>
 
-                  <Button className="h-12 w-full" type="submit" disabled={!answer.trim() || isFrozen || isJamActive || isSlowed || youEliminated}>
+                  <Button className="h-12 w-full" type="submit" disabled={!answer.trim() || isJamActive || youEliminated}>
                     Submit Answer
                   </Button>
                 </form>

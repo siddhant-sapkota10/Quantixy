@@ -105,7 +105,7 @@ export type ServerToClientEvents = {
     }>;
   }) => void;
   roomError: (payload: { message: string }) => void;
-  newQuestion: (payload: { question?: string } | string) => void;
+  newQuestion: (payload: { question?: string; token?: number } | string) => void;
   incorrectAnswer: (payload: { strikes: number; eliminated: boolean }) => void;
   opponentStrike: (payload: { opponentStrikes: number; opponentEliminated: boolean }) => void;
   liveLeaderboard: (payload: {
@@ -276,7 +276,7 @@ export type ClientToServerEvents = {
   joinRoom: (payload: { roomCode: string; accessToken?: string }) => void;
   startRoomMatch: () => void;
   leaveRoom: () => void;
-  submitAnswer: (answer: string) => void;
+  submitAnswer: (payload: { answer: string; token: number }) => void;
   requestRematch: () => void;
   usePowerUp: (payload: { type: PowerUpId }) => void;
   activateUltimate: () => void;

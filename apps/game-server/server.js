@@ -873,8 +873,8 @@ function emitNewQuestionToPlayer(roomId, socketId) {
   game.phase = "playing";
   clearPlayerQuestionTimer(game, socketId);
 
-  const payload = { question: question.prompt };
-  console.log(`[server] newQuestion emitted -> room=${roomId} player=${socketId}`, payload);
+  const payload = { question: question.prompt, token: questionState.generation };
+  console.log(`[server] newQuestion emitted -> room=${roomId} player=${socketId} token=${questionState.generation}`, payload);
   io.to(socketId).emit("newQuestion", payload);
   emitQuestionState(roomId);
 }
@@ -1264,14 +1264,26 @@ function handleMissedQuestion(roomId, scorerSocketId) {
   const scorerIndex = scorerState?.index;
 
   for (const player of game.players) {
-    const playerState = game.playerQuestionState[player.socketId];
-    if (
-      player.socketId !== scorerSocketId &&
-      typeof scorerIndex === "number" &&
-      playerState?.index === scorerIndex
-    ) {
-      game.streaks[player.socketId] = 0;
+    if (player.socketId === scorerSocketId) {
+      continue;
     }
+
+    const playerState = game.playerQuestionState[player.socketId];
+
+    if (typeof scorerIndex !== "number" || playerState?.index !== scorerIndex) {
+      continue;
+    }
+
+    // Reset the opponent's streak for failing to answer first.
+    game.streaks[player.socketId] = 0;
+
+    // Immediately close this question for the opponent so they cannot submit
+    // a stale answer after the question has been claimed. We mark it answered,
+    // advance their index, and push the next question right now — all in the
+    // same synchronous tick so no late submit can slip through.
+    playerState.answered = true;
+    playerState.index += 1;
+    emitNewQuestionToPlayer(roomId, player.socketId);
   }
 }
 
@@ -2200,8 +2212,12 @@ io.on("connection", (socket) => {
     removeFromCustomRoom(socket, { notifyRemaining: true });
   });
 
-  socket.on("submitAnswer", (answer) => {
-    console.log(`[server] submitAnswer received -> id=${socket.id} answer=${answer}`);
+  socket.on("submitAnswer", (payload) => {
+    // Accept both the legacy bare-string format and the current { answer, token } object.
+    const answer = typeof payload === "string" ? payload : payload?.answer;
+    const clientToken = typeof payload === "object" && payload !== null ? payload.token : null;
+
+    console.log(`[server] submitAnswer received -> id=${socket.id} answer=${answer} token=${clientToken}`);
 
     const roomId = socket.data.roomId;
     const game = roomId ? activeGames.get(roomId) : null;
@@ -2234,6 +2250,14 @@ io.on("connection", (socket) => {
     }
 
     if (questionState.answered) {
+      return;
+    }
+
+    // Token check: if the client sent a token, it must match the server's current
+    // generation for this player. A mismatch means this is a stale submission for
+    // an already-resolved question — drop it silently with no strike penalty.
+    if (clientToken !== null && clientToken !== undefined && clientToken !== questionState.generation) {
+      console.log(`[server] stale submitAnswer rejected -> id=${socket.id} clientToken=${clientToken} serverGeneration=${questionState.generation}`);
       return;
     }
 
@@ -2284,56 +2308,11 @@ io.on("connection", (socket) => {
     startCountdown(roomId);
   });
 
-  socket.on("usePowerUp", (payload) => {
-    const roomId = socket.data.roomId;
-
-    if (!roomId) {
-      return;
-    }
-
-    const game = activeGames.get(roomId);
-
-    if (!game || game.phase !== "playing") {
-      return;
-    }
-
-    if ((game.powerUpCooldownUntil[socket.id] ?? 0) > Date.now()) {
-      return;
-    }
-
-    if ((game.powerUpUsesCount[socket.id] ?? 0) >= MAX_POWER_UP_USES_PER_MATCH) {
-      return;
-    }
-
-    const type = payload?.type;
-
-    if (!POWER_UP_BY_ID.has(type)) {
-      return;
-    }
-
-    if (type === "freeze") {
-      useFreezePowerUp(roomId, socket.id);
-      return;
-    }
-
-    if (type === "shield") {
-      useShieldPowerUp(roomId, socket.id);
-      return;
-    }
-
-    if (type === "double_points") {
-      useDoublePointsPowerUp(roomId, socket.id);
-      return;
-    }
-
-    if (type === "hint") {
-      useHintPowerUp(roomId, socket.id);
-      return;
-    }
-
-    if (type === "cleanse") {
-      useCleansePowerUp(roomId, socket.id);
-    }
+  socket.on("usePowerUp", (_payload) => {
+    // Powerups are disabled — ultimates are the only active ability system.
+    // Restore the body below (and set POWERUPS_ENABLED=true on the client)
+    // to re-enable the full powerup system in the future.
+    return;
   });
 
   socket.on("activateUltimate", () => {
