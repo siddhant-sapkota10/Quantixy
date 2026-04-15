@@ -49,11 +49,17 @@ http://localhost:3000
 
 `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
+`NEXT_PUBLIC_SITE_URL`
+
+`NEXT_PUBLIC_VERCEL_URL` (optional preview fallback)
+
 Examples:
 ```env
 NEXT_PUBLIC_SOCKET_URL=http://localhost:3001
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-public-anon-key
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
+NEXT_PUBLIC_VERCEL_URL=
 NEXT_PUBLIC_SOCKET_URL=https://your-backend.onrender.com
 ```
 
@@ -92,6 +98,7 @@ CORS_ORIGIN=https://your-app.vercel.app,http://localhost:3000
 NEXT_PUBLIC_SOCKET_URL=https://your-backend-domain.com
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-public-anon-key
+NEXT_PUBLIC_SITE_URL=https://your-production-domain.vercel.app
 ```
 5. Deploy.
 
@@ -119,3 +126,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 - Players, topic ratings, and match history persist in Supabase across restarts.
 - The frontend uses the public anon key, while the game server uses the service role key for trusted player and match writes.
 - Gameplay, countdowns, rematches, sounds, streaks, and ELO continue to run through the same Socket.IO server in production.
+- Password reset emails redirect to `/reset-password` using a computed base URL:
+  - `NEXT_PUBLIC_SITE_URL` first
+  - then `NEXT_PUBLIC_VERCEL_URL`
+  - then `http://localhost:3000/`

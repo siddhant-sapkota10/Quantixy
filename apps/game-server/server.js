@@ -672,12 +672,20 @@ function startCountdown(roomId) {
   }, COUNTDOWN_INTERVAL_MS);
 }
 
-async function finishGame(roomId) {
+async function finishGame(roomId, options = {}) {
   const game = activeGames.get(roomId);
 
   if (!game) {
     return;
   }
+
+  if (game.phase === "finished") {
+    return;
+  }
+
+  const forcedWinnerSocketId =
+    typeof options.forceWinnerSocketId === "string" ? options.forceWinnerSocketId : null;
+  const reason = typeof options.reason === "string" ? options.reason : null;
 
   clearCountdown(game);
   clearAllQuestionTimers(game);
@@ -695,12 +703,20 @@ async function finishGame(roomId) {
 
   const playerOneScore = game.scores[playerOne.socketId] ?? 0;
   const playerTwoScore = game.scores[playerTwo.socketId] ?? 0;
-  const isDraw = playerOneScore === playerTwoScore;
-  const winner = isDraw
-    ? null
-    : playerOneScore > playerTwoScore
+  const forcedWinner =
+    forcedWinnerSocketId === playerOne.socketId
       ? playerOne
-      : playerTwo;
+      : forcedWinnerSocketId === playerTwo.socketId
+        ? playerTwo
+        : null;
+  const isDraw = !forcedWinner && playerOneScore === playerTwoScore;
+  const winner = forcedWinner
+    ? forcedWinner
+    : isDraw
+      ? null
+      : playerOneScore > playerTwoScore
+        ? playerOne
+        : playerTwo;
   const loser = isDraw ? null : winner?.socketId === playerOne.socketId ? playerTwo : playerOne;
   const playerOneActualScore = isDraw ? 0.5 : winner?.socketId === playerOne.socketId ? 1 : 0;
   const playerTwoActualScore = isDraw ? 0.5 : winner?.socketId === playerTwo.socketId ? 1 : 0;
@@ -708,9 +724,11 @@ async function finishGame(roomId) {
   const playerTwoDelta = calculateEloChange(playerTwo.rating, playerOne.rating, playerTwoActualScore);
   const nextPlayerOneRating = playerOne.rating + playerOneDelta;
   const nextPlayerTwoRating = playerTwo.rating + playerTwoDelta;
-  const message = isDraw
-    ? `Draw ${playerOneScore}-${playerTwoScore}.`
-    : `${winner?.name ?? "Player"} defeats ${loser?.name ?? "Opponent"} ${Math.max(playerOneScore, playerTwoScore)}-${Math.min(playerOneScore, playerTwoScore)}.`;
+  const message = reason
+    ? reason
+    : isDraw
+      ? `Draw ${playerOneScore}-${playerTwoScore}.`
+      : `${winner?.name ?? "Player"} defeats ${loser?.name ?? "Opponent"} ${Math.max(playerOneScore, playerTwoScore)}-${Math.min(playerOneScore, playerTwoScore)}.`;
 
   try {
     await Promise.all([
@@ -929,6 +947,13 @@ function handleIncorrectAnswer(roomId, playerSocketId) {
 
   emitQuestionState(roomId);
   emitLiveLeaderboard(roomId);
+
+  if (isEliminated && opponent) {
+    void finishGame(roomId, {
+      forceWinnerSocketId: opponent.socketId,
+      reason: `${opponent.name} wins by elimination.`
+    });
+  }
 }
 
 function handleMissedQuestion(roomId, scorerSocketId) {

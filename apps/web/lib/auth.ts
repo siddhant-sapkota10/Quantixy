@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { getSupabaseClient } from "@/lib/supabase";
 import { DEFAULT_AVATAR_ID } from "@/lib/avatars";
+import { getURL } from "@/lib/site-url";
 
 const DISPLAY_NAME_MIN_LENGTH = 3;
 const DISPLAY_NAME_MAX_LENGTH = 16;
@@ -80,10 +81,16 @@ export function useSupabaseAuth() {
 
 export async function signInWithGoogle() {
   const supabase = getSupabaseClient();
+  const redirectTo = getURL();
+
+  if (process.env.NODE_ENV !== "production") {
+    console.debug("[auth] signInWithGoogle:redirectTo", redirectTo);
+  }
+
   return supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: window.location.origin
+      redirectTo
     }
   });
 }
@@ -220,7 +227,7 @@ export async function signUpWithPassword(email: string, password: string, displa
 export async function resendSignupVerification(email: string) {
   const supabase = getSupabaseClient();
   const trimmedEmail = email.trim();
-  const redirectTo = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
+  const redirectTo = getURL();
 
   const result = await supabase.auth.resend({
     type: "signup",
@@ -243,23 +250,16 @@ export async function resendSignupVerification(email: string) {
 }
 
 function getResetRedirectUrl() {
-  const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  const baseUrl = configuredSiteUrl || (typeof window !== "undefined" ? window.location.origin : "");
-
-  if (!baseUrl) {
-    return undefined;
-  }
-
-  try {
-    return new URL("/reset-password", baseUrl).toString();
-  } catch {
-    return undefined;
-  }
+  return getURL("/reset-password");
 }
 
 export async function requestPasswordReset(email: string) {
   const supabase = getSupabaseClient();
   const redirectTo = getResetRedirectUrl();
+
+  if (process.env.NODE_ENV !== "production") {
+    console.debug("[auth] requestPasswordReset:redirectTo", redirectTo);
+  }
 
   const result = await supabase.auth.resetPasswordForEmail(email.trim(), {
     redirectTo

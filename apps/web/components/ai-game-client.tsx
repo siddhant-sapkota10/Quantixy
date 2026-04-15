@@ -157,12 +157,12 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
     if (countdownLaunchTimeoutRef.current) { clearTimeout(countdownLaunchTimeoutRef.current); countdownLaunchTimeoutRef.current = null; }
   }, []);
 
-  const finishGame = useCallback(() => {
+  const finishGame = useCallback((forcedResult?: "win" | "loss" | "draw") => {
     clearTimers();
     isRunningRef.current = false;
 
     const s = scoresRef.current;
-    const result = s.you > s.opponent ? "win" : s.you < s.opponent ? "loss" : "draw";
+    const result = forcedResult ?? (s.you > s.opponent ? "win" : s.you < s.opponent ? "loss" : "draw");
     setGameResult({ result });
     setStatus("finished");
     statusRef.current = "finished";
@@ -319,6 +319,21 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
   // gameKey is the only dep we want — startCountdown is stable
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameKey]);
+
+  useEffect(() => {
+    if (status !== "playing") {
+      return;
+    }
+
+    if (eliminated.you) {
+      finishGame("loss");
+      return;
+    }
+
+    if (eliminated.opponent) {
+      finishGame("win");
+    }
+  }, [eliminated.opponent, eliminated.you, finishGame, status]);
 
   // ---------------------------------------------------------------------------
   // Player submits an answer
