@@ -43,7 +43,6 @@ console.log("[server] ALLOWED_ORIGINS =", RESOLVED_ALLOWED_ORIGINS);
 console.log("[server] CORS_ALLOW_VERCEL_PREVIEWS =", ALLOW_VERCEL_PREVIEWS);
 const MATCH_DURATION_MS = 60000;
 const TIMER_UPDATE_INTERVAL_MS = 1000;
-const QUESTION_DURATION_MS = 9000;
 const FREEZE_DURATION_MS = 1600;
 const SLOW_DURATION_MS = 1000;
 const DOUBLE_POINTS_DURATION_MS = 6000;
@@ -593,27 +592,8 @@ function emitNewQuestionToPlayer(roomId, socketId) {
   questionState.answered = false;
   questionState.questionSentAt = Date.now();
   questionState.generation += 1;
-  const generation = questionState.generation;
   game.phase = "playing";
   clearPlayerQuestionTimer(game, socketId);
-
-  game.questionTimeouts[socketId] = setTimeout(() => {
-    const activeGame = activeGames.get(roomId);
-    const liveState = activeGame?.playerQuestionState?.[socketId];
-
-    if (!activeGame || activeGame.phase !== "playing" || !liveState) {
-      return;
-    }
-
-    if (liveState.generation !== generation || liveState.answered) {
-      return;
-    }
-
-    liveState.answered = true;
-    activeGame.streaks[socketId] = 0;
-    liveState.index += 1;
-    emitNewQuestionToPlayer(roomId, socketId);
-  }, QUESTION_DURATION_MS);
 
   const payload = { question: question.prompt };
   console.log(`[server] newQuestion emitted -> room=${roomId} player=${socketId}`, payload);
