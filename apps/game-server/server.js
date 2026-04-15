@@ -22,6 +22,7 @@ const {
   saveMatch,
   updateRatingsAfterMatch
 } = require("./lib/persistence");
+const { calculateEloDelta, deriveMatchOutcome } = require("./lib/rating");
 
 const HOST = "0.0.0.0";
 const PORT = Number(process.env.PORT || 3001);
@@ -54,7 +55,6 @@ const EMOTE_BURST_LIMIT = 3;
 const COUNTDOWN_STEPS = ["3", "2", "1", "GO"];
 const COUNTDOWN_INTERVAL_MS = 1000;
 const FAST_ANSWER_MS = 2000;
-const K_FACTOR = 32;
 const ULTIMATE_MAX_CHARGE = 100;
 const ULTIMATE_TIME_CHARGE_PER_SECOND = 1.4;
 const ULTIMATE_CORRECT_CHARGE = 18;
@@ -130,11 +130,29 @@ async function handleHttpRequest(request, response) {
   if (request.method === "GET" && url.pathname === "/leaderboard") {
     try {
       const topic = url.searchParams.get("topic") ?? undefined;
-      const rows = await getLeaderboard(topic);
+      let authUserId = null;
+      const authHeader = request.headers.authorization ?? "";
+      const accessToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+
+      if (accessToken) {
+        try {
+          const authUser = await verifyAccessToken(accessToken);
+          authUserId = authUser.id;
+        } catch (authError) {
+          console.warn("[server] leaderboard auth token ignored", authError);
+        }
+      }
+
+      const leaderboardData = await getLeaderboard({
+        topic,
+        authUserId,
+        limit: topic ? 50 : 100
+      });
 
       sendJson(request, response, 200, {
         topic: topic ?? "all",
-        leaderboard: rows
+        leaderboard: leaderboardData.leaderboard,
+        myRank: leaderboardData.myRank
       });
     } catch (error) {
       console.error("[server] leaderboard fetch failed", error);
@@ -251,11 +269,6 @@ function generateRoomCode() {
   }
 
   return null;
-}
-
-function calculateEloChange(playerRating, opponentRating, actualScore) {
-  const expectedScore = 1 / (1 + 10 ** ((opponentRating - playerRating) / 400));
-  return Math.round(K_FACTOR * (actualScore - expectedScore));
 }
 
 function ensureQuestionAtIndex(game, index) {
@@ -982,8 +995,6 @@ async function finishGame(roomId, options = {}) {
     return;
   }
 
-  const forcedWinnerSocketId =
-    typeof options.forceWinnerSocketId === "string" ? options.forceWinnerSocketId : null;
   const reason = typeof options.reason === "string" ? options.reason : null;
 
   clearCountdown(game);
@@ -1002,31 +1013,26 @@ async function finishGame(roomId, options = {}) {
 
   const playerOneScore = game.scores[playerOne.socketId] ?? 0;
   const playerTwoScore = game.scores[playerTwo.socketId] ?? 0;
-  const forcedWinner =
-    forcedWinnerSocketId === playerOne.socketId
-      ? playerOne
-      : forcedWinnerSocketId === playerTwo.socketId
-        ? playerTwo
-        : null;
-  const isDraw = !forcedWinner && playerOneScore === playerTwoScore;
-  const winner = forcedWinner
-    ? forcedWinner
-    : isDraw
-      ? null
-      : playerOneScore > playerTwoScore
-        ? playerOne
-        : playerTwo;
+  const outcome = deriveMatchOutcome(playerOneScore, playerTwoScore);
+  const isDraw = outcome.result === "draw";
+  const winner = outcome.winnerSide === "player_one" ? playerOne : outcome.winnerSide === "player_two" ? playerTwo : null;
   const loser = isDraw ? null : winner?.socketId === playerOne.socketId ? playerTwo : playerOne;
-  const playerOneActualScore = isDraw ? 0.5 : winner?.socketId === playerOne.socketId ? 1 : 0;
-  const playerTwoActualScore = isDraw ? 0.5 : winner?.socketId === playerTwo.socketId ? 1 : 0;
-  const playerOneDelta = calculateEloChange(playerOne.rating, playerTwo.rating, playerOneActualScore);
-  const playerTwoDelta = calculateEloChange(playerTwo.rating, playerOne.rating, playerTwoActualScore);
+  const playerOneDelta = calculateEloDelta(
+    playerOne.rating,
+    playerTwo.rating,
+    outcome.playerOneActualScore
+  );
+  const playerTwoDelta = calculateEloDelta(
+    playerTwo.rating,
+    playerOne.rating,
+    outcome.playerTwoActualScore
+  );
   const nextPlayerOneRating = playerOne.rating + playerOneDelta;
   const nextPlayerTwoRating = playerTwo.rating + playerTwoDelta;
-  const message = reason
-    ? reason
-    : isDraw
-      ? `Draw ${playerOneScore}-${playerTwoScore}.`
+  const message = isDraw
+    ? `Draw ${playerOneScore}-${playerTwoScore}.`
+    : reason
+      ? reason
       : `${winner?.name ?? "Player"} defeats ${loser?.name ?? "Opponent"} ${Math.max(playerOneScore, playerTwoScore)}-${Math.min(playerOneScore, playerTwoScore)}.`;
 
   try {

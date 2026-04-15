@@ -681,7 +681,7 @@ export function HomeHero() {
           ) : null}
 
           {!user ? (
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <Button
                 variant="secondary"
                 className="w-full"
@@ -704,13 +704,20 @@ export function HomeHero() {
               >
                 Create Account
               </Button>
+              <Button
+                variant="secondary"
+                className="w-full sm:col-span-2"
+                onClick={() => router.push("/leaderboard")}
+              >
+                Leaderboard
+              </Button>
             </div>
           ) : isGuest ? (
             <div className="space-y-3">
               <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
                 You&apos;re playing as a temporary guest. Upgrade to an account to keep your identity across devices.
               </div>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <Button
                   className="w-full"
                   onClick={() => openAuthModal("signup")}
@@ -734,16 +741,30 @@ export function HomeHero() {
                 >
                   Create Account
                 </Button>
+                <Button
+                  variant="secondary"
+                  className="w-full sm:col-span-2"
+                  onClick={() => router.push("/leaderboard")}
+                >
+                  Leaderboard
+                </Button>
               </div>
             </div>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-3">
               <Button
                 variant="secondary"
                 className="w-full"
                 onClick={() => router.push("/profile")}
               >
                 Profile
+              </Button>
+              <Button
+                variant="secondary"
+                className="w-full"
+                onClick={() => router.push("/leaderboard")}
+              >
+                Leaderboard
               </Button>
               <Button
                 variant="secondary"

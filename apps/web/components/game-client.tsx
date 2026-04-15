@@ -26,6 +26,11 @@ import { SnowfallOverlay } from "@/components/animations/SnowfallOverlay";
 import { EmoteBar } from "@/components/EmoteBar";
 import { EmoteDisplay, type EmoteDisplayItem } from "@/components/EmoteDisplay";
 import { OpponentPresence, type OpponentActivity } from "@/components/OpponentPresence";
+import {
+  UltimateActivationOverlay,
+  type UltimateActivationCue
+} from "@/components/animations/UltimateActivationOverlay";
+import { ULTIMATE_VFX, normalizeUltimateType, type UltimateType } from "@/lib/ultimate-vfx";
 
 type GameStatus =
   | "connecting"
@@ -327,6 +332,13 @@ export function GameClient({
   const peakYouStreakRef = useRef(0);
   /** Peak answer-streak reached by opponent this match. */
   const peakOpponentStreakRef = useRef(0);
+  const [ultimateCue, setUltimateCue] = useState<UltimateActivationCue | null>(null);
+  const ultimateCueIdRef = useRef(0);
+  const ultimateCueTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [youUltimateFxKey, setYouUltimateFxKey] = useState(0);
+  const [opponentUltimateFxKey, setOpponentUltimateFxKey] = useState(0);
+  const [youUltimateFxType, setYouUltimateFxType] = useState<UltimateType | null>(null);
+  const [opponentUltimateFxType, setOpponentUltimateFxType] = useState<UltimateType | null>(null);
 
   // Animation hook
   const {
@@ -384,6 +396,15 @@ export function GameClient({
     setRoomErrorMessage(null);
     setRoomNotice(null);
     setGameResult(null);
+    setUltimateCue(null);
+    setYouUltimateFxKey(0);
+    setOpponentUltimateFxKey(0);
+    setYouUltimateFxType(null);
+    setOpponentUltimateFxType(null);
+    if (ultimateCueTimeoutRef.current) {
+      clearTimeout(ultimateCueTimeoutRef.current);
+      ultimateCueTimeoutRef.current = null;
+    }
     currentMatchRoomIdRef.current = null;
 
     // Mark connection failed after 20 s if the socket never fires "connect".
@@ -1158,19 +1179,35 @@ export function GameClient({
           (payload as { opponentDoublePointsUntil?: number }).opponentDoublePointsUntil ??
           previous.opponentDoublePointsUntil
       }));
-      triggerPowerUpActivated(payload.by, "shield");
+      const normalizedType = normalizeUltimateType(payload.type);
+      const cueId = ++ultimateCueIdRef.current;
+      setUltimateCue({
+        id: cueId,
+        by: payload.by,
+        target: payload.target,
+        type: normalizedType
+      });
+      if (ultimateCueTimeoutRef.current) {
+        clearTimeout(ultimateCueTimeoutRef.current);
+      }
+      const cueLifetimeMs = Math.max(
+        880,
+        Math.min(1300, (ULTIMATE_VFX[normalizedType].durationMs ?? 1000) * 0.34)
+      );
+      const cueVisibleMs = payload.by === "opponent" ? cueLifetimeMs + 120 : cueLifetimeMs;
+      ultimateCueTimeoutRef.current = setTimeout(() => {
+        setUltimateCue((previous) => (previous?.id === cueId ? null : previous));
+      }, cueVisibleMs);
 
-      const labelId = ++emoteIdRef.current;
-      const ultimateLabel = `${payload.type.replace(/_/g, " ").toUpperCase()}`;
-      setEmoteLabels((previous) => [
-        ...previous,
-        { id: labelId, who: payload.by, icon: "⚡", label: `ULTIMATE: ${ultimateLabel}` }
-      ]);
-      setTimeout(() => {
-        setEmoteLabels((previous) => previous.filter((entry) => entry.id !== labelId));
-      }, 1400);
+      if (payload.by === "you") {
+        setYouUltimateFxType(normalizedType);
+        setYouUltimateFxKey((value) => value + 1);
+      } else {
+        setOpponentUltimateFxType(normalizedType);
+        setOpponentUltimateFxKey((value) => value + 1);
+      }
 
-      if (payload.effect === "input_disabled" && payload.target === "you" && payload.durationMs) {
+      if ((payload.effect === "jam_active" || payload.effect === "input_disabled") && payload.target === "you" && payload.durationMs) {
         setFrozenUntil(Date.now() + payload.durationMs);
         triggerFreezeHit("you");
       }
@@ -1575,6 +1612,10 @@ export function GameClient({
 
     return () => {
       clearTimeout(connectionTimeout);
+      if (ultimateCueTimeoutRef.current) {
+        clearTimeout(ultimateCueTimeoutRef.current);
+        ultimateCueTimeoutRef.current = null;
+      }
       nextSocket.off("connect", handleConnect);
       nextSocket.off("connect_error", handleConnectError);
       nextSocket.off("authRequired", handleAuthRequired);
@@ -1799,6 +1840,7 @@ export function GameClient({
         ? `${rematchProgress.requestedPlayers}/${rematchProgress.requiredPlayers} players ready`
         : " ";
   const timerLabel = `00:${String(Math.max(0, timer.secondsLeft)).padStart(2, "0")}`;
+  const now = Date.now();
 
   /**
    * Consolidated in-match status display.
@@ -1965,32 +2007,70 @@ export function GameClient({
     </div>
   );
 
-  const localUltimateStateLabel =
-    ultimate.type === "rapid_fire"
-      ? `Bonus: ${isRapidFireActive ? "Active" : "Idle"}`
-      : ultimate.type === "jam"
-      ? `Jam: ${isJamActive ? "Active" : "Ready"}`
-      : ultimate.type === "shield"
-      ? `Blocks: ${ultimate.fortressBlocksRemaining}`
-      : ultimate.type === "double"
-      ? `Double: ${ultimate.infernoPending ? "Armed" : "Spent"}`
-      : " ";
+  const getUltimateStatus = (
+    type: string,
+    side: "you" | "opponent"
+  ): { label: string; sublabel: string; progress: number | null; accent: string } => {
+    const normalizedType = normalizeUltimateType(type);
+    const vfx = ULTIMATE_VFX[normalizedType];
 
-  const opponentUltimateStateLabel =
-    ultimate.opponentType === "rapid_fire"
-      ? `Bonus: ${isOpponentRapidFireActive ? "Active" : "Idle"}`
-      : ultimate.opponentType === "jam"
-      ? `Jam: ${ultimate.opponentBlackoutUntil > Date.now() ? "Active" : "Ready"}`
-      : ultimate.opponentType === "shield"
-      ? `Blocks: ${ultimate.opponentFortressBlocksRemaining}`
-      : ultimate.opponentType === "double"
-      ? `Double: ${ultimate.opponentInfernoPending ? "Armed" : "Spent"}`
-      : " ";
+    if (normalizedType === "rapid_fire") {
+      const until = side === "you" ? ultimate.overclockUntil : ultimate.opponentOverclockUntil;
+      const active = until > now;
+      const total = vfx.durationMs ?? 3000;
+      const progress = active ? Math.max(0, Math.min(1, (until - now) / total)) : 0;
+      return {
+        label: active ? "Rapid Fire Active" : "Rapid Fire",
+        sublabel: active ? "Speed bonus live" : "Stand by",
+        progress: active ? progress : null,
+        accent: "bg-amber-400"
+      };
+    }
+
+    if (normalizedType === "jam") {
+      const until = side === "you" ? ultimate.blackoutUntil : ultimate.opponentBlackoutUntil;
+      const active = until > now;
+      const total = vfx.durationMs ?? 2000;
+      const progress = active ? Math.max(0, Math.min(1, (until - now) / total)) : 0;
+      return {
+        label: active ? "Jam Active" : "Jam Ready",
+        sublabel: active ? "Input disruption online" : "Stand by",
+        progress: active ? progress : null,
+        accent: "bg-violet-400"
+      };
+    }
+
+    if (normalizedType === "shield") {
+      const until = side === "you" ? ultimate.fortressUntil : ultimate.opponentFortressUntil;
+      const blocks = side === "you" ? ultimate.fortressBlocksRemaining : ultimate.opponentFortressBlocksRemaining;
+      const active = until > now && blocks > 0;
+      const total = vfx.durationMs ?? 7000;
+      const progress = active ? Math.max(0, Math.min(1, (until - now) / total)) : 0;
+      return {
+        label: active ? "Shield Active" : "Shield",
+        sublabel: `Blocks ${blocks}`,
+        progress: active ? progress : null,
+        accent: "bg-cyan-400"
+      };
+    }
+
+    const armed = side === "you" ? ultimate.infernoPending : ultimate.opponentInfernoPending;
+    return {
+      label: armed ? "Double Armed" : "Double",
+      sublabel: armed ? "Next correct +2" : "Waiting",
+      progress: null,
+      accent: "bg-rose-400"
+    };
+  };
+
+  const localUltimateStatus = getUltimateStatus(ultimate.type, "you");
+  const opponentUltimateStatus = getUltimateStatus(ultimate.opponentType, "opponent");
 
   return (
     <section className="relative w-full max-w-5xl rounded-[2rem] border border-white/10 bg-slate-950/70 p-3 shadow-glow backdrop-blur sm:p-5 md:p-7 lg:p-8">
       {/* Game-over overlays (win glow / lose vignette) */}
       <GameOverOverlay result={isFinished ? (gameResult?.result ?? null) : null} />
+      <UltimateActivationOverlay cue={ultimateCue} />
 
       {/* Streak-broken popup */}
       <AnimatePresence>
@@ -2062,6 +2142,8 @@ export function GameClient({
               scoreGlowKey={animState.youScoreGlowKey}
               shieldBlockFlashKey={animState.youShieldBlockFlashKey}
               powerUpGlowKey={animState.youPowerUpGlowKey}
+              ultimateFxKey={youUltimateFxKey}
+              ultimateFxType={youUltimateFxType}
             />
             {/* Symmetry spacer - matches OpponentPresence min-height in opponent column */}
             <div className="min-h-[2.5rem]" aria-hidden="true" />
@@ -2084,7 +2166,20 @@ export function GameClient({
               <p className="mt-1 h-8 overflow-hidden text-[10px] text-slate-400">
                 {ultimate.description}
               </p>
-              <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-slate-400">{localUltimateStateLabel}</p>
+              <div className="mt-1 min-h-[1.9rem] rounded-md border border-slate-800 bg-slate-900/70 px-2 py-1">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-300">{localUltimateStatus.label}</p>
+                <p className="mt-0.5 text-[10px] text-slate-500">{localUltimateStatus.sublabel}</p>
+              </div>
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800">
+                <motion.div
+                  className={`h-full ${localUltimateStatus.accent}`}
+                  animate={{
+                    width: `${Math.round(((localUltimateStatus.progress ?? 0) * 100))}%`,
+                    opacity: localUltimateStatus.progress === null ? 0 : 1
+                  }}
+                  transition={{ duration: 0.2 }}
+                />
+              </div>
               <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-slate-300">
                 {ultimate.used ? "Used" : ultimate.ready ? "Ready" : "Charging"}
               </p>
@@ -2130,6 +2225,8 @@ export function GameClient({
               scoreGlowKey={animState.opponentScoreGlowKey}
               shieldBlockFlashKey={animState.opponentShieldBlockFlashKey}
               powerUpGlowKey={animState.opponentPowerUpGlowKey}
+              ultimateFxKey={opponentUltimateFxKey}
+              ultimateFxType={opponentUltimateFxType}
             />
             <OpponentPresence
               activity={opponentActivity}
@@ -2153,7 +2250,20 @@ export function GameClient({
                   transition={{ duration: 0.2 }}
                 />
               </div>
-              <p className="mt-1 text-center text-[10px] uppercase tracking-[0.18em] text-slate-400">{opponentUltimateStateLabel}</p>
+              <div className="mt-1 min-h-[1.9rem] rounded-md border border-slate-800 bg-slate-900/70 px-2 py-1 text-left">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-300">{opponentUltimateStatus.label}</p>
+                <p className="mt-0.5 text-[10px] text-slate-500">{opponentUltimateStatus.sublabel}</p>
+              </div>
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800">
+                <motion.div
+                  className={`h-full ${opponentUltimateStatus.accent}`}
+                  animate={{
+                    width: `${Math.round(((opponentUltimateStatus.progress ?? 0) * 100))}%`,
+                    opacity: opponentUltimateStatus.progress === null ? 0 : 1
+                  }}
+                  transition={{ duration: 0.2 }}
+                />
+              </div>
               <p className="mt-2 text-center text-[10px] uppercase tracking-[0.18em] text-slate-400">
                 {ultimate.opponentUsed
                   ? "Used"
@@ -2462,5 +2572,3 @@ export function GameClient({
     </section>
   );
 }
-
-

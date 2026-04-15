@@ -4,6 +4,12 @@ const AVATARS = require("../../../packages/shared/avatars.json");
 const DEFAULT_RATING = 1000;
 const VALID_AVATAR_IDS = new Set((AVATARS ?? []).map((avatar) => avatar.id));
 
+function deriveResultFromScores(yourScore, opponentScore) {
+  if (yourScore > opponentScore) return "win";
+  if (yourScore < opponentScore) return "loss";
+  return "draw";
+}
+
 function normalizeAvatarId(value) {
   if (typeof value === "string" && VALID_AVATAR_IDS.has(value)) {
     return value;
@@ -266,13 +272,38 @@ async function saveMatch({
   }
 }
 
-async function getLeaderboard(topic) {
-  let ratingsQuery = supabaseAdmin
-    .from("ratings")
-    .select("player_id, topic, rating")
-    .order("rating", { ascending: false })
-    .limit(topic ? 50 : 100);
+function buildRankedRows(rows) {
+  const sorted = [...rows].sort((left, right) => {
+    if (right.rating !== left.rating) {
+      return right.rating - left.rating;
+    }
+    const nameCompare = left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
+    if (nameCompare !== 0) {
+      return nameCompare;
+    }
+    return left.playerId.localeCompare(right.playerId);
+  });
 
+  let lastRating = null;
+  let lastRank = 0;
+  return sorted.map((entry, index) => {
+    if (lastRating !== entry.rating) {
+      lastRank = index + 1;
+      lastRating = entry.rating;
+    }
+    return {
+      ...entry,
+      rank: lastRank
+    };
+  });
+}
+
+async function getLeaderboard(options = {}) {
+  const topic = options.topic;
+  const authUserId = options.authUserId ?? null;
+  const limit = Number.isFinite(options.limit) ? Math.max(1, options.limit) : 100;
+
+  let ratingsQuery = supabaseAdmin.from("ratings").select("player_id, topic, rating");
   if (topic) {
     ratingsQuery = ratingsQuery.eq("topic", topic);
   }
@@ -284,10 +315,38 @@ async function getLeaderboard(topic) {
   }
 
   if (!ratings || ratings.length === 0) {
-    return [];
+    return {
+      leaderboard: [],
+      myRank: null
+    };
   }
 
-  const playerIds = [...new Set(ratings.map((entry) => entry.player_id))];
+  let uniqueRatings;
+  if (topic) {
+    const topicMap = new Map();
+    for (const entry of ratings) {
+      const previous = topicMap.get(entry.player_id);
+      if (!previous || entry.rating > previous.rating) {
+        topicMap.set(entry.player_id, entry);
+      }
+    }
+    uniqueRatings = [...topicMap.values()];
+  } else {
+    const globalMap = new Map();
+    for (const entry of ratings) {
+      const previous = globalMap.get(entry.player_id);
+      if (
+        !previous ||
+        entry.rating > previous.rating ||
+        (entry.rating === previous.rating && entry.topic.localeCompare(previous.topic) < 0)
+      ) {
+        globalMap.set(entry.player_id, entry);
+      }
+    }
+    uniqueRatings = [...globalMap.values()];
+  }
+
+  const playerIds = [...new Set(uniqueRatings.map((entry) => entry.player_id))];
   const { data: players, error: playersError } = await supabaseAdmin
     .from("players")
     .select("id, username, display_name, avatar_id")
@@ -304,13 +363,29 @@ async function getLeaderboard(topic) {
     ])
   );
 
-  return ratings.map((entry) => ({
+  const rankedRows = buildRankedRows(uniqueRatings.map((entry) => ({
     playerId: entry.player_id,
     name: playerMap.get(entry.player_id)?.username ?? "Unknown Player",
     avatarId: playerMap.get(entry.player_id)?.avatarId ?? "flash",
     rating: entry.rating,
     topic: entry.topic
-  }));
+  })));
+
+  let myRank = null;
+  if (authUserId) {
+    const currentPlayer = await findPlayerByAuthUserId(authUserId);
+    if (currentPlayer) {
+      const currentRow = rankedRows.find((row) => row.playerId === currentPlayer.id);
+      if (currentRow) {
+        myRank = currentRow;
+      }
+    }
+  }
+
+  return {
+    leaderboard: rankedRows.slice(0, limit),
+    myRank
+  };
 }
 
 async function getProfileSummary(authUserId) {
@@ -371,9 +446,15 @@ async function getProfileSummary(authUserId) {
     );
   }
 
-  const wins = matchRows.filter((match) => match.winner_player_id === player.id).length;
-  const draws = matchRows.filter((match) => match.winner_player_id === null).length;
-  const losses = matchRows.length - wins - draws;
+  const resultRows = matchRows.map((match) => {
+    const isPlayerOne = match.player1_id === player.id;
+    const yourScore = isPlayerOne ? match.player1_score : match.player2_score;
+    const opponentScore = isPlayerOne ? match.player2_score : match.player1_score;
+    return deriveResultFromScores(yourScore, opponentScore);
+  });
+  const wins = resultRows.filter((result) => result === "win").length;
+  const draws = resultRows.filter((result) => result === "draw").length;
+  const losses = resultRows.filter((result) => result === "loss").length;
   const winRate = matchRows.length > 0 ? Math.round((wins / matchRows.length) * 100) : 0;
   const sortedRatings = (ratings ?? []).sort((left, right) => right.rating - left.rating);
   const highestRatedTopic = sortedRatings[0]?.topic ?? null;
@@ -407,12 +488,10 @@ async function getProfileSummary(authUserId) {
           you: isPlayerOne ? match.player1_score : match.player2_score,
           opponent: isPlayerOne ? match.player2_score : match.player1_score
         },
-        result:
-          match.winner_player_id === null
-            ? "draw"
-            : match.winner_player_id === player.id
-              ? "win"
-              : "loss",
+        result: deriveResultFromScores(
+          isPlayerOne ? match.player1_score : match.player2_score,
+          isPlayerOne ? match.player2_score : match.player1_score
+        ),
         ratingChange,
         createdAt: match.created_at
       };

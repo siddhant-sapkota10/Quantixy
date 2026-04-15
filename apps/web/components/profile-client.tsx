@@ -65,6 +65,18 @@ type MatchQueryRow = {
   created_at: string;
 };
 
+type OpponentQueryRow = {
+  id: string;
+  username: string;
+  display_name: string | null;
+};
+
+function deriveResultFromScores(yourScore: number, opponentScore: number): "win" | "loss" | "draw" {
+  if (yourScore > opponentScore) return "win";
+  if (yourScore < opponentScore) return "loss";
+  return "draw";
+}
+
 async function loadProfileFromSupabase(authUserId: string): Promise<ProfileResponse> {
   const supabase = getSupabaseClient();
 
@@ -116,9 +128,40 @@ async function loadProfileFromSupabase(authUserId: string): Promise<ProfileRespo
 
   const ratingRows = (ratings ?? []) as RatingQueryRow[];
   const matchRows = (matches ?? []) as MatchQueryRow[];
-  const wins = matchRows.filter((match) => match.winner_player_id === player.id).length;
-  const draws = matchRows.filter((match) => match.winner_player_id === null).length;
-  const losses = matchRows.length - wins - draws;
+  const opponentIds = [
+    ...new Set(
+      matchRows.map((match) => (match.player1_id === player.id ? match.player2_id : match.player1_id))
+    )
+  ];
+  let opponentNameMap = new Map<string, string>();
+
+  if (opponentIds.length > 0) {
+    const { data: opponents, error: opponentsError } = await supabase
+      .from("players")
+      .select("id, username, display_name")
+      .in("id", opponentIds);
+
+    if (opponentsError) {
+      console.error("[profile] opponents query failed", opponentsError);
+    } else {
+      opponentNameMap = new Map(
+        ((opponents ?? []) as OpponentQueryRow[]).map((opponent) => [
+          opponent.id,
+          opponent.display_name ?? opponent.username
+        ])
+      );
+    }
+  }
+
+  const results = matchRows.map((match) =>
+    deriveResultFromScores(
+      match.player1_id === player.id ? match.player1_score : match.player2_score,
+      match.player1_id === player.id ? match.player2_score : match.player1_score
+    )
+  );
+  const wins = results.filter((result) => result === "win").length;
+  const draws = results.filter((result) => result === "draw").length;
+  const losses = results.filter((result) => result === "loss").length;
   const sortedRatings = [...ratingRows].sort((left, right) => right.rating - left.rating);
 
   return {
@@ -137,21 +180,19 @@ async function loadProfileFromSupabase(authUserId: string): Promise<ProfileRespo
     ratings: sortedRatings,
     matches: matchRows.map((match) => {
       const isPlayerOne = match.player1_id === player.id;
+      const opponentId = isPlayerOne ? match.player2_id : match.player1_id;
+      const yourScore = isPlayerOne ? match.player1_score : match.player2_score;
+      const opponentScore = isPlayerOne ? match.player2_score : match.player1_score;
 
       return {
         id: match.id,
         topic: match.topic,
-        opponentName: "Opponent",
+        opponentName: opponentNameMap.get(opponentId) ?? "Opponent",
         score: {
-          you: isPlayerOne ? match.player1_score : match.player2_score,
-          opponent: isPlayerOne ? match.player2_score : match.player1_score
+          you: yourScore,
+          opponent: opponentScore
         },
-        result:
-          match.winner_player_id === null
-            ? "draw"
-            : match.winner_player_id === player.id
-              ? "win"
-              : "loss",
+        result: deriveResultFromScores(yourScore, opponentScore),
         ratingChange: isPlayerOne
           ? match.player1_rating_change ?? 0
           : match.player2_rating_change ?? 0,
@@ -527,6 +568,9 @@ export function ProfileClient() {
               <div>
                 <p className="text-sm uppercase tracking-[0.25em] text-slate-400">Ratings</p>
                 <h2 className="mt-2 text-2xl font-bold text-white">Current Ratings</h2>
+                <p className="mt-1 text-sm text-slate-400">
+                  Peak Rating: <span className="font-semibold text-white">{data?.summary.highestRating ?? 1000}</span>
+                </p>
               </div>
 
               <div className="text-right">
@@ -595,10 +639,14 @@ export function ProfileClient() {
                         </p>
                         <p
                           className={`mt-1 text-xs font-semibold ${
-                            match.ratingChange >= 0 ? "text-emerald-300" : "text-rose-300"
+                            match.ratingChange > 0
+                              ? "text-emerald-300"
+                              : match.ratingChange < 0
+                                ? "text-rose-300"
+                                : "text-slate-300"
                           }`}
                         >
-                          {match.ratingChange >= 0 ? "+" : ""}
+                          {match.ratingChange > 0 ? "+" : ""}
                           {match.ratingChange} rating
                         </p>
                       </div>
@@ -608,10 +656,14 @@ export function ProfileClient() {
                       </span>
                       <span
                         className={`font-semibold ${
-                          match.result === "win" ? "text-emerald-300" : "text-rose-300"
+                          match.result === "win"
+                            ? "text-emerald-300"
+                            : match.result === "loss"
+                              ? "text-rose-300"
+                              : "text-slate-300"
                         }`}
                       >
-                        {match.result === "win" ? "Win" : "Loss"}
+                        {match.result === "win" ? "Win" : match.result === "loss" ? "Loss" : "Draw"}
                       </span>
                       <span className="text-slate-400">
                         {new Date(match.createdAt).toLocaleString()}

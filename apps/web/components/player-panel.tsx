@@ -14,12 +14,11 @@ type PlayerPanelProps = {
   fastActive?: boolean;
   highlighted?: boolean;
   pulseKey: number;
-  /** Increments on every correct answer — brief sky-blue glow + scale pulse. */
   scoreGlowKey?: number;
-  /** Increments when this player's shield blocks a freeze — white flash. */
   shieldBlockFlashKey?: number;
-  /** Increments when this player activates a power-up — sky-blue glow ring. */
   powerUpGlowKey?: number;
+  ultimateFxKey?: number;
+  ultimateFxType?: "rapid_fire" | "jam" | "shield" | "double" | null;
 };
 
 export function PlayerPanel({
@@ -37,10 +36,19 @@ export function PlayerPanel({
   scoreGlowKey = 0,
   shieldBlockFlashKey = 0,
   powerUpGlowKey = 0,
+  ultimateFxKey = 0,
+  ultimateFxType = null
 }: PlayerPanelProps) {
+  const ultimateFxByType: Record<NonNullable<PlayerPanelProps["ultimateFxType"]>, { tint: string; ring: string }> = {
+    rapid_fire: { tint: "rgba(250,204,21,0.45)", ring: "rgba(250,204,21,0.82)" },
+    jam: { tint: "rgba(167,139,250,0.48)", ring: "rgba(167,139,250,0.82)" },
+    shield: { tint: "rgba(34,211,238,0.42)", ring: "rgba(34,211,238,0.8)" },
+    double: { tint: "rgba(251,113,133,0.48)", ring: "rgba(251,113,133,0.82)" }
+  };
+  const ultimateFx = ultimateFxType ? ultimateFxByType[ultimateFxType] : null;
+
   return (
     <div className="flex min-w-0 flex-col items-center gap-2">
-      {/* Streak / fast badges */}
       <div className="flex h-12 flex-col items-center justify-end text-center sm:h-14">
         <AnimatePresence mode="wait">
           {streakLabel ? (
@@ -52,7 +60,7 @@ export function PlayerPanel({
               transition={{ duration: 0.22 }}
               className="text-xs font-bold uppercase tracking-[0.25em] text-sky-300"
             >
-              {streakLabel} {streakLevel === "unstoppable" ? "⚡" : "🔥"}
+              {streakLabel} {streakLevel === "unstoppable" ? "?" : "??"}
             </motion.p>
           ) : null}
         </AnimatePresence>
@@ -67,15 +75,13 @@ export function PlayerPanel({
               transition={{ duration: 0.2 }}
               className="mt-1 text-[11px] font-bold uppercase tracking-[0.25em] text-amber-300"
             >
-              FAST ⚡
+              FAST ?
             </motion.p>
           ) : null}
         </AnimatePresence>
       </div>
 
-      {/* Card + overlay stack */}
       <div className="relative w-full">
-        {/* Existing streak/fast glow pulse — keyed by pulseKey */}
         <motion.div
           key={pulseKey}
           initial={{ scale: 1 }}
@@ -85,32 +91,24 @@ export function PlayerPanel({
               ? [
                   "0 0 0 rgba(56, 189, 248, 0)",
                   "0 0 24px rgba(56, 189, 248, 0.28)",
-                  "0 0 0 rgba(56, 189, 248, 0)",
+                  "0 0 0 rgba(56, 189, 248, 0)"
                 ]
-              : "0 0 0 rgba(56, 189, 248, 0)",
+              : "0 0 0 rgba(56, 189, 248, 0)"
           }}
           transition={{ duration: 0.45, ease: "easeOut" }}
           className="w-full min-h-[11.5rem] rounded-2xl border border-slate-800 bg-slate-950/80 p-3 text-center sm:min-h-[12.25rem] sm:p-4"
         >
-          {avatar ? (
-            <p className="text-2xl leading-none sm:text-3xl">{avatar}</p>
-          ) : null}
+          {avatar ? <p className="text-2xl leading-none sm:text-3xl">{avatar}</p> : null}
           <p className="mt-1 truncate px-1 text-xs uppercase tracking-[0.2em] text-slate-400">{label}</p>
           <div className="mt-1 flex h-4 items-center justify-center">
             {typeof rating === "number" ? (
-              <p className="truncate text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                Rating {rating}
-              </p>
+              <p className="truncate text-[11px] uppercase tracking-[0.16em] text-slate-500">Rating {rating}</p>
             ) : (
               <p className="text-[11px] uppercase tracking-[0.16em] text-transparent">Rating</p>
             )}
           </div>
           <div className="mt-0.5 flex h-4 items-center justify-center">
-            <p
-              className={`text-[11px] uppercase tracking-[0.16em] ${
-                eliminated ? "text-rose-300" : "text-slate-500"
-              }`}
-            >
+            <p className={`text-[11px] uppercase tracking-[0.16em] ${eliminated ? "text-rose-300" : "text-slate-500"}`}>
               Strikes {strikes}/3
             </p>
           </div>
@@ -119,7 +117,6 @@ export function PlayerPanel({
           </div>
         </motion.div>
 
-        {/* Score glow overlay — fires on every correct answer */}
         {scoreGlowKey > 0 && (
           <motion.div
             key={`sg-${scoreGlowKey}`}
@@ -129,12 +126,11 @@ export function PlayerPanel({
             transition={{ duration: 0.5, ease: "easeOut" }}
             style={{
               background:
-                "radial-gradient(ellipse at 50% 50%, rgba(56,189,248,0.38) 0%, transparent 68%)",
+                "radial-gradient(ellipse at 50% 50%, rgba(56,189,248,0.38) 0%, transparent 68%)"
             }}
           />
         )}
 
-        {/* Shield-block flash overlay — bright white burst */}
         {shieldBlockFlashKey > 0 && (
           <>
             <motion.div
@@ -155,7 +151,6 @@ export function PlayerPanel({
           </>
         )}
 
-        {/* Power-up activation glow overlay */}
         {powerUpGlowKey > 0 && (
           <motion.div
             key={`pg-${powerUpGlowKey}`}
@@ -165,10 +160,33 @@ export function PlayerPanel({
             transition={{ duration: 0.55, ease: "easeOut" }}
             style={{
               background:
-                "radial-gradient(ellipse at 50% 50%, rgba(56,189,248,0.5) 0%, transparent 62%)",
+                "radial-gradient(ellipse at 50% 50%, rgba(56,189,248,0.5) 0%, transparent 62%)"
             }}
           />
         )}
+
+        {ultimateFxKey > 0 && ultimateFx ? (
+          <>
+            <motion.div
+              key={`ug-${ultimateFxKey}`}
+              className="pointer-events-none absolute inset-0 rounded-2xl"
+              initial={{ opacity: 0, scale: 0.86 }}
+              animate={{ opacity: [0, 0.66, 0], scale: [0.86, 1.08, 1] }}
+              transition={{ duration: 0.62, ease: "easeOut" }}
+              style={{
+                background: `radial-gradient(ellipse at 50% 50%, ${ultimateFx.tint} 0%, transparent 64%)`
+              }}
+            />
+            <motion.div
+              key={`ur-${ultimateFxKey}`}
+              className="pointer-events-none absolute inset-[-6px] rounded-[1.35rem] border-2"
+              style={{ borderColor: ultimateFx.ring }}
+              initial={{ opacity: 0, scale: 0.92 }}
+              animate={{ opacity: [0, 0.95, 0], scale: [0.92, 1.05, 1.1] }}
+              transition={{ duration: 0.64, ease: "easeOut" }}
+            />
+          </>
+        ) : null}
       </div>
     </div>
   );
