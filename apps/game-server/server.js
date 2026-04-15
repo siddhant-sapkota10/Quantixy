@@ -25,15 +25,22 @@ const {
 const HOST = "0.0.0.0";
 const PORT = Number(process.env.PORT || 3001);
 
-const ALLOWED_ORIGINS = [
+const DEFAULT_ALLOWED_ORIGINS = [
   "https://math-battle-web.vercel.app",
   "http://localhost:3000",
-  "http://192.168.1.102:3000",
+  "http://192.168.1.102:3000"
 ];
+const ALLOWED_ORIGINS = (process.env.CORS_ORIGIN || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const RESOLVED_ALLOWED_ORIGINS = ALLOWED_ORIGINS.length > 0 ? ALLOWED_ORIGINS : DEFAULT_ALLOWED_ORIGINS;
+const ALLOW_VERCEL_PREVIEWS = process.env.CORS_ALLOW_VERCEL_PREVIEWS === "true";
 
 console.log("MATHBATTLE BACKEND LIVE VERSION A2");
 console.log("[server] PORT =", PORT);
-console.log("[server] ALLOWED_ORIGINS =", ALLOWED_ORIGINS);
+console.log("[server] ALLOWED_ORIGINS =", RESOLVED_ALLOWED_ORIGINS);
+console.log("[server] CORS_ALLOW_VERCEL_PREVIEWS =", ALLOW_VERCEL_PREVIEWS);
 const MATCH_DURATION_MS = 60000;
 const TIMER_UPDATE_INTERVAL_MS = 1000;
 const QUESTION_DURATION_MS = 9000;
@@ -62,20 +69,43 @@ let roomCounter = 1;
 
 function getAllowedOrigin(request) {
   const requestOrigin = request.headers.origin ?? "";
-  if (ALLOWED_ORIGINS.includes(requestOrigin)) {
+
+  if (!requestOrigin) {
+    return RESOLVED_ALLOWED_ORIGINS[0] ?? "*";
+  }
+
+  if (RESOLVED_ALLOWED_ORIGINS.includes(requestOrigin)) {
     return requestOrigin;
   }
-  return ALLOWED_ORIGINS[0];
+
+  if (ALLOW_VERCEL_PREVIEWS) {
+    try {
+      const parsed = new URL(requestOrigin);
+      if (parsed.protocol === "https:" && parsed.hostname.endsWith(".vercel.app")) {
+        return requestOrigin;
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
 }
 
 function sendJson(request, response, statusCode, payload) {
-  response.writeHead(statusCode, {
+  const allowedOrigin = getAllowedOrigin(request);
+  const headers = {
     "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": getAllowedOrigin(request),
     "Access-Control-Allow-Methods": "GET, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Vary": "Origin"
-  });
+  };
+
+  if (allowedOrigin) {
+    headers["Access-Control-Allow-Origin"] = allowedOrigin;
+  }
+
+  response.writeHead(statusCode, headers);
   response.end(JSON.stringify(payload));
 }
 
@@ -148,10 +178,35 @@ const httpServer = createServer((request, response) => {
 
 const io = new Server(httpServer, {
   cors: {
-    origin: ALLOWED_ORIGINS,
+    origin(origin, callback) {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      if (RESOLVED_ALLOWED_ORIGINS.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      if (ALLOW_VERCEL_PREVIEWS) {
+        try {
+          const parsed = new URL(origin);
+          if (parsed.protocol === "https:" && parsed.hostname.endsWith(".vercel.app")) {
+            callback(null, true);
+            return;
+          }
+        } catch {
+          callback(new Error("Invalid origin"), false);
+          return;
+        }
+      }
+
+      callback(new Error(`Origin not allowed: ${origin}`), false);
+    },
     methods: ["GET", "POST"],
-    credentials: false,
-  },
+    credentials: false
+  }
 });
 
 function sanitizeUsername(value) {

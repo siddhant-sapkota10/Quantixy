@@ -14,6 +14,7 @@ export type SoundName =
   | "shieldBlock";
 
 const STORAGE_KEY = "mathbattle-muted";
+const USE_SOUND_FILES = process.env.NEXT_PUBLIC_USE_SOUND_FILES === "true";
 
 const SOUND_FILES: Record<SoundName, string> = {
   correct: "/sounds/correct.mp3",
@@ -63,15 +64,16 @@ class SoundManager {
 
     this.initialized = true;
 
+    if (!USE_SOUND_FILES) {
+      return;
+    }
+
     for (const [name, path] of Object.entries(SOUND_FILES) as Array<[SoundName, string]>) {
       const audio = new Audio(path);
-      // "metadata" fetches only duration/headers — avoids the eager Range requests
-      // that cause 416 errors from the dev server.
-      audio.preload = "metadata";
+      audio.preload = "none";
       audio.addEventListener(
         "error",
         () => {
-          // File missing or load failed — remove from cache so playFallback is used.
           this.sounds.delete(name as SoundName);
         },
         { once: true }
@@ -144,6 +146,11 @@ class SoundManager {
     }
 
     this.init();
+
+    if (!USE_SOUND_FILES) {
+      this.playFallback(name);
+      return;
+    }
 
     const source = this.sounds.get(name);
 
