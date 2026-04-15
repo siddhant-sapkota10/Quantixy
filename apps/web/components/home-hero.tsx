@@ -505,6 +505,27 @@ export function HomeHero() {
   const suggestedGuestName = user ? getGuestUsername(user.id) : "";
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const searchParams = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const recoveryType = hashParams.get("type") ?? searchParams.get("type");
+
+    if (recoveryType !== "recovery") {
+      return;
+    }
+
+    if (window.location.pathname === "/reset-password") {
+      return;
+    }
+
+    const target = `/reset-password${window.location.search}${window.location.hash}`;
+    window.location.replace(target);
+  }, []);
+
+  useEffect(() => {
     let mounted = true;
 
     const loadIdentity = async () => {
