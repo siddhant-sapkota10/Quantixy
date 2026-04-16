@@ -2274,7 +2274,10 @@ function useAvatarUltimate(roomId, playerSocketId) {
 function handleSendEmote(roomId, playerSocketId, emoteId, clientMessageId) {
   const game = activeGames.get(roomId);
 
-  if (!game || game.phase !== "playing") {
+  // Allow emotes during countdown + live play (feels "in-game" to users).
+  // Previously we only allowed phase === "playing", which made emotes look broken
+  // during the countdown and other brief non-playing transitions.
+  if (!game || (game.phase !== "playing" && game.phase !== "countdown" && game.phase !== "finished")) {
     return;
   }
 

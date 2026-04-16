@@ -1063,7 +1063,8 @@ export function GameClient({
         hintUntil: 0
       }));
       setShieldBlockedUntil(0);
-      setEmoteBarOpen(false);
+      // Make the emote UI obvious as soon as gameplay begins.
+      setEmoteBarOpen(true);
       setRematchRequested(false);
       setOpponentRematchRequested(false);
       setRematchProgress({ requestedPlayers: 0, requiredPlayers: 2 });
@@ -2204,7 +2205,8 @@ export function GameClient({
   const EMOTE_BURST_LIMIT = 3;
 
   const handleSendEmote = (emoteId: string) => {
-    if (!socket || status !== "playing" || emoteCooldownUntil > Date.now()) {
+    const canSend = status === "playing" || status === "countdown" || status === "finished";
+    if (!socket || !canSend || emoteCooldownUntil > Date.now()) {
       return;
     }
 
@@ -2255,7 +2257,8 @@ export function GameClient({
   const isRoomLobby = status === "room-lobby";
   const isOpponentLeft = status === "opponent-left";
   const isWaitingState = status === "connecting" || status === "waiting";
-  const isActiveGameplay = status === "playing";
+  const isActiveGameplay = status === "playing" || status === "countdown";
+  const emotesEnabled = isActiveGameplay || isFinished;
   const youEliminated = eliminated.you;
   const opponentEliminated = eliminated.opponent;
 
@@ -2676,7 +2679,19 @@ export function GameClient({
 
           {/* Bottom: Sticky action bar */}
           <div className="shrink-0 border-t border-white/10 bg-slate-950/90 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 backdrop-blur sm:px-5">
-            <form className="mx-auto flex w-full max-w-3xl flex-col gap-2" onSubmit={handleSubmit}>
+            <div className="mx-auto w-full max-w-3xl">
+              <div className="mb-2 flex items-center justify-center">
+                <EmoteBar
+                  emotes={availableEmotes}
+                  open={emoteBarOpen && emotesEnabled}
+                  onToggle={() => setEmoteBarOpen((o) => !o)}
+                  onSend={handleSendEmote}
+                  coolingDown={emoteCoolingDown}
+                  cooldownUntil={emoteCooldownUntil}
+                  disabled={!emotesEnabled}
+                />
+              </div>
+              <form className="flex w-full flex-col gap-2" onSubmit={handleSubmit}>
               <input
                 ref={answerInputRef}
                 type="text"
@@ -2718,7 +2733,8 @@ export function GameClient({
                   {ultimate.ready && !ultimate.used ? "Ultimate" : "Charge"}
                 </Button>
               </div>
-            </form>
+              </form>
+            </div>
           </div>
         </div>
       </section>
@@ -2802,19 +2818,15 @@ export function GameClient({
 
           <p className="min-h-[1.5rem] text-sm text-slate-300 sm:min-h-[1.75rem] sm:text-base md:text-lg">{statusCopy[status]}</p>
           <div className="mt-2 min-h-[2.75rem]">
-            {isActiveGameplay ? (
-              <EmoteBar
-                emotes={availableEmotes}
-                open={emoteBarOpen}
-                onToggle={() => setEmoteBarOpen((o) => !o)}
-                onSend={handleSendEmote}
-                coolingDown={emoteCoolingDown}
-                cooldownUntil={emoteCooldownUntil}
-                disabled={!isActiveGameplay}
-              />
-            ) : (
-              <div aria-hidden="true" className="h-11" />
-            )}
+            <EmoteBar
+              emotes={availableEmotes}
+              open={emoteBarOpen && emotesEnabled}
+              onToggle={() => setEmoteBarOpen((o) => !o)}
+              onSend={handleSendEmote}
+              coolingDown={emoteCoolingDown}
+              cooldownUntil={emoteCooldownUntil}
+              disabled={!emotesEnabled}
+            />
           </div>
         </div>
 

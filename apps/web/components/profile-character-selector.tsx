@@ -145,7 +145,15 @@ export function ProfileCharacterSelector({
         </div>
 
         {/* Compact selector */}
-        <div className="rounded-[1.8rem] border border-slate-800 bg-slate-950/40 p-3 sm:p-4">
+        <div
+          className="rounded-[1.8rem] border border-slate-800 bg-slate-950/40 p-3 sm:p-4"
+          onMouseLeave={() => onPreviewChange(selectedId)}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              onPreviewChange(selectedId);
+            }
+          }}
+        >
           <p className="px-2 pb-2 text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">
             Select Character
           </p>
