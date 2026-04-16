@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/button";
-import { AvatarCarousel } from "@/components/avatar-carousel";
+import { ProfileCharacterSelector } from "@/components/profile-character-selector";
 import { DEFAULT_AVATAR_ID, getAvatar, normalizeAvatarId, type AvatarId } from "@/lib/avatars";
 import { getReadableAuthError, sanitizeDisplayName, validateDisplayName } from "@/lib/auth";
 import { getSupabaseClient } from "@/lib/supabase";
@@ -26,6 +26,7 @@ type ProfileResponse = {
   avatarId?: string;
   streakEffect?: string;
   emotePack?: string;
+  ownedEmotePacks?: string[];
   summary: {
     totalMatches: number;
     wins: number;
@@ -120,7 +121,8 @@ async function loadProfileFromSupabase(authUserId: string): Promise<ProfileRespo
   // Cosmetic columns are fetched separately so the profile page loads even if
   // the DB migration has not been applied yet (columns missing → safe defaults).
   let streakEffect = "none";
-  let emotePack = "basic";
+  let emotePack = "starter";
+  let ownedEmotePacks: string[] = ["starter"];
   const { data: cosmeticData, error: cosmeticError } = await supabase
     .from("players")
     .select("streak_effect, emote_pack")
@@ -130,6 +132,20 @@ async function loadProfileFromSupabase(authUserId: string): Promise<ProfileRespo
     const cosRow = cosmeticData as CosmeticQueryRow;
     streakEffect = normalizeStreakEffectId(cosRow.streak_effect);
     emotePack = normalizeEmotePackId(cosRow.emote_pack);
+  }
+
+  // Owned packs are sourced from user_emote_packs (written by Stripe webhook).
+  try {
+    const { data: ownedRows, error: ownedError } = await supabase
+      .from("user_emote_packs")
+      .select("pack_id")
+      .eq("user_id", authUserId);
+    if (!ownedError && Array.isArray(ownedRows)) {
+      const rows = ownedRows as Array<{ pack_id: string }>;
+      ownedEmotePacks = Array.from(new Set(["starter", ...rows.map((r) => r.pack_id)]));
+    }
+  } catch {
+    // If table/migration not applied yet, fall back to starter-only.
   }
 
   console.log("[profile] querying ratings", { playerId: player.id });
@@ -203,6 +219,7 @@ async function loadProfileFromSupabase(authUserId: string): Promise<ProfileRespo
     avatarId: normalizeAvatarId(player.avatar_id),
     streakEffect,
     emotePack,
+    ownedEmotePacks,
     summary: {
       totalMatches: matchRows.length,
       wins,
@@ -263,6 +280,8 @@ export function ProfileClient() {
   const [streakEffectError, setStreakEffectError] = useState<string | null>(null);
   const [savingEmotePack, setSavingEmotePack] = useState<EmotePackId | null>(null);
   const [emotePackError, setEmotePackError] = useState<string | null>(null);
+  const [buyingPack, setBuyingPack] = useState<EmotePackId | null>(null);
+  const [emoteShopError, setEmoteShopError] = useState<string | null>(null);
   const [navPending, setNavPending] = useState(false);
 
   useEffect(() => {
@@ -498,6 +517,8 @@ export function ProfileClient() {
 
   const selectedStreakEffect = normalizeStreakEffectId(data?.streakEffect);
   const selectedEmotePack = normalizeEmotePackId(data?.emotePack);
+  const ownedEmotePacks = new Set((data?.ownedEmotePacks ?? ["starter"]).map(String));
+  const isPackOwned = (packId: EmotePackId) => packId === "starter" || ownedEmotePacks.has(packId);
 
   const handleStreakEffectSelect = async (effectId: StreakEffectId) => {
     if (!authUserId || !data || savingStreakEffect || data.streakEffect === effectId) return;
@@ -527,6 +548,10 @@ export function ProfileClient() {
 
   const handleEmotePackSelect = async (packId: EmotePackId) => {
     if (!authUserId || !data || savingEmotePack || data.emotePack === packId) return;
+    if (!isPackOwned(packId)) {
+      setEmotePackError("That emote pack is locked. Purchase it in the Emote Shop first.");
+      return;
+    }
 
     const previousPack = data.emotePack;
     setEmotePackError(null);
@@ -548,6 +573,51 @@ export function ProfileClient() {
       );
     } finally {
       setSavingEmotePack(null);
+    }
+  };
+
+  const handleBuyEmotePack = async (packId: EmotePackId) => {
+    setEmoteShopError(null);
+    if (packId === "starter") return;
+    if (buyingPack) return;
+    if (!data) return;
+
+    const supabase = getSupabaseClient();
+    const {
+      data: { session }
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      setEmoteShopError("You must be signed in to purchase emote packs.");
+      return;
+    }
+
+    if (session.user?.is_anonymous) {
+      setEmoteShopError("Guest accounts cannot make purchases. Sign in with a real account to buy packs.");
+      return;
+    }
+
+    setBuyingPack(packId);
+    try {
+      const response = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ pack: packId }),
+      });
+
+      const payload = (await response.json()) as { url?: string; error?: string };
+      if (!response.ok || !payload.url) {
+        throw new Error(payload.error ?? "Unable to start checkout.");
+      }
+
+      window.location.href = payload.url;
+    } catch (buyError) {
+      setEmoteShopError(buyError instanceof Error ? buyError.message : "Unable to start checkout.");
+    } finally {
+      setBuyingPack(null);
     }
   };
 
@@ -635,39 +705,16 @@ export function ProfileClient() {
           </div>
         </div>
 
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-4 sm:p-6">
-          <div className="grid gap-6 lg:grid-cols-[minmax(240px,0.9fr)_minmax(0,1.4fr)] lg:items-stretch">
-            <div className="flex h-full flex-col justify-between space-y-4 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-              <div className="space-y-3">
-                <p className="text-sm uppercase tracking-[0.25em] text-slate-400">Character Select</p>
-                <h2 className="text-3xl font-black text-white">{currentAvatar.name}</h2>
-                <p className="text-xs uppercase tracking-[0.22em] text-sky-200/90">{currentAvatar.role}</p>
-                <p className="text-sm text-slate-300">
-                  Pick your identity for multiplayer matches. Selection is saved to your profile instantly.
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-slate-700/80 bg-slate-900/70 px-3 py-3">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Ultimate</p>
-                <p className="mt-1 text-base font-semibold text-white">{currentAvatar.ultimateName}</p>
-                <p className="mt-1 text-sm text-slate-300">{currentAvatar.ultimateDescription}</p>
-              </div>
-            </div>
-
-            <div className="min-w-0">
-              <AvatarCarousel
-                selectedId={selectedAvatarId}
-                savingId={savingAvatarId}
-                disabled={loading || Boolean(savingAvatarId)}
-                onFocusChange={setPreviewAvatarId}
-                onSelect={(avatarId) => void handleAvatarSelect(avatarId)}
-              />
-            </div>
-          </div>
-
-          {avatarError ? (
-            <p className="mt-4 text-sm text-rose-300">{avatarError}</p>
-          ) : null}
+        <div>
+          <ProfileCharacterSelector
+            selectedId={selectedAvatarId}
+            previewId={previewAvatarId}
+            savingId={savingAvatarId}
+            disabled={loading || Boolean(savingAvatarId)}
+            onPreviewChange={setPreviewAvatarId}
+            onSelect={(avatarId) => void handleAvatarSelect(avatarId)}
+          />
+          {avatarError ? <p className="mt-4 text-sm text-rose-300">{avatarError}</p> : null}
         </div>
 
         {/* ── Cosmetics ─────────────────────────────────────────── */}
@@ -680,7 +727,7 @@ export function ProfileClient() {
             </div>
             <h2 className="text-2xl font-bold text-white">Identity</h2>
             <p className="text-sm text-slate-400">
-              Personalise how you look and feel in matches. All items are free.
+              Personalise how you look and feel in matches. Some cosmetics are locked (simulated unlocks for now).
             </p>
           </div>
 
@@ -740,27 +787,34 @@ export function ProfileClient() {
               {EMOTE_PACKS.map((pack) => {
                 const isSelected = selectedEmotePack === pack.id;
                 const isSaving = savingEmotePack === pack.id;
+                const unlocked = pack.unlockedByDefault || isPackOwned(pack.id as EmotePackId);
                 return (
                   <button
                     key={pack.id}
                     type="button"
                     onClick={() => void handleEmotePackSelect(pack.id as EmotePackId)}
-                    disabled={loading || Boolean(savingEmotePack) || isSelected}
+                    disabled={loading || Boolean(savingEmotePack) || isSelected || !unlocked}
                     className={`relative flex flex-col items-start rounded-2xl border px-4 py-4 text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
                       isSelected
                         ? "border-sky-400/60 bg-sky-500/10 shadow-[0_0_12px_rgba(56,189,248,0.10)]"
-                        : "border-slate-700 bg-slate-950/60 hover:border-slate-600 hover:bg-slate-900 active:scale-[0.98]"
+                        : unlocked
+                          ? "border-slate-700 bg-slate-950/60 hover:border-slate-600 hover:bg-slate-900 active:scale-[0.98]"
+                          : "border-slate-800 bg-slate-950/40 opacity-60 saturate-75"
                     } ${isSaving ? "opacity-60" : ""}`}
                   >
                     <div className="flex w-full items-start justify-between gap-2">
                       <p className={`text-sm font-semibold ${isSelected ? "text-white" : "text-slate-300"}`}>
                         {pack.name}
                       </p>
-                      {isSelected && (
+                      {isSelected ? (
                         <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.2em] text-sky-300">
                           Equipped
                         </span>
-                      )}
+                      ) : !unlocked ? (
+                        <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">
+                          Locked
+                        </span>
+                      ) : null}
                     </div>
                     <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
                       {pack.description}
@@ -787,6 +841,78 @@ export function ProfileClient() {
             {emotePackError ? (
               <p className="mt-3 text-sm text-rose-300">{emotePackError}</p>
             ) : null}
+          </div>
+
+          {/* Emote Shop (simulated unlocks) */}
+          <div className="mt-8 rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.28em] text-slate-400">Emote Shop</p>
+                <p className="mt-1 text-sm text-slate-300">
+                  Buy packs via Stripe Checkout. Packs unlock only after verified payment (webhook).
+                </p>
+              </div>
+              <span className="rounded-full border border-amber-400/25 bg-amber-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-200">
+                Stripe Checkout
+              </span>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              {EMOTE_PACKS.map((pack) => {
+                const packId = pack.id as EmotePackId;
+                const unlocked = pack.unlockedByDefault || isPackOwned(packId);
+                const busy = buyingPack === packId;
+                return (
+                  <div key={`shop-${pack.id}`} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-bold text-white">{pack.name}</p>
+                        <p className="mt-1 text-[11px] text-slate-400">{pack.previewLabel}</p>
+                      </div>
+                      <span
+                        className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.22em] ${
+                          unlocked
+                            ? "border-emerald-400/25 bg-emerald-500/10 text-emerald-200"
+                            : "border-amber-400/25 bg-amber-500/10 text-amber-200"
+                        }`}
+                      >
+                        {unlocked ? "Unlocked" : "Locked"}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {pack.emoteIds.map((emoteId) => {
+                        const emote = EMOTES.find((e) => e.id === emoteId);
+                        return emote ? (
+                          <span
+                            key={`shop-${pack.id}-${emoteId}`}
+                            title={emote.label}
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900/60 px-2 py-1 text-xs text-slate-200"
+                          >
+                            <span>{emote.icon}</span>
+                            <span className="text-slate-300">{emote.label}</span>
+                          </span>
+                        ) : null;
+                      })}
+                    </div>
+
+                    <div className="mt-4">
+                      <Button
+                        variant={unlocked ? "secondary" : "primary"}
+                        className="w-full"
+                        disabled={loading || busy || packId === "starter" || unlocked}
+                        loading={busy}
+                        loadingText="Starting..."
+                        onClick={() => void handleBuyEmotePack(packId)}
+                      >
+                        {packId === "starter" ? "Included" : unlocked ? "Owned" : "Buy"}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {emoteShopError ? <p className="mt-3 text-sm text-rose-300">{emoteShopError}</p> : null}
           </div>
         </div>
 

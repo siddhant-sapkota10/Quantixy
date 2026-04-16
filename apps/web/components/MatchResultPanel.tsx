@@ -98,7 +98,6 @@ function getTagline(result: "win" | "loss" | "draw", margin: number): string {
 // ── Avatar card ────────────────────────────────────────────────────────────
 
 type AvatarCardProps = {
-  avatar: string;
   name: string;
   score: number;
   ratingChange?: number;
@@ -111,7 +110,6 @@ type AvatarCardProps = {
 };
 
 function AvatarCard({
-  avatar,
   name,
   score,
   ratingChange,
@@ -140,7 +138,6 @@ function AvatarCard({
         </div>
       )}
 
-      <p className="text-3xl leading-none sm:text-4xl">{avatar}</p>
       <p className="max-w-[7rem] truncate text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
         {name}
       </p>
@@ -259,7 +256,6 @@ export function MatchResultPanel({
         {/* ── Avatar score row ── */}
         <div className="flex w-full items-stretch gap-3 sm:gap-4">
           <AvatarCard
-            avatar={yourAvatar}
             name={yourName}
             score={scores.you}
             ratingChange={ratingChange?.you}
@@ -277,7 +273,6 @@ export function MatchResultPanel({
           </div>
 
           <AvatarCard
-            avatar={opponentAvatar}
             name={opponentName}
             score={scores.opponent}
             ratingChange={ratingChange?.opponent}

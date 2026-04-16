@@ -16,8 +16,8 @@ type EmoteBarProps = {
 
 /**
  * Compact emote picker with:
- * - Single emoji toggle button (💬)
- * - Pop-up grid of large emoji tap targets
+ * - Horizontal bar of 4 emotes (fast PvP)
+ * - Collapse toggle button (💬)
  * - Keyboard shortcuts 1–6
  * - Cooldown ring animation on the toggle button
  */
@@ -66,20 +66,20 @@ export function EmoteBar({
   const durationMs = Math.max(0, cooldownUntil - Date.now());
 
   return (
-    <div ref={containerRef} className="relative flex h-11 items-center">
-      {/* Toggle button */}
+    <div ref={containerRef} className="relative flex h-11 items-center gap-2">
+      {/* Toggle button (collapse/expand) */}
       <button
         type="button"
         onClick={onToggle}
-        disabled={disabled || coolingDown}
-        aria-label={coolingDown ? "Emote cooldown" : "Send emote (keys 1–6)"}
-        title={coolingDown ? "Emote cooldown…" : "Send emote  (keys 1–6)"}
+        disabled={disabled}
+        aria-label={open ? "Hide emotes" : "Show emotes"}
+        title={open ? "Hide emotes" : "Show emotes"}
         className={`relative flex h-11 w-11 items-center justify-center rounded-full border text-xl transition-all duration-150 ease-out select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
-          coolingDown
-            ? "cursor-not-allowed border-slate-700 bg-slate-900/60 opacity-55 saturate-50"
+          disabled
+            ? "cursor-not-allowed border-slate-800 bg-slate-950/40 opacity-50"
             : open
-            ? "border-amber-400/60 bg-amber-950/60 shadow-[0_0_12px_rgba(251,191,36,0.18)]"
-            : "border-slate-700 bg-slate-900 hover:border-slate-500 hover:bg-slate-800 active:scale-[0.96]"
+              ? "border-amber-400/60 bg-amber-950/60 shadow-[0_0_12px_rgba(251,191,36,0.18)]"
+              : "border-slate-700 bg-slate-900 hover:border-slate-500 hover:bg-slate-800 active:scale-[0.96]"
         }`}
       >
         💬
@@ -95,27 +95,24 @@ export function EmoteBar({
         )}
       </button>
 
-      {/* Emote picker grid — slides up from the toggle button */}
-      <AnimatePresence>
-        {open && (
+      <AnimatePresence initial={false}>
+        {open ? (
           <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 6 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 6 }}
+            key="bar"
+            initial={{ opacity: 0, x: -8, scale: 0.98 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: -8, scale: 0.98 }}
             transition={{ duration: 0.14, ease: "easeOut" }}
-            className="absolute bottom-full left-0 mb-2 flex max-w-[min(92vw,28rem)] flex-wrap gap-1.5 rounded-2xl border border-slate-700/80 bg-slate-900/97 p-2 shadow-2xl backdrop-blur-sm"
-            style={{ zIndex: 50 }}
+            className="flex items-center gap-1.5 rounded-full border border-slate-700/80 bg-slate-900/90 px-2 py-1.5 shadow-xl backdrop-blur-sm"
           >
-            {emotes.map((emote, index) => (
-              <EmoteButton
-                key={emote.id}
-                emote={emote}
-                index={index}
-                onSend={onSend}
-              />
+            {emotes.slice(0, 6).map((emote, index) => (
+              <EmoteButton key={emote.id} emote={emote} index={index} onSend={onSend} disabled={disabled || coolingDown} />
             ))}
+            <span className="ml-1 hidden text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400 sm:inline">
+              1–6
+            </span>
           </motion.div>
-        )}
+        ) : null}
       </AnimatePresence>
     </div>
   );
@@ -125,16 +122,22 @@ type EmoteButtonProps = {
   emote: Emote;
   index: number;
   onSend: (id: string) => void;
+  disabled?: boolean;
 };
 
-function EmoteButton({ emote, index, onSend }: EmoteButtonProps) {
+function EmoteButton({ emote, index, onSend, disabled }: EmoteButtonProps) {
   return (
     <button
       type="button"
       onClick={() => onSend(emote.id)}
+      disabled={disabled}
       title={`${emote.label} (${index + 1})`}
       aria-label={emote.label}
-      className="group relative flex h-12 w-12 items-center justify-center rounded-xl border border-slate-700 bg-slate-950/80 text-2xl transition-all duration-150 ease-out hover:border-amber-400/40 hover:bg-slate-800 active:scale-[0.96] active:border-amber-400/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60"
+      className={`group relative flex h-10 w-10 items-center justify-center rounded-full border text-xl transition-all duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
+        disabled
+          ? "cursor-not-allowed border-slate-800 bg-slate-950/40 opacity-55 saturate-50"
+          : "border-slate-700 bg-slate-950/80 hover:border-amber-400/40 hover:bg-slate-800 active:scale-[0.96] active:border-amber-400/70"
+      }`}
     >
       <span className="pointer-events-none">{emote.icon}</span>
       {/* Keyboard shortcut badge — shown on hover */}

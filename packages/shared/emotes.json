@@ -1,11 +1,16 @@
 [
-  { "id": "too-easy", "label": "Too Easy", "icon": "😎" },
-  { "id": "on-fire", "label": "On Fire", "icon": "🔥" },
-  { "id": "get-ready", "label": "Get Ready", "icon": "😈" },
-  { "id": "oops", "label": "Oops", "icon": "😂" },
-  { "id": "focus", "label": "Focus", "icon": "😤" },
-  { "id": "lets-go", "label": "Let's Go", "icon": "🎉" },
-  { "id": "lucky", "label": "Lucky", "icon": "🍀" },
-  { "id": "close-one", "label": "Close One", "icon": "😅" },
-  { "id": "gg", "label": "GG", "icon": "🤝" }
+  { "id": "too-easy", "label": "Too Easy", "icon": "😎", "category": "celebration", "pack": "starter" },
+  { "id": "lucky", "label": "Lucky", "icon": "🍀", "category": "neutral", "pack": "starter" },
+  { "id": "close-one", "label": "Close One", "icon": "😅", "category": "neutral", "pack": "starter" },
+  { "id": "gg", "label": "GG", "icon": "🤝", "category": "celebration", "pack": "starter" },
+
+  { "id": "what-was-that", "label": "What was that", "icon": "🤡", "category": "bm", "pack": "tilt" },
+  { "id": "you-tried", "label": "You tried", "icon": "💀", "category": "bm", "pack": "tilt" },
+  { "id": "salty", "label": "Salty?", "icon": "🧂", "category": "bm", "pack": "tilt" },
+  { "id": "cry-more", "label": "Cry more", "icon": "😂", "category": "bm", "pack": "tilt" },
+
+  { "id": "on-fire", "label": "On Fire", "icon": "🔥", "category": "celebration", "pack": "clutch" },
+  { "id": "king", "label": "King", "icon": "👑", "category": "celebration", "pack": "clutch" },
+  { "id": "perfect", "label": "Perfect", "icon": "💯", "category": "celebration", "pack": "clutch" },
+  { "id": "lets-go", "label": "Let's go", "icon": "🚀", "category": "celebration", "pack": "clutch" }
 ]

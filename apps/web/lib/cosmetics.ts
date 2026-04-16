@@ -3,7 +3,7 @@ import cosmeticsData from "../../../packages/shared/cosmetics.json";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type StreakEffectId = "none" | "fire" | "lightning";
-export type EmotePackId = "basic";
+export type EmotePackId = "starter" | "tilt" | "clutch";
 export type UnlockType = "default" | "premium" | "achievement" | "seasonal";
 
 export type StreakEffect = {
@@ -40,7 +40,7 @@ export type PlayerCosmetics = {
 
 export const DEFAULT_COSMETICS: PlayerCosmetics = {
   streakEffect: "none",
-  emotePack: "basic",
+  emotePack: "starter",
 };
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ export function normalizeEmotePackId(value: string | null | undefined): EmotePac
   if (typeof value === "string" && VALID_EMOTE_PACK_IDS.has(value)) {
     return value as EmotePackId;
   }
-  return "basic";
+  return "starter";
 }
 
 // ─── Accessors ────────────────────────────────────────────────────────────────
@@ -82,7 +82,7 @@ export function getStreakEffect(id: string | null | undefined): StreakEffect {
 }
 
 export function getEmotePack(id: string | null | undefined): EmotePack {
-  return (EMOTE_PACK_MAP.get(normalizeEmotePackId(id)) ?? EMOTE_PACK_MAP.get("basic")) as EmotePack;
+  return (EMOTE_PACK_MAP.get(normalizeEmotePackId(id)) ?? EMOTE_PACK_MAP.get("starter")) as EmotePack;
 }
 
 // ─── Streak effect visual config (consumed by PlayerPanel) ────────────────────
