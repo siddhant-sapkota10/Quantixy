@@ -729,18 +729,8 @@ export function HomeHero() {
           ) : null}
 
           {!user ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Button
-                variant="secondary"
-                className="w-full"
-                onClick={handleGuestContinue}
-                disabled={guestBusy || loading}
-                loading={guestBusy}
-                loadingText="Continuing..."
-              >
-                Continue as Guest
-              </Button>
-              <Button
+            <div className="grid gap-3 sm:grid-cols-1">
+               <Button
                 className="w-full"
                 onClick={() => openAuthModal("login")}
                 disabled={loading}
@@ -753,6 +743,16 @@ export function HomeHero() {
                 disabled={loading}
               >
                 Create Account
+              </Button>
+              <Button
+                variant="secondary"
+                className="w-full"
+                onClick={handleGuestContinue}
+                disabled={guestBusy || loading}
+                loading={guestBusy}
+                loadingText="Continuing..."
+              >
+                Continue as Guest
               </Button>
               <Button
                 variant="secondary"
