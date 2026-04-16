@@ -678,7 +678,7 @@ export function HomeHero() {
             Multiplayer Math Arena
           </span>
           <h1 className="text-3xl font-black tracking-tight text-white sm:text-5xl md:text-6xl">
-            MathBattle
+           Arithix
           </h1>
           <p className="text-base text-slate-300 sm:text-lg md:text-xl">Real-time multiplayer math</p>
         </div>
