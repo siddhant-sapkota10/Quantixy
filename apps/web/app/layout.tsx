@@ -8,7 +8,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "MathBattle",
+  title: "Quantixy",
   description: "Real-time multiplayer math game"
 };
 
