@@ -30,14 +30,34 @@
   ],
   "emotePacks": [
     {
-      "id": "basic",
-      "name": "Basic",
-      "description": "Standard in-match communication pack.",
-      "previewLabel": "Standard",
+      "id": "starter",
+      "name": "Starter Pack",
+      "description": "Free starter emotes for quick sportsmanship and reactions.",
+      "previewLabel": "Free",
       "unlockedByDefault": true,
       "isPremium": false,
       "unlockType": "default",
       "emoteIds": ["too-easy", "lucky", "close-one", "gg"]
+    },
+    {
+      "id": "tilt",
+      "name": "Tilt Pack",
+      "description": "Spicy BM emotes. (Simulated unlock — future premium cosmetic.)",
+      "previewLabel": "Premium",
+      "unlockedByDefault": false,
+      "isPremium": true,
+      "unlockType": "premium",
+      "emoteIds": ["what-was-that", "you-tried", "salty", "cry-more"]
+    },
+    {
+      "id": "clutch",
+      "name": "Clutch Pack",
+      "description": "High-energy win momentum and clutch celebrations.",
+      "previewLabel": "Premium",
+      "unlockedByDefault": false,
+      "isPremium": true,
+      "unlockType": "premium",
+      "emoteIds": ["on-fire", "king", "perfect", "lets-go"]
     }
   ]
 }

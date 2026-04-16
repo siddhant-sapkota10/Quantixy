@@ -1,4 +1,8 @@
 import type { Difficulty, Topic } from "./topics";
+// Reuse the same generator as PvP so topics/difficulty stay aligned.
+// This import is JS (shared module) and is safe to use from TS.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { generateQuestion: generateSharedQuestion } = require("../../../packages/shared/question-engine");
 
 export type GeneratedQuestion = { question: string; answer: string };
 
@@ -247,26 +251,6 @@ function generatePowers(difficulty: Difficulty): GeneratedQuestion {
 // ---------------------------------------------------------------------------
 
 export function generateQuestion(topic: Topic, difficulty: Difficulty): GeneratedQuestion {
-  const nonMixed: Topic[] = [
-    "arithmetic",
-    "mental-math",
-    "algebra",
-    "percentages",
-    "fractions",
-    "powers",
-  ];
-
-  if (topic === "mixed") {
-    const t = nonMixed[rand(0, nonMixed.length - 1)];
-    return generateQuestion(t, difficulty);
-  }
-
-  switch (topic) {
-    case "arithmetic":   return generateArithmetic(difficulty);
-    case "mental-math":  return generateMentalMath(difficulty);
-    case "algebra":      return generateAlgebra(difficulty);
-    case "percentages":  return generatePercentages(difficulty);
-    case "fractions":    return generateFractions(difficulty);
-    case "powers":       return generatePowers(difficulty);
-  }
+  const q = generateSharedQuestion(topic, difficulty, "ai");
+  return { question: `${q.prompt} = ?`, answer: q.answer };
 }

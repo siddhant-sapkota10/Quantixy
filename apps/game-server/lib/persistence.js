@@ -41,10 +41,10 @@ function normalizeStreakEffectId(value) {
 
 function normalizeEmotePackId(value) {
   if (typeof value === "string" && VALID_EMOTE_PACK_IDS.has(value)) return value;
-  return "basic";
+  return "starter";
 }
 
-const COSMETICS_DEFAULT = { streakEffect: "none", emotePack: "basic" };
+const COSMETICS_DEFAULT = { streakEffect: "none", emotePack: "starter" };
 
 /**
  * Fetch cosmetic fields for a player by their internal UUID.
@@ -58,7 +58,7 @@ const COSMETICS_DEFAULT = { streakEffect: "none", emotePack: "basic" };
 async function getPlayerCosmetics(playerId) {
   const { data, error } = await supabaseAdmin
     .from("players")
-    .select("streak_effect, emote_pack")
+    .select("streak_effect, emote_pack, auth_user_id")
     .eq("id", playerId)
     .maybeSingle();
 
@@ -70,10 +70,32 @@ async function getPlayerCosmetics(playerId) {
     return COSMETICS_DEFAULT;
   }
 
-  return {
-    streakEffect: normalizeStreakEffectId(data?.streak_effect ?? null),
-    emotePack: normalizeEmotePackId(data?.emote_pack ?? null)
-  };
+  const streakEffect = normalizeStreakEffectId(data?.streak_effect ?? null);
+  let emotePack = normalizeEmotePackId(data?.emote_pack ?? null);
+
+  // Ownership enforcement (paid packs only usable if owned).
+  // Source of truth is public.user_emote_packs, written by Stripe webhook via service role.
+  const authUserId = data?.auth_user_id ?? null;
+  if (authUserId && emotePack !== "starter") {
+    const { data: ownedRows, error: ownedError } = await supabaseAdmin
+      .from("user_emote_packs")
+      .select("pack_id")
+      .eq("user_id", authUserId);
+
+    if (ownedError) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[persistence] user_emote_packs query failed, forcing starter:", ownedError.message);
+      }
+      emotePack = "starter";
+    } else {
+      const owned = new Set(["starter", ...(ownedRows ?? []).map((r) => r.pack_id)]);
+      if (!owned.has(emotePack)) {
+        emotePack = "starter";
+      }
+    }
+  }
+
+  return { streakEffect, emotePack };
 }
 
 function isNoRowsError(error) {

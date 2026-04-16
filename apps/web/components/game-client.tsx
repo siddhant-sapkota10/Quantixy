@@ -10,7 +10,7 @@ import { getSupabaseClient } from "@/lib/supabase";
 import { createGameSocket, type GameSocket } from "@/lib/socket";
 import { soundManager } from "@/lib/sounds";
 import { formatTopicLabel, getSafeDifficulty, getSafeTopic } from "@/lib/topics";
-import { getAvatar } from "@/lib/avatars";
+import { getAvatar, normalizeAvatarId, type AvatarId } from "@/lib/avatars";
 import { EMOTES, getEmoteById } from "@/lib/emotes";
 import {
   normalizeStreakEffectId,
@@ -22,6 +22,7 @@ import {
 import { getPowerUpMeta, POWER_UPS, type PowerUpId } from "@/lib/powerups";
 import { getRankFromRating, RANKS } from "@/lib/ranks";
 import { RankBadge } from "@/components/rank-badge";
+import { MatchChampionCard } from "@/components/match-champion-card";
 
 // Feature flag — set to true to re-enable the powerup system in live matches.
 // While false, powerup UI is hidden and powerup socket events are no-ops.
@@ -116,7 +117,9 @@ type UltimateState = {
   novaBonusRemaining: number;
   opponentNovaBonusRemaining: number;
   infernoPending: boolean;
+  infernoPendingUntil: number;
   opponentInfernoPending: boolean;
+  opponentInfernoPendingUntil: number;
 };
 
 type FeedbackState = {
@@ -194,7 +197,9 @@ const initialUltimate: UltimateState = {
   novaBonusRemaining: 0,
   opponentNovaBonusRemaining: 0,
   infernoPending: false,
-  opponentInfernoPending: false
+  infernoPendingUntil: 0,
+  opponentInfernoPending: false,
+  opponentInfernoPendingUntil: 0
 };
 
 const initialFeedback: FeedbackState = {
@@ -313,10 +318,14 @@ export function GameClient({
   const scoresRef = useRef(initialScores);
   const [currentQuestion, setCurrentQuestion] = useState("Waiting for the first question...");
   const [answer, setAnswer] = useState("");
+  const answerInputRef = useRef<HTMLInputElement | null>(null);
+  const [focusPulseKey, setFocusPulseKey] = useState(0);
   const [yourName, setYourName] = useState("You");
   const [opponentName, setOpponentName] = useState("Opponent");
   const [yourAvatar, setYourAvatar] = useState("🦊");
   const [opponentAvatar, setOpponentAvatar] = useState("🦊");
+  const [yourAvatarId, setYourAvatarId] = useState<AvatarId>("flash");
+  const [opponentAvatarId, setOpponentAvatarId] = useState<AvatarId>("flash");
   const [countdownValue, setCountdownValue] = useState<string | null>(null);
   const [frozenUntil, setFrozenUntil] = useState(0);
   const [shieldBlockedUntil, setShieldBlockedUntil] = useState(0);
@@ -350,6 +359,8 @@ export function GameClient({
   const [leavePending, setLeavePending] = useState(false);
   const [ultimateActivating, setUltimateActivating] = useState(false);
   const ultimateActivateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ultimateReadySoundRef = useRef({ you: false, opponent: false });
+  const [ultReadyCueKey, setUltReadyCueKey] = useState({ you: 0, opponent: 0 });
   const [gameResult, setGameResult] = useState<{
     result: "win" | "loss" | "draw";
     message: string;
@@ -373,7 +384,7 @@ export function GameClient({
   // Cosmetic state — visual only, never affects gameplay
   const [yourStreakEffect, setYourStreakEffect] = useState<StreakEffectId>("none");
   const [opponentStreakEffect, setOpponentStreakEffect] = useState<StreakEffectId>("none");
-  const [yourEmotePack, setYourEmotePack] = useState<EmotePackId>("basic");
+  const [yourEmotePack, setYourEmotePack] = useState<EmotePackId>("starter");
 
   // Health bar system — client-side only, derived from pointScored events
   const MAX_HP = 100;
@@ -387,6 +398,13 @@ export function GameClient({
   const [opponentHitKey, setOpponentHitKey] = useState(0);
   const [latestYouDamage, setLatestYouDamage] = useState<number | null>(null);
   const [latestOpponentDamage, setLatestOpponentDamage] = useState<number | null>(null);
+  const [youHitType, setYouHitType] = useState<"normal" | "streak" | "ultimate">("normal");
+  const [opponentHitType, setOpponentHitType] = useState<"normal" | "streak" | "ultimate">("normal");
+  const [youHitIntensity, setYouHitIntensity] = useState(0.35);
+  const [opponentHitIntensity, setOpponentHitIntensity] = useState(0.35);
+  const [shakeKey, setShakeKey] = useState(0);
+  const [shakeVector, setShakeVector] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const hitDelayTimeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
 
   const [isFinalPhase, setIsFinalPhase] = useState(false);
   const [scoreImpactKey, setScoreImpactKey] = useState({ you: 0, opponent: 0 });
@@ -414,6 +432,85 @@ export function GameClient({
     setMuted(soundManager.isMuted());
   }, []);
 
+  // Scroll lock during live gameplay: make it feel like a real game viewport.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const shouldLock = status === "playing";
+    const html = document.documentElement;
+    const body = document.body;
+    if (!shouldLock) {
+      html.style.overflow = "";
+      body.style.overflow = "";
+      body.style.height = "";
+      return;
+    }
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    body.style.height = "100%";
+    return () => {
+      html.style.overflow = "";
+      body.style.overflow = "";
+      body.style.height = "";
+    };
+  }, [status]);
+
+  const focusAnswerInput = (opts: { select?: boolean } = {}) => {
+    const el = answerInputRef.current;
+    if (!el) return;
+    if (document.activeElement === el) return;
+    el.focus({ preventScroll: true });
+    if (opts.select) {
+      try {
+        el.select();
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      for (const t of hitDelayTimeoutsRef.current) clearTimeout(t);
+      hitDelayTimeoutsRef.current.clear();
+    };
+  }, []);
+
+  const classifyHit = (opts: { streak: number; isUltimate: boolean }) => {
+    if (opts.isUltimate) return "ultimate" as const;
+    if (opts.streak >= 3) return "streak" as const;
+    return "normal" as const;
+  };
+
+  const intensityFromDamage = (damage: number) => {
+    const d = Math.max(0, damage);
+    // Tuned so ~10 dmg is noticeable, ~25+ is punchy
+    return Math.max(0.25, Math.min(1, d / 28));
+  };
+
+  const triggerScreenShake = (strength: number) => {
+    const s = Math.max(0, Math.min(1, strength));
+    if (s <= 0) return;
+    const amp = 2 + s * 4; // 2..6px
+    const x = (Math.random() * 2 - 1) * amp;
+    const y = (Math.random() * 2 - 1) * (amp * 0.7);
+    setShakeVector({ x, y });
+    setShakeKey((prev) => prev + 1);
+  };
+
+  const playHitSound = (hitType: "normal" | "streak" | "ultimate", intensity: number) => {
+    const vol = 0.12 + Math.min(0.35, intensity * 0.38);
+    const rate = hitType === "ultimate" ? 0.95 : hitType === "streak" ? 1.06 : 1.12;
+    if (hitType === "ultimate") {
+      soundManager.play("hitUltimate", { volume: vol, rate });
+      return;
+    }
+    if (hitType === "streak") {
+      soundManager.play("hitStreak", { volume: vol, rate });
+      return;
+    }
+    soundManager.play("hitNormal", { volume: vol, rate });
+  };
+
   useEffect(() => {
     feedbackRef.current = feedback;
   }, [feedback]);
@@ -440,6 +537,30 @@ export function GameClient({
       soundManager.play("tick");
     }
   }, [status, timer.secondsLeft]);
+
+  useEffect(() => {
+    // Play once when ultimate becomes ready (per player).
+    const youReadyNow = ultimate.ready && !ultimate.used && ultimate.implemented;
+    const oppReadyNow = ultimate.opponentReady && !ultimate.opponentUsed && ultimate.opponentImplemented;
+
+    if (youReadyNow && !ultimateReadySoundRef.current.you) {
+      ultimateReadySoundRef.current.you = true;
+      soundManager.play("ultReady", { volume: 0.26, rate: 1.05 });
+      setUltReadyCueKey((prev) => ({ ...prev, you: prev.you + 1 }));
+    }
+    if (oppReadyNow && !ultimateReadySoundRef.current.opponent) {
+      ultimateReadySoundRef.current.opponent = true;
+      soundManager.play("ultReady", { volume: 0.2, rate: 0.98 });
+      setUltReadyCueKey((prev) => ({ ...prev, opponent: prev.opponent + 1 }));
+    }
+
+    if (!youReadyNow) {
+      ultimateReadySoundRef.current.you = false;
+    }
+    if (!oppReadyNow) {
+      ultimateReadySoundRef.current.opponent = false;
+    }
+  }, [ultimate.ready, ultimate.used, ultimate.implemented, ultimate.opponentReady, ultimate.opponentUsed, ultimate.opponentImplemented]);
 
   useEffect(() => {
     if (status !== "room-lobby") {
@@ -520,7 +641,7 @@ export function GameClient({
     setOpponentUltimateFxType(null);
     setYourStreakEffect("none");
     setOpponentStreakEffect("none");
-    setYourEmotePack("basic");
+    setYourEmotePack("starter");
     setIsFinalPhase(false);
     setScoreImpactKey({ you: 0, opponent: 0 });
     setClutchMoment({ key: 0, side: null });
@@ -717,10 +838,18 @@ export function GameClient({
             : previous.opponentNovaBonusRemaining,
         infernoPending:
           typeof payload.infernoPending === "boolean" ? payload.infernoPending : previous.infernoPending,
+        infernoPendingUntil:
+          typeof payload.infernoPendingUntil === "number"
+            ? payload.infernoPendingUntil
+            : (previous as UltimateState & { infernoPendingUntil?: number }).infernoPendingUntil ?? 0,
         opponentInfernoPending:
           typeof payload.opponentInfernoPending === "boolean"
             ? payload.opponentInfernoPending
-            : previous.opponentInfernoPending
+            : previous.opponentInfernoPending,
+        opponentInfernoPendingUntil:
+          typeof payload.opponentInfernoPendingUntil === "number"
+            ? payload.opponentInfernoPendingUntil
+            : (previous as UltimateState & { opponentInfernoPendingUntil?: number }).opponentInfernoPendingUntil ?? 0
       }));
     };
 
@@ -797,8 +926,12 @@ export function GameClient({
         payload.roomId ?? payload.room ?? payload.roomInfo?.id ?? currentMatchRoomIdRef.current;
       setYourName(payload.yourName ?? "You");
       setOpponentName(payload.opponentName ?? payload.opponent?.name ?? "Opponent");
-      setYourAvatar(getAvatar(payload.yourAvatar).emoji);
-      setOpponentAvatar(getAvatar(payload.opponentAvatar).emoji);
+      const nextYourAvatarId = normalizeAvatarId(payload.yourAvatar);
+      const nextOpponentAvatarId = normalizeAvatarId(payload.opponentAvatar);
+      setYourAvatarId(nextYourAvatarId);
+      setOpponentAvatarId(nextOpponentAvatarId);
+      setYourAvatar(getAvatar(nextYourAvatarId).emoji);
+      setOpponentAvatar(getAvatar(nextOpponentAvatarId).emoji);
       // Apply cosmetics — visual only, no gameplay effect
       setYourStreakEffect(normalizeStreakEffectId(payload.yourStreakEffect));
       setOpponentStreakEffect(normalizeStreakEffectId(payload.opponentStreakEffect));
@@ -917,6 +1050,7 @@ export function GameClient({
       currentQuestionTokenRef.current = token;
       setCurrentQuestion(question || "Get ready...");
       setAnswer("");
+      setFocusPulseKey((k) => k + 1);
       setCountdownValue(null);
       setFeedback((previous) => ({
         ...previous,
@@ -1153,21 +1287,67 @@ export function GameClient({
 
       // HP damage tracking — apply damage when either player scores
       if (youScored) {
+        // Instant feedback: correct answer tick
+        soundManager.play("correct", { volume: 0.28, rate: 1.05 });
         const youPointsDelta = newYouScore - prevScores.you;
         const dmgDealt = calcDamage(youPointsDelta, payload.fastAnswer ?? false, streakValue);
         if (dmgDealt > 0) {
-          setOpponentDamageTaken((prev) => prev + dmgDealt);
-          setLatestOpponentDamage(dmgDealt);
-          setOpponentHitKey((prev) => prev + 1);
+          const isUltimateHit =
+            ultimate.overclockUntil > Date.now() ||
+            ultimate.infernoPending;
+          const type = classifyHit({ streak: streakValue, isUltimate: isUltimateHit });
+          const infernoSpike = ultimate.infernoPending ? 1.35 : 1;
+          const intensity = Math.min(1, intensityFromDamage(dmgDealt) * (type === "ultimate" ? 1.12 : 1) * infernoSpike);
+          const delayMs = 80;
+          const t = setTimeout(() => {
+            setOpponentHitType(type);
+            setOpponentHitIntensity(intensity);
+            setOpponentDamageTaken((prev) => prev + dmgDealt);
+            setLatestOpponentDamage(dmgDealt);
+            setOpponentHitKey((prev) => prev + 1);
+            playHitSound(type, intensity);
+            if (type !== "normal") {
+              triggerScreenShake(
+                type === "ultimate"
+                  ? Math.min(1, intensity * (ultimate.infernoPending ? 1.05 : 0.95))
+                  : Math.min(1, intensity * 0.65)
+              );
+            }
+          }, delayMs);
+          hitDelayTimeoutsRef.current.add(t);
+          setTimeout(() => hitDelayTimeoutsRef.current.delete(t), delayMs + 20);
         }
       }
       if (opponentScored) {
+        // Instant feedback: opponent also landed a correct answer
+        soundManager.play("correct", { volume: 0.22, rate: 0.98 });
         const oppPointsDelta = newOpponentScore - prevScores.opponent;
         const dmgTaken = calcDamage(oppPointsDelta, payload.opponentFastAnswer ?? false, opponentStreakValue);
         if (dmgTaken > 0) {
-          setYouDamageTaken((prev) => prev + dmgTaken);
-          setLatestYouDamage(dmgTaken);
-          setYouHitKey((prev) => prev + 1);
+          const isUltimateHit =
+            ultimate.opponentOverclockUntil > Date.now() ||
+            ultimate.opponentInfernoPending;
+          const type = classifyHit({ streak: opponentStreakValue, isUltimate: isUltimateHit });
+          const infernoSpike = ultimate.opponentInfernoPending ? 1.35 : 1;
+          const intensity = Math.min(1, intensityFromDamage(dmgTaken) * (type === "ultimate" ? 1.12 : 1) * infernoSpike);
+          const delayMs = 80;
+          const t = setTimeout(() => {
+            setYouHitType(type);
+            setYouHitIntensity(intensity);
+            setYouDamageTaken((prev) => prev + dmgTaken);
+            setLatestYouDamage(dmgTaken);
+            setYouHitKey((prev) => prev + 1);
+            playHitSound(type, intensity);
+            if (type !== "normal") {
+              triggerScreenShake(
+                type === "ultimate"
+                  ? Math.min(1, intensity * (ultimate.opponentInfernoPending ? 1.05 : 0.95))
+                  : Math.min(1, intensity * 0.65)
+              );
+            }
+          }, delayMs);
+          hitDelayTimeoutsRef.current.add(t);
+          setTimeout(() => hitDelayTimeoutsRef.current.delete(t), delayMs + 20);
         }
       }
       const secondsRemaining = timerSecondsRef.current;
@@ -1280,19 +1460,16 @@ export function GameClient({
       }
 
       if (payload.fastAnswer) {
-        soundManager.play("fast");
+        soundManager.play("fast", { volume: 0.2, rate: 1.12 });
       } else if (payload.opponentFastAnswer) {
-        soundManager.play("fast");
+        soundManager.play("fast", { volume: 0.18, rate: 1.05 });
       }
 
-      if ((payload.pointsAwarded ?? 0) > 1) {
-        soundManager.play("powerReady");
-      } else if (streakValue >= 3 && streakValue > previousFeedback.youStreak) {
-        soundManager.play("streak");
+      // Light streak accent (only when entering 3+ streak)
+      if (streakValue >= 3 && streakValue > previousFeedback.youStreak) {
+        soundManager.play("streak", { volume: 0.24, rate: 1.04 });
       } else if (opponentStreakValue >= 3 && opponentStreakValue > previousFeedback.opponentStreak) {
-        soundManager.play("streak");
-      } else {
-        soundManager.play("correct");
+        soundManager.play("streak", { volume: 0.22, rate: 1.0 });
       }
     };
 
@@ -1661,6 +1838,7 @@ export function GameClient({
     const handleGameOver = (payload: {
       result?: string;
       message?: string;
+      endCondition?: string;
       opponentName?: string;
       scores?: {
         you: number;
@@ -1750,7 +1928,13 @@ export function GameClient({
       setOpponentRematchRequested(false);
       setRematchProgress({ requestedPlayers: 0, requiredPlayers: 2 });
       setStatus("finished");
-      soundManager.play(result === "loss" ? "lose" : "win");
+      if (payload.endCondition === "ko") {
+        soundManager.play(result === "loss" ? "koLose" : "koWin", { volume: 0.38, rate: 1.0, allowOverlap: true });
+      } else if (result === "draw") {
+        soundManager.play("tick", { volume: 0.22, rate: 0.9 });
+      } else {
+        soundManager.play(result === "loss" ? "lose" : "win", { volume: 0.34, rate: 1.0, allowOverlap: true });
+      }
     };
 
     const handleRematchStatus = (payload: {
@@ -2000,6 +2184,18 @@ export function GameClient({
       setUltimateActivating(false);
       ultimateActivateTimeoutRef.current = null;
     }, 1400);
+    soundManager.play("uiClick", { volume: 0.14, rate: 1.0 });
+    const id = yourAvatarId;
+    soundManager.play(
+      id === "flash"
+        ? "ultActivateFlash"
+        : id === "guardian"
+          ? "ultActivateGuardian"
+          : id === "inferno"
+            ? "ultActivateInferno"
+            : "ultActivateShadow",
+      { volume: 0.28, rate: 1.0, allowOverlap: true }
+    );
     socket.emit("activateUltimate");
   };
 
@@ -2081,6 +2277,15 @@ export function GameClient({
     ultimate.implemented &&
     !youEliminated &&
     !ultimateActivating;
+
+  // Keep the answer input always ready in live matches.
+  useEffect(() => {
+    if (status !== "playing") return;
+    if (eliminated.you) return;
+    if (isJamActive || feedback.youAnsweredCurrent) return;
+    const t = setTimeout(() => focusAnswerInput(), 40);
+    return () => clearTimeout(t);
+  }, [status, eliminated.you, isJamActive, feedback.youAnsweredCurrent, focusPulseKey]);
   const roomPlayerCount = roomLobby?.players.length ?? 0;
   const roomReady = roomPlayerCount === 2;
   const rematchCtaLabel = rematchRequested
@@ -2328,6 +2533,198 @@ export function GameClient({
   const localUltimateStatus = getUltimateStatus(ultimate.type, "you");
   const opponentUltimateStatus = getUltimateStatus(ultimate.opponentType, "opponent");
 
+  // Dedicated in-match layout (competitive HUD + sticky action bar).
+  if (isActiveGameplay) {
+    const youHpPct = Math.max(0, Math.min(100, (youHP / MAX_HP) * 100));
+    const oppHpPct = Math.max(0, Math.min(100, (opponentHP / MAX_HP) * 100));
+    const youHpColor = youHpPct > 60 ? "bg-emerald-400" : youHpPct > 30 ? "bg-amber-400" : "bg-rose-500";
+    const oppHpColor = oppHpPct > 60 ? "bg-emerald-400" : oppHpPct > 30 ? "bg-amber-400" : "bg-rose-500";
+
+    return (
+      <section className="fixed inset-0 z-10 bg-slate-950 text-white">
+        {/* Overlays */}
+        <GameOverOverlay result={null} />
+        <UltimateActivationOverlay cue={ultimateCue} />
+
+        <div className="flex h-[100dvh] flex-col overflow-hidden">
+          {/* Top HUD */}
+          <div className="shrink-0 border-b border-white/10 bg-slate-950/85 px-3 pb-2 pt-3 backdrop-blur sm:px-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="truncate text-xs font-bold uppercase tracking-[0.24em] text-slate-400">
+                    {yourName}
+                  </p>
+                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-slate-400">
+                    {opponentName}
+                  </p>
+                </div>
+
+                <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                  {/* You HP */}
+                  <div>
+                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                      <span>HP</span>
+                      <span className="tabular-nums text-slate-300">{youHP}</span>
+                    </div>
+                    <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-800">
+                      <div className={`h-full ${youHpColor}`} style={{ width: `${youHpPct}%` }} />
+                    </div>
+                  </div>
+
+                  {/* Timer + Score */}
+                  <div className="flex flex-col items-center justify-center px-1">
+                    <div className="rounded-full border border-slate-800 bg-slate-950/80 px-3 py-1 text-xs font-black tracking-[0.22em] text-sky-200">
+                      {timerLabel}
+                    </div>
+                    <div className="mt-2 flex items-baseline gap-2">
+                      <span className="text-2xl font-black tabular-nums text-sky-200">{scores.you}</span>
+                      <span className="text-xs font-black uppercase tracking-[0.35em] text-slate-600">vs</span>
+                      <span className="text-2xl font-black tabular-nums text-rose-200">{scores.opponent}</span>
+                    </div>
+                  </div>
+
+                  {/* Opp HP */}
+                  <div>
+                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                      <span>HP</span>
+                      <span className="tabular-nums text-slate-300">{opponentHP}</span>
+                    </div>
+                    <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-800">
+                      <div className={`h-full ${oppHpColor}`} style={{ width: `${oppHpPct}%` }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <SoundToggle muted={muted} onToggle={handleToggleSound} />
+            </div>
+
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <MatchChampionCard
+                model={{
+                  side: "you",
+                  playerName: yourName,
+                  avatarId: yourAvatarId,
+                  ultimateType: normalizeUltimateType(ultimate.type),
+                  ultimateName: ultimate.name,
+                  charge: ultimate.charge,
+                  ready: ultimate.ready,
+                  used: ultimate.used,
+                  implemented: ultimate.implemented,
+                  overclockUntil: ultimate.overclockUntil,
+                  blackoutUntil: ultimate.blackoutUntil,
+                  fortressUntil: ultimate.fortressUntil,
+                  fortressBlocksRemaining: ultimate.fortressBlocksRemaining,
+                  infernoPending: ultimate.infernoPending,
+                  infernoPendingUntil: ultimate.infernoPendingUntil,
+                }}
+              />
+              <MatchChampionCard
+                model={{
+                  side: "opponent",
+                  playerName: opponentName,
+                  avatarId: opponentAvatarId,
+                  ultimateType: normalizeUltimateType(ultimate.opponentType),
+                  ultimateName: ultimate.opponentName,
+                  charge: ultimate.opponentCharge,
+                  ready: ultimate.opponentReady,
+                  used: ultimate.opponentUsed,
+                  implemented: ultimate.opponentImplemented,
+                  overclockUntil: ultimate.opponentOverclockUntil,
+                  blackoutUntil: ultimate.opponentBlackoutUntil,
+                  fortressUntil: ultimate.opponentFortressUntil,
+                  fortressBlocksRemaining: ultimate.opponentFortressBlocksRemaining,
+                  infernoPending: ultimate.opponentInfernoPending,
+                  infernoPendingUntil: ultimate.opponentInfernoPendingUntil,
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Middle: Question zone */}
+          <div className="flex min-h-0 flex-1 flex-col items-stretch justify-center px-3 py-4 sm:px-5">
+            <motion.div animate={animState.questionShakeControls} className="mx-auto w-full max-w-3xl">
+              <div className="relative rounded-[1.5rem] border border-slate-800 bg-slate-900/70 p-4 text-center sm:p-6">
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">
+                  Question
+                </p>
+                <div className="mt-3 flex items-center justify-center">
+                  <p className="text-2xl font-black tracking-tight text-white sm:text-4xl md:text-5xl">
+                    {currentQuestion}
+                  </p>
+                </div>
+
+                <div className="mt-3 min-h-[2.25rem]">
+                  {primaryStatus ? (
+                    <p className={`text-xs font-black uppercase tracking-[0.22em] ${primaryStatus.color}`}>
+                      {primaryStatus.text}
+                    </p>
+                  ) : null}
+                  {secondaryStatus ? (
+                    <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      {secondaryStatus}
+                    </p>
+                  ) : null}
+                </div>
+
+                <FrostBurst active={animState.frostBurstActive} />
+                <SnowfallOverlay active={animState.snowfallActive} />
+              </div>
+            </motion.div>
+          </div>
+
+          {/* Bottom: Sticky action bar */}
+          <div className="shrink-0 border-t border-white/10 bg-slate-950/90 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 backdrop-blur sm:px-5">
+            <form className="mx-auto flex w-full max-w-3xl flex-col gap-2" onSubmit={handleSubmit}>
+              <input
+                ref={answerInputRef}
+                type="text"
+                value={answer}
+                onChange={(event) => handleAnswerChange(event.target.value)}
+                placeholder={
+                  isJamActive
+                    ? "Jammed..."
+                    : youEliminated
+                      ? "Eliminated"
+                      : feedback.youAnsweredCurrent
+                        ? "Waiting..."
+                        : "Type answer…"
+                }
+                disabled={isJamActive || youEliminated || feedback.youAnsweredCurrent}
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                enterKeyHint="go"
+                className="h-12 w-full rounded-2xl border border-slate-700 bg-slate-900/80 px-4 text-slate-100 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/35 disabled:cursor-not-allowed disabled:opacity-60"
+              />
+
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  className="h-11 w-full"
+                  type="submit"
+                  disabled={!answer.trim() || isJamActive || youEliminated || feedback.youAnsweredCurrent}
+                >
+                  Submit
+                </Button>
+                <Button
+                  className="h-11 w-full"
+                  onClick={handleActivateUltimate}
+                  disabled={!canUseUltimate}
+                  loading={ultimateActivating}
+                  loadingText="Activating..."
+                  type="button"
+                >
+                  {ultimate.ready && !ultimate.used ? "Ultimate" : "Charge"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="relative w-full max-w-5xl rounded-[2rem] border border-white/10 bg-slate-950/70 p-3 shadow-glow backdrop-blur sm:p-5 md:p-7 lg:p-8">
       {/* Game-over overlays (win glow / lose vignette) */}
@@ -2422,233 +2819,343 @@ export function GameClient({
         </div>
 
         {/* Player panels */}
-        <div className="grid gap-3 rounded-3xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4 md:grid-cols-[minmax(0,1fr)_3rem_minmax(0,1fr)] md:items-stretch md:gap-4 md:p-5 lg:p-6">
-          {/* You */}
-          <div className="relative grid min-h-[22rem] grid-rows-[auto_2.5rem_minmax(8.5rem,auto)] gap-2 sm:min-h-[23rem] sm:gap-3">
-            <PlayerPanel
-              label={yourName}
-              score={scores.you}
-              rating={ratings.you}
-              strikes={strikes.you}
-              eliminated={youEliminated}
-              avatar={yourAvatar}
-              streakLabel={isActiveGameplay ? yourStreakLabel : null}
-              streakLevel={isActiveGameplay ? yourStreakLevel : null}
-              streakEffect={yourStreakEffect}
-              fastActive={isActiveGameplay && feedback.youFast}
-              highlighted={
-                isActiveGameplay &&
-                (feedback.youFast || !!yourStreakLabel)
-              }
-              pulseKey={feedback.youPulseKey}
-              scoreGlowKey={animState.youScoreGlowKey}
-              shieldBlockFlashKey={animState.youShieldBlockFlashKey}
-              powerUpGlowKey={animState.youPowerUpGlowKey}
-              ultimateFxKey={youUltimateFxKey}
-              ultimateFxType={youUltimateFxType}
-              hp={showHP ? youHP : undefined}
-              maxHp={MAX_HP}
-              hitKey={youHitKey}
-              latestDamage={latestYouDamage}
+        {isWaitingState ? (
+          <motion.div
+            className="relative grid gap-3 rounded-3xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4 md:grid-cols-[minmax(0,1fr)_3rem_minmax(0,1fr)] md:items-stretch md:gap-4 md:p-5 lg:p-6"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: "easeOut" }}
+          >
+            {/* Subtle shimmer */}
+            <motion.div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 overflow-hidden rounded-3xl"
+              initial={{ opacity: 0.25 }}
+              animate={{ opacity: [0.16, 0.28, 0.16] }}
+              transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+              style={{
+                background:
+                  "radial-gradient(ellipse at 30% 20%, rgba(56,189,248,0.18) 0%, transparent 55%), radial-gradient(ellipse at 70% 60%, rgba(167,139,250,0.10) 0%, transparent 60%)"
+              }}
             />
-            <AnimatePresence>
-              {scoreImpactKey.you > 0 ? (
-                <motion.div
-                  key={`score-you-${scoreImpactKey.you}`}
-                  className="pointer-events-none absolute inset-0 z-10 rounded-3xl"
-                  initial={{ opacity: 0, scale: 0.98 }}
-                  animate={{ opacity: [0, isCloseScore ? 0.48 : 0.34, 0], scale: [0.98, 1.01, 1] }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: isCloseScore ? 0.34 : 0.28, ease: "easeOut" }}
-                  style={{
-                    background:
-                      "radial-gradient(ellipse at 25% 35%, rgba(56,189,248,0.46) 0%, rgba(56,189,248,0.12) 34%, transparent 68%)"
-                  }}
-                />
-              ) : null}
-            </AnimatePresence>
-            {/* Symmetry spacer - matches OpponentPresence min-height in opponent column */}
-            <div className="min-h-[2.5rem]" aria-hidden="true" />
-            <div
-              className={`min-h-[8.5rem] rounded-xl border bg-slate-950/70 px-3 py-2 ${
-                canUseUltimate ? "border-emerald-500/40" : "border-slate-800"
-              }`}
-            >
-              <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-slate-400">
-                <span>{ultimate.name}</span>
-                <span>{Math.round(ultimate.charge)}%</span>
-              </div>
-              {/* Charge bar */}
-              <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-slate-800">
-                <motion.div
-                  className={`h-full rounded-full transition-colors duration-300 ${ultimate.ready ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" : "bg-sky-400"}`}
-                  animate={{ width: `${Math.max(0, Math.min(100, ultimate.charge))}%` }}
-                  transition={{ duration: 0.25 }}
-                />
+
+            {/* You (ready) */}
+            <div className="relative grid min-h-[22rem] grid-rows-[auto_2.5rem_minmax(8.5rem,auto)] gap-2 sm:min-h-[23rem] sm:gap-3">
+              <PlayerPanel
+                label={yourName}
+                score={scores.you}
+                rating={ratings.you}
+                strikes={strikes.you}
+                eliminated={youEliminated}
+                streakLabel={null}
+                streakLevel={null}
+                streakEffect={yourStreakEffect}
+                fastActive={false}
+                highlighted
+                pulseKey={feedback.youPulseKey}
+                scoreGlowKey={animState.youScoreGlowKey}
+                shieldBlockFlashKey={0}
+                powerUpGlowKey={0}
+                ultimateFxKey={0}
+                ultimateFxType={null}
+                hp={undefined}
+                hitKey={0}
+                latestDamage={null}
+              />
+
+              <div className="min-h-[2.5rem] flex items-center justify-center" aria-hidden="true">
+                <span className="rounded-full border border-emerald-400/25 bg-emerald-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-emerald-200 shadow-[0_0_20px_rgba(52,211,153,0.16)]">
+                  READY
+                </span>
               </div>
 
-              {/* Active effect progress bar */}
-              {localUltimateStatus.progress !== null && (
-                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800">
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/55 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">Matchmaking</p>
+                <p className="mt-2 text-sm text-slate-200">Searching for an opponent…</p>
+                <motion.p
+                  className="mt-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400"
+                  animate={{ opacity: [0.35, 1, 0.35] }}
+                  transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+                >
+                  Finding match
+                  <span className="inline-block w-6 text-left">
+                    <motion.span
+                      animate={{ opacity: [0.2, 1, 0.2] }}
+                      transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+                    >
+                      ...
+                    </motion.span>
+                  </span>
+                </motion.p>
+              </div>
+            </div>
+
+            {/* VS element (dimmed) */}
+            <motion.div
+              className="flex items-center justify-center self-center pb-0 text-xs font-semibold uppercase tracking-[0.35em] text-slate-500 sm:text-sm"
+              initial={{ opacity: 0.35, scale: 0.92 }}
+              animate={{ opacity: [0.35, 0.55, 0.35], scale: [0.92, 1, 0.92] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+            >
+              vs
+            </motion.div>
+
+            {/* Opponent placeholder */}
+            <motion.div
+              className="relative grid min-h-[22rem] grid-rows-[auto_2.5rem_minmax(8.5rem,auto)] gap-2 sm:min-h-[23rem] sm:gap-3"
+              initial={{ opacity: 0.7 }}
+              animate={{ opacity: [0.55, 0.85, 0.55] }}
+              transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <div className="relative w-full min-h-[11.5rem] rounded-2xl border border-slate-800 bg-slate-950/80 p-3 text-center sm:min-h-[12.25rem] sm:p-4">
+                <p className="truncate px-1 text-xs uppercase tracking-[0.2em] text-slate-400">
+                  Searching for opponent…
+                </p>
+                <div className="mt-3 flex items-center justify-center">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-700 bg-slate-900/60 text-3xl text-slate-200 shadow-[0_0_24px_rgba(56,189,248,0.12)]">
+                    ?
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center justify-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-slate-500/70" />
                   <motion.div
-                    className={`h-full ${localUltimateStatus.accent}`}
-                    animate={{ width: `${Math.round((localUltimateStatus.progress) * 100)}%` }}
-                    transition={{ duration: 0.2 }}
+                    className="h-2 w-2 rounded-full bg-slate-500/70"
+                    animate={{ opacity: [0.2, 1, 0.2] }}
+                    transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut", delay: 0.15 }}
+                  />
+                  <motion.div
+                    className="h-2 w-2 rounded-full bg-slate-500/70"
+                    animate={{ opacity: [0.2, 1, 0.2] }}
+                    transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut", delay: 0.3 }}
                   />
                 </div>
-              )}
-
-              {/* Status label */}
-              <div className="mt-1.5 flex items-center justify-between gap-1">
-                <p className={`text-[10px] font-bold uppercase tracking-[0.18em] ${
-                  ultimate.ready && !ultimate.used ? "text-emerald-300" :
-                  localUltimateStatus.progress !== null ? "text-sky-300" :
-                  "text-slate-400"
-                }`}>
-                  {localUltimateStatus.label}
-                </p>
-                <p className="text-[9px] text-slate-500">{localUltimateStatus.sublabel}</p>
               </div>
 
-              <Button
-                className={`mt-2 w-full py-2 text-xs font-bold ${canUseUltimate ? "shadow-lg shadow-emerald-500/25" : ""}`}
-                onClick={handleActivateUltimate}
-                disabled={!canUseUltimate}
-                loading={ultimateActivating}
-                loadingText="Activating..."
-              >
-                {ultimate.used
-                  ? "Used"
-                  : !ultimate.implemented
-                  ? "Coming Soon"
-                  : ultimate.ready
-                  ? `⚡ Activate ${ultimate.name}`
-                  : `Charging ${Math.round(ultimate.charge)}%`}
-              </Button>
-            </div>
-            <FloatingLabel items={youFloatingItems} />
-            <EmoteDisplay items={youEmoteItems} />
-          </div>
-
-          <div className="flex items-center justify-center self-center pb-0 text-xs font-semibold uppercase tracking-[0.35em] text-slate-500 sm:text-sm">
-            vs
-          </div>
-
-          {/* Opponent */}
-          <div className="relative grid min-h-[22rem] grid-rows-[auto_2.5rem_minmax(8.5rem,auto)] gap-2 sm:min-h-[23rem] sm:gap-3">
-            <PlayerPanel
-              label={opponentName}
-              score={scores.opponent}
-              rating={ratings.opponent}
-              strikes={strikes.opponent}
-              eliminated={opponentEliminated}
-              avatar={opponentAvatar}
-              streakLabel={isActiveGameplay ? opponentStreakLabel : null}
-              streakLevel={isActiveGameplay ? opponentStreakLevel : null}
-              streakEffect={opponentStreakEffect}
-              fastActive={isActiveGameplay && feedback.opponentFast}
-              highlighted={
-                isActiveGameplay &&
-                (feedback.opponentFast || !!opponentStreakLabel)
-              }
-              pulseKey={feedback.opponentPulseKey}
-              scoreGlowKey={animState.opponentScoreGlowKey}
-              shieldBlockFlashKey={animState.opponentShieldBlockFlashKey}
-              powerUpGlowKey={animState.opponentPowerUpGlowKey}
-              ultimateFxKey={opponentUltimateFxKey}
-              ultimateFxType={opponentUltimateFxType}
-              hp={showHP ? opponentHP : undefined}
-              maxHp={MAX_HP}
-              hitKey={opponentHitKey}
-              latestDamage={latestOpponentDamage}
-            />
-            <AnimatePresence>
-              {scoreImpactKey.opponent > 0 ? (
-                <motion.div
-                  key={`score-opp-${scoreImpactKey.opponent}`}
-                  className="pointer-events-none absolute inset-0 z-10 rounded-3xl"
-                  initial={{ opacity: 0, scale: 0.98 }}
-                  animate={{ opacity: [0, isCloseScore ? 0.48 : 0.34, 0], scale: [0.98, 1.01, 1] }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: isCloseScore ? 0.34 : 0.28, ease: "easeOut" }}
-                  style={{
-                    background:
-                      "radial-gradient(ellipse at 75% 35%, rgba(251,113,133,0.46) 0%, rgba(251,113,133,0.12) 34%, transparent 68%)"
+              <div className="min-h-[2.5rem]" aria-hidden="true" />
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/55 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">Opponent</p>
+                <p className="mt-2 text-sm text-slate-300">Searching…</p>
+              </div>
+            </motion.div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key={shakeKey}
+            className="grid gap-3 rounded-3xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4 md:grid-cols-[minmax(0,1fr)_3rem_minmax(0,1fr)] md:items-stretch md:gap-4 md:p-5 lg:p-6"
+            initial={{ x: 0, y: 0 }}
+            animate={{
+              x: [0, shakeVector.x, -shakeVector.x * 0.65, 0],
+              y: [0, shakeVector.y, -shakeVector.y * 0.65, 0],
+            }}
+            transition={{ duration: 0.14, ease: "easeOut" }}
+          >
+            {/* You */}
+            <div className="relative grid min-h-[22rem] grid-rows-[auto_2.5rem_minmax(8.5rem,auto)] gap-2 sm:min-h-[23rem] sm:gap-3">
+              <PlayerPanel
+                label={yourName}
+                score={scores.you}
+                rating={ratings.you}
+                strikes={strikes.you}
+                eliminated={youEliminated}
+                avatar={yourAvatar}
+                streakLabel={isActiveGameplay ? yourStreakLabel : null}
+                streakLevel={isActiveGameplay ? yourStreakLevel : null}
+                streakEffect={yourStreakEffect}
+                fastActive={isActiveGameplay && feedback.youFast}
+                highlighted={
+                  isActiveGameplay &&
+                  (feedback.youFast || !!yourStreakLabel)
+                }
+                pulseKey={feedback.youPulseKey}
+                scoreGlowKey={animState.youScoreGlowKey}
+                shieldBlockFlashKey={animState.youShieldBlockFlashKey}
+                powerUpGlowKey={animState.youPowerUpGlowKey}
+                ultimateFxKey={youUltimateFxKey}
+                ultimateFxType={youUltimateFxType}
+                hp={showHP ? youHP : undefined}
+                maxHp={MAX_HP}
+                hitKey={youHitKey}
+                latestDamage={latestYouDamage}
+                hitType={youHitType}
+                hitIntensity={youHitIntensity}
+                ultReadyCueKey={ultReadyCueKey.you}
+                overclockUntil={ultimate.overclockUntil}
+                blackoutUntil={ultimate.blackoutUntil}
+                fortressUntil={ultimate.fortressUntil}
+                fortressBlocksRemaining={ultimate.fortressBlocksRemaining}
+                infernoPendingUntil={ultimate.infernoPendingUntil}
+              />
+              <AnimatePresence>
+                {scoreImpactKey.you > 0 ? (
+                  <motion.div
+                    key={`score-you-${scoreImpactKey.you}`}
+                    className="pointer-events-none absolute inset-0 z-10 rounded-3xl"
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: [0, isCloseScore ? 0.48 : 0.34, 0], scale: [0.98, 1.01, 1] }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: isCloseScore ? 0.34 : 0.28, ease: "easeOut" }}
+                    style={{
+                      background:
+                        "radial-gradient(ellipse at 25% 35%, rgba(56,189,248,0.46) 0%, rgba(56,189,248,0.12) 34%, transparent 68%)"
+                    }}
+                  />
+                ) : null}
+              </AnimatePresence>
+              {/* Symmetry spacer - matches OpponentPresence min-height in opponent column */}
+              <div className="min-h-[2.5rem]" aria-hidden="true" />
+              <div className="space-y-2">
+                <MatchChampionCard
+                  model={{
+                    side: "you",
+                    playerName: yourName,
+                    avatarId: yourAvatarId,
+                    ultimateType: normalizeUltimateType(ultimate.type),
+                    ultimateName: ultimate.name,
+                    charge: ultimate.charge,
+                    ready: ultimate.ready,
+                    used: ultimate.used,
+                    implemented: ultimate.implemented,
+                    overclockUntil: ultimate.overclockUntil,
+                    blackoutUntil: ultimate.blackoutUntil,
+                    fortressUntil: ultimate.fortressUntil,
+                    fortressBlocksRemaining: ultimate.fortressBlocksRemaining,
+                    infernoPending: ultimate.infernoPending,
+                    infernoPendingUntil: ultimate.infernoPendingUntil,
                   }}
                 />
-              ) : null}
-            </AnimatePresence>
-            <OpponentPresence
-              activity={opponentActivity}
-              opponentAnswered={feedback.opponentAnsweredCurrent}
-              youAnswered={feedback.youAnsweredCurrent}
-              isActive={isActiveGameplay}
-            />
-            <div
-              className={`min-h-[8.5rem] rounded-xl border bg-slate-950/70 px-3 py-2 transition-colors duration-300 ${
-                ultimate.opponentReady && !ultimate.opponentUsed ? "border-rose-500/50 shadow-[0_0_10px_rgba(239,68,68,0.15)]" : "border-slate-800"
-              }`}
-            >
-              <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-slate-400">
-                <span className={ultimate.opponentReady && !ultimate.opponentUsed ? "text-rose-300 font-bold" : ""}>{ultimate.opponentName}</span>
-                <span>{Math.round(ultimate.opponentCharge)}%</span>
+
+                <Button
+                  className={`w-full py-2 text-xs font-black uppercase tracking-[0.2em] ${
+                    canUseUltimate ? "shadow-lg shadow-emerald-500/25" : ""
+                  }`}
+                  onClick={handleActivateUltimate}
+                  disabled={!canUseUltimate}
+                  loading={ultimateActivating}
+                  loadingText="Activating..."
+                >
+                  {ultimate.used
+                    ? "Used"
+                    : !ultimate.implemented
+                      ? "Coming Soon"
+                      : ultimate.ready
+                        ? "Activate Ultimate"
+                        : `Charging ${Math.round(ultimate.charge)}%`}
+                </Button>
               </div>
-              {/* Charge bar */}
-              <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-slate-800">
-                <motion.div
-                  className={`h-full rounded-full transition-colors duration-300 ${ultimate.opponentReady ? "bg-rose-400 shadow-[0_0_8px_rgba(248,113,133,0.6)]" : "bg-slate-500"}`}
-                  animate={{ width: `${Math.max(0, Math.min(100, ultimate.opponentCharge))}%` }}
-                  transition={{ duration: 0.2 }}
-                />
-              </div>
-              {/* Active effect progress */}
-              {opponentUltimateStatus.progress !== null && (
-                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800">
-                  <motion.div
-                    className={`h-full ${opponentUltimateStatus.accent}`}
-                    animate={{ width: `${Math.round((opponentUltimateStatus.progress) * 100)}%` }}
-                    transition={{ duration: 0.2 }}
-                  />
-                </div>
-              )}
-              <div className="mt-1.5 flex items-center justify-between gap-1">
-                <p className={`text-[10px] font-bold uppercase tracking-[0.18em] ${
-                  ultimate.opponentReady && !ultimate.opponentUsed ? "text-rose-300" :
-                  opponentUltimateStatus.progress !== null ? "text-sky-300" :
-                  "text-slate-400"
-                }`}>
-                  {opponentUltimateStatus.label}
-                </p>
-                <p className="text-[9px] text-slate-500">{opponentUltimateStatus.sublabel}</p>
-              </div>
-              <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-slate-500">
-                {ultimate.opponentUsed
-                  ? "Used"
-                  : !ultimate.opponentImplemented
-                  ? "Soon"
-                  : ultimate.opponentReady
-                  ? "⚠ Opponent Ready"
-                  : "Charging"}
-              </p>
+              <FloatingLabel items={youFloatingItems} />
+              <EmoteDisplay items={youEmoteItems} />
             </div>
-            <FloatingLabel items={opponentFloatingItems} />
-            <EmoteDisplay items={opponentEmoteItems} />
-            {/* Emote flash: brief rose glow when opponent taunts */}
-            {opponentEmoteFlashKey > 0 && (
-              <motion.div
-                key={`oef-${opponentEmoteFlashKey}`}
-                className="pointer-events-none absolute inset-0 z-10 rounded-3xl"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: [0, 0.3, 0] }}
-                transition={{ duration: 0.65, ease: "easeOut" }}
-                style={{
-                  background:
-                    "radial-gradient(ellipse at 50% 30%, rgba(251,113,133,0.55) 0%, transparent 72%)",
+
+            <motion.div
+              className="flex items-center justify-center self-center pb-0 text-xs font-semibold uppercase tracking-[0.35em] text-slate-500 sm:text-sm"
+              initial={{ opacity: 0.45, scale: 0.9 }}
+              animate={{ opacity: [0.45, 1, 0.65], scale: [0.9, 1.18, 1] }}
+              transition={{ duration: 0.55, ease: "easeOut" }}
+            >
+              vs
+            </motion.div>
+
+            {/* Opponent */}
+            <motion.div
+              className="relative grid min-h-[22rem] grid-rows-[auto_2.5rem_minmax(8.5rem,auto)] gap-2 sm:min-h-[23rem] sm:gap-3"
+              initial={{ opacity: 0, x: 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.35, ease: "easeOut" }}
+            >
+              <PlayerPanel
+                label={opponentName}
+                score={scores.opponent}
+                rating={ratings.opponent}
+                strikes={strikes.opponent}
+                eliminated={opponentEliminated}
+                avatar={opponentAvatar}
+                streakLabel={isActiveGameplay ? opponentStreakLabel : null}
+                streakLevel={isActiveGameplay ? opponentStreakLevel : null}
+                streakEffect={opponentStreakEffect}
+                fastActive={isActiveGameplay && feedback.opponentFast}
+                highlighted={
+                  isActiveGameplay &&
+                  (feedback.opponentFast || !!opponentStreakLabel)
+                }
+                pulseKey={feedback.opponentPulseKey}
+                scoreGlowKey={animState.opponentScoreGlowKey}
+                shieldBlockFlashKey={animState.opponentShieldBlockFlashKey}
+                powerUpGlowKey={animState.opponentPowerUpGlowKey}
+                ultimateFxKey={opponentUltimateFxKey}
+                ultimateFxType={opponentUltimateFxType}
+                hp={showHP ? opponentHP : undefined}
+                maxHp={MAX_HP}
+                hitKey={opponentHitKey}
+                latestDamage={latestOpponentDamage}
+                hitType={opponentHitType}
+                hitIntensity={opponentHitIntensity}
+                ultReadyCueKey={ultReadyCueKey.opponent}
+                overclockUntil={ultimate.opponentOverclockUntil}
+                blackoutUntil={ultimate.opponentBlackoutUntil}
+                fortressUntil={ultimate.opponentFortressUntil}
+                fortressBlocksRemaining={ultimate.opponentFortressBlocksRemaining}
+                infernoPendingUntil={ultimate.opponentInfernoPendingUntil}
+              />
+              <AnimatePresence>
+                {scoreImpactKey.opponent > 0 ? (
+                  <motion.div
+                    key={`score-opp-${scoreImpactKey.opponent}`}
+                    className="pointer-events-none absolute inset-0 z-10 rounded-3xl"
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: [0, isCloseScore ? 0.48 : 0.34, 0], scale: [0.98, 1.01, 1] }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: isCloseScore ? 0.34 : 0.28, ease: "easeOut" }}
+                    style={{
+                      background:
+                        "radial-gradient(ellipse at 75% 35%, rgba(251,113,133,0.46) 0%, rgba(251,113,133,0.12) 34%, transparent 68%)"
+                    }}
+                  />
+                ) : null}
+              </AnimatePresence>
+              <OpponentPresence
+                activity={opponentActivity}
+                opponentAnswered={feedback.opponentAnsweredCurrent}
+                youAnswered={feedback.youAnsweredCurrent}
+                isActive={isActiveGameplay}
+              />
+              <MatchChampionCard
+                model={{
+                  side: "opponent",
+                  playerName: opponentName,
+                  avatarId: opponentAvatarId,
+                  ultimateType: normalizeUltimateType(ultimate.opponentType),
+                  ultimateName: ultimate.opponentName,
+                  charge: ultimate.opponentCharge,
+                  ready: ultimate.opponentReady,
+                  used: ultimate.opponentUsed,
+                  implemented: ultimate.opponentImplemented,
+                  overclockUntil: ultimate.opponentOverclockUntil,
+                  blackoutUntil: ultimate.opponentBlackoutUntil,
+                  fortressUntil: ultimate.opponentFortressUntil,
+                  fortressBlocksRemaining: ultimate.opponentFortressBlocksRemaining,
+                  infernoPending: ultimate.opponentInfernoPending,
+                  infernoPendingUntil: ultimate.opponentInfernoPendingUntil,
                 }}
               />
-            )}
-          </div>
-        </div>
+              <FloatingLabel items={opponentFloatingItems} />
+              <EmoteDisplay items={opponentEmoteItems} />
+              {/* Emote flash: brief rose glow when opponent taunts */}
+              {opponentEmoteFlashKey > 0 && (
+                <motion.div
+                  key={`oef-${opponentEmoteFlashKey}`}
+                  className="pointer-events-none absolute inset-0 z-10 rounded-3xl"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: [0, 0.3, 0] }}
+                  transition={{ duration: 0.65, ease: "easeOut" }}
+                  style={{
+                    background:
+                      "radial-gradient(ellipse at 50% 30%, rgba(251,113,133,0.55) 0%, transparent 72%)",
+                  }}
+                />
+              )}
+            </motion.div>
+          </motion.div>
+        )}
 
         {isRoomLobby && roomLobby ? (
           <div className="rounded-[1.75rem] border border-slate-700 bg-slate-900/70 p-4 sm:p-6">
@@ -2856,37 +3363,8 @@ export function GameClient({
             </motion.div>
 
             <div className="min-h-[9.5rem]">
-              {status === "playing" ? (
-                <form className="space-y-3 transition-all duration-300" onSubmit={handleSubmit}>
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium uppercase tracking-[0.2em] text-slate-400">
-                      Your Answer
-                    </span>
-                    <input
-                      type="text"
-                      value={answer}
-                      onChange={(event) => handleAnswerChange(event.target.value)}
-                      placeholder={
-                        isJamActive
-                          ? "Jammed..."
-                          : youEliminated
-                          ? "Eliminated"
-                          : feedback.youAnsweredCurrent
-                          ? "Waiting for opponent..."
-                          : "Type your answer and press Enter"
-                      }
-                      disabled={isJamActive || youEliminated || feedback.youAnsweredCurrent}
-                      className="h-14 w-full rounded-2xl border border-slate-700 bg-slate-900/80 px-4 text-slate-100 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/35 disabled:cursor-not-allowed disabled:opacity-60"
-                    />
-                  </label>
-
-                  <Button className="h-12 w-full" type="submit" disabled={!answer.trim() || isJamActive || youEliminated || feedback.youAnsweredCurrent}>
-                    Submit Answer
-                  </Button>
-                </form>
-              ) : (
-                <div aria-hidden="true" className="h-[9.5rem]" />
-              )}
+              {/* Live match uses the dedicated fixed in-match layout above. */}
+              <div aria-hidden="true" className="h-[9.5rem]" />
             </div>
           </>
         ) : (

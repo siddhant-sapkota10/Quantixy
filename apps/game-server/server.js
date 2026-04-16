@@ -9,10 +9,11 @@ const POWER_UPS = require("../../packages/shared/powerups.json");
 const { verifyAccessToken } = require("./lib/supabase");
 const {
   generateQuestion,
+  isCorrectAnswer,
   isValidDifficulty,
   isValidTopic,
   normalizeAnswer
-} = require("./lib/question-generators");
+} = require("../../packages/shared/question-engine");
 const {
   DEFAULT_RATING,
   findOrCreatePlayerFromAuthUser,
@@ -70,6 +71,11 @@ const HP_BASE_PER_POINT = 8;
 const HP_FAST_BONUS = 4;
 const HP_STREAK_3_BONUS = 2;
 const HP_STREAK_5_BONUS = 4;
+// Ultimate balance tuning (ms)
+const RAPID_FIRE_DURATION_MS = 6000;
+const FORTRESS_DURATION_MS = 8000;
+const JAM_DURATION_MS = 3000;
+const INFERNO_ARMED_DURATION_MS = 10000;
 const ROOM_CODE_LENGTH = 6;
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -330,6 +336,7 @@ function clearUltimateTimeoutMap(game, key) {
 function clearUltimateEffects(game) {
   clearUltimateTimeoutMap(game, "titanTimeout");
   clearUltimateTimeoutMap(game, "blackoutTimeout");
+  clearUltimateTimeoutMap(game, "infernoTimeout");
   game.titanUntil = buildTitanUntilMap(game.players);
   game.blackoutUntil = buildBlackoutUntilMap(game.players);
   game.overclockUntil = buildOverclockUntilMap(game.players);
@@ -338,6 +345,7 @@ function clearUltimateEffects(game) {
   game.novaBonusRemaining = buildNovaBonusRemainingMap(game.players);
   game.fortressBlocksRemaining = buildFortressBlocksMap(game.players);
   game.infernoPending = buildInfernoPendingMap(game.players);
+  game.infernoPendingUntil = buildInfernoPendingUntilMap(game.players);
 }
 
 function buildScoreMap(players) {
@@ -401,6 +409,14 @@ function buildFortressBlocksMap(players) {
 
 function buildInfernoPendingMap(players) {
   return Object.fromEntries(players.map((player) => [player.socketId, false]));
+}
+
+function buildInfernoPendingUntilMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, 0]));
+}
+
+function buildInfernoTimeoutMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, null]));
 }
 
 function buildUltimateEffectTimeoutMap(players) {
@@ -574,6 +590,9 @@ function getUltimateDescriptionForPlayer(game, socketId) {
 }
 
 function getUltimateDurationMs(ultimateType) {
+  if (ultimateType === "rapid_fire") return RAPID_FIRE_DURATION_MS;
+  if (ultimateType === "shield") return FORTRESS_DURATION_MS;
+  if (ultimateType === "jam") return JAM_DURATION_MS;
   const avatar = AVATARS.find((entry) => entry.ultimateId === ultimateType);
   return avatar?.ultimateMeta?.durationMs ?? ULTIMATE_DEFAULT_DURATION_MS;
 }
@@ -627,7 +646,9 @@ function buildPlayerUltimateState(game, socketId) {
     novaBonusRemaining: game.novaBonusRemaining[socketId] ?? 0,
     opponentNovaBonusRemaining: opponentId ? game.novaBonusRemaining[opponentId] ?? 0 : 0,
     infernoPending: !!game.infernoPending[socketId],
-    opponentInfernoPending: opponentId ? !!game.infernoPending[opponentId] : false
+    infernoPendingUntil: game.infernoPendingUntil?.[socketId] ?? 0,
+    opponentInfernoPending: opponentId ? !!game.infernoPending[opponentId] : false,
+    opponentInfernoPendingUntil: opponentId ? game.infernoPendingUntil?.[opponentId] ?? 0 : 0
   };
 }
 
@@ -851,8 +872,10 @@ function resetGameState(game) {
   game.flashBonusRemaining = buildFlashBonusRemainingMap(game.players);
   game.novaBonusRemaining = buildNovaBonusRemainingMap(game.players);
   game.infernoPending = buildInfernoPendingMap(game.players);
+  game.infernoPendingUntil = buildInfernoPendingUntilMap(game.players);
   game.titanTimeout = buildUltimateEffectTimeoutMap(game.players);
   game.blackoutTimeout = buildUltimateEffectTimeoutMap(game.players);
+  game.infernoTimeout = buildInfernoTimeoutMap(game.players);
   game.powerUpInventory = buildPowerUpInventoryMap(game.players);
   game.powerUpUsedList = buildPowerUpUsedListMap(game.players);
   game.freezeUntil = buildFreezeMap(game.players);
@@ -1185,6 +1208,9 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     const infernoMin = typeof infernoMeta.minimumPoints === "number" ? infernoMeta.minimumPoints : 2;
     awardedPoints = Math.max(awardedPoints, infernoMin);
     game.infernoPending[playerSocketId] = false;
+    game.infernoPendingUntil[playerSocketId] = 0;
+    clearTimeout(game.infernoTimeout[playerSocketId]);
+    game.infernoTimeout[playerSocketId] = null;
   }
 
   if (isActiveUntil(game.overclockUntil[playerSocketId])) {
@@ -1204,9 +1230,29 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     if (!game.hp) {
       game.hp = buildHpMap(game.players);
     }
-    const nextOpponentHp = Math.max(0, (game.hp[opponent.socketId] ?? MAX_HP) - damage);
-    game.hp[opponent.socketId] = nextOpponentHp;
-    knockedOutOpponent = nextOpponentHp <= 0;
+    // Guardian fortress shield can block incoming damage hits.
+    const blockedByProtection = damage > 0 ? consumeIncomingProtection(game, opponent.socketId) : null;
+    const damageBlocked = Boolean(blockedByProtection);
+
+    if (damageBlocked) {
+      io.to(playerSocketId).emit("shieldBlocked", {
+        by: "you",
+        target: "opponent",
+        blockedType: "damage",
+        ...buildPlayerPowerState(game, playerSocketId)
+      });
+
+      io.to(opponent.socketId).emit("shieldBlocked", {
+        by: "opponent",
+        target: "you",
+        blockedType: "damage",
+        ...buildPlayerPowerState(game, opponent.socketId)
+      });
+    } else {
+      const nextOpponentHp = Math.max(0, (game.hp[opponent.socketId] ?? MAX_HP) - damage);
+      game.hp[opponent.socketId] = nextOpponentHp;
+      knockedOutOpponent = nextOpponentHp <= 0;
+    }
   }
 
   const playerOneSocketId = game.players[0].socketId;
@@ -1557,8 +1603,10 @@ function createActiveGame(players, topic, difficulty, customRoomCode = null) {
     flashBonusRemaining: buildFlashBonusRemainingMap(players),
     novaBonusRemaining: buildNovaBonusRemainingMap(players),
     infernoPending: buildInfernoPendingMap(players),
+    infernoPendingUntil: buildInfernoPendingUntilMap(players),
     titanTimeout: buildUltimateEffectTimeoutMap(players),
     blackoutTimeout: buildUltimateEffectTimeoutMap(players),
+    infernoTimeout: buildInfernoTimeoutMap(players),
     powerUpInventory: buildPowerUpInventoryMap(players),
     powerUpUsedList: buildPowerUpUsedListMap(players),
     freezeUntil: buildFreezeMap(players),
@@ -2169,6 +2217,23 @@ function useAvatarUltimate(roomId, playerSocketId) {
 
   if (ultimateType === "double") {
     game.infernoPending[playerSocketId] = true;
+    game.infernoPendingUntil[playerSocketId] = now + INFERNO_ARMED_DURATION_MS;
+    clearTimeout(game.infernoTimeout[playerSocketId]);
+    game.infernoTimeout[playerSocketId] = setTimeout(() => {
+      const activeGame = activeGames.get(roomId);
+      if (!activeGame) return;
+      if (!activeGame.infernoPending[playerSocketId]) return;
+      activeGame.infernoPending[playerSocketId] = false;
+      activeGame.infernoPendingUntil[playerSocketId] = 0;
+      activeGame.infernoTimeout[playerSocketId] = null;
+      emitUltimateEnded(
+        activeGame,
+        playerSocketId,
+        opponent.socketId,
+        { by: "you", target: "you", type: "double", effect: "inferno_armed_expired" },
+        { by: "opponent", target: "opponent", type: "double", effect: "inferno_armed_expired" }
+      );
+    }, INFERNO_ARMED_DURATION_MS);
     emitUltimateApplied(
       game,
       roomId,
@@ -2390,7 +2455,7 @@ io.on("connection", (socket) => {
 
     const hadDoublePoints = isActiveUntil(game.doublePointsUntil[socket.id]);
 
-    if (normalizeAnswer(answer) === normalizeAnswer(currentQuestion.answer)) {
+    if (isCorrectAnswer(answer, currentQuestion.answer, currentQuestion.answerType)) {
       if (hadDoublePoints) {
         game.doublePointsUntil[socket.id] = 0;
       }

@@ -28,6 +28,18 @@ function OverlayContent({ cue }: { cue: UltimateActivationCue }) {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
     >
+      {/* Screen pulse / emphasis */}
+      <motion.div
+        className="absolute inset-0"
+        initial={{ opacity: 0, scale: 1 }}
+        animate={{ opacity: [0, 0.22, 0.1, 0], scale: [1, 1.012, 1.006, 1] }}
+        transition={{ duration: 0.42, ease: "easeOut" }}
+        style={{
+          background:
+            "radial-gradient(ellipse at 50% 25%, rgba(255,255,255,0.10) 0%, transparent 62%)"
+        }}
+      />
+
       <motion.div
         className="absolute inset-0"
         initial={{ opacity: 0 }}
@@ -124,9 +136,9 @@ function OverlayContent({ cue }: { cue: UltimateActivationCue }) {
       />
 
       <motion.div
-        initial={{ opacity: 0, y: -10, scale: 0.95 }}
-        animate={{ opacity: [0, 1, 1, 0], y: [-10, 0, 0, -5], scale: [0.95, 1, 1, 0.98] }}
-        transition={{ duration: 0.96, ease: "easeOut" }}
+        initial={{ opacity: 0, y: -12, scale: 0.92 }}
+        animate={{ opacity: [0, 1, 1, 0], y: [-12, 0, 0, -6], scale: [0.92, 1.02, 1, 0.98] }}
+        transition={{ duration: 1.02, ease: "easeOut" }}
         className="absolute left-1/2 top-2 z-10 w-[calc(100%-0.75rem)] max-w-[32rem] -translate-x-1/2 px-1 sm:top-3 sm:w-auto sm:max-w-[38rem]"
       >
         <div
@@ -159,6 +171,9 @@ function OverlayContent({ cue }: { cue: UltimateActivationCue }) {
               {config.ultimateName}
             </p>
           </div>
+          <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.22em] text-slate-300">
+            {config.icon} {config.ultimateName.toUpperCase()}
+          </p>
         </div>
       </motion.div>
     </motion.div>

@@ -18,7 +18,7 @@ export const ULTIMATE_VFX: Record<UltimateType, UltimateVfxConfig> = {
     accent: "#FACC15",
     glow: "rgba(250, 204, 21, 0.45)",
     tint: "rgba(251, 191, 36, 0.14)",
-    durationMs: 8000
+    durationMs: 6000
   },
   jam: {
     avatarName: "Shadow",
@@ -27,7 +27,7 @@ export const ULTIMATE_VFX: Record<UltimateType, UltimateVfxConfig> = {
     accent: "#A78BFA",
     glow: "rgba(167, 139, 250, 0.45)",
     tint: "rgba(91, 33, 182, 0.2)",
-    durationMs: 5000
+    durationMs: 3000
   },
   shield: {
     avatarName: "Guardian",
@@ -36,7 +36,7 @@ export const ULTIMATE_VFX: Record<UltimateType, UltimateVfxConfig> = {
     accent: "#22D3EE",
     glow: "rgba(34, 211, 238, 0.42)",
     tint: "rgba(34, 211, 238, 0.14)",
-    durationMs: 10000
+    durationMs: 8000
   },
   double: {
     avatarName: "Inferno",

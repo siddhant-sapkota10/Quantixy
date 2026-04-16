@@ -27,18 +27,6 @@ const TOPIC_CONFIG = {
     text: "text-sky-300",
     ring: "ring-sky-500/40",
   },
-  "mental-math": {
-    label: "Mental Math",
-    icon: (
-      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-      </svg>
-    ),
-    border: "border-violet-500/50",
-    bg: "bg-violet-500/10",
-    text: "text-violet-300",
-    ring: "ring-violet-500/40",
-  },
   algebra: {
     label: "Algebra",
     icon: (
@@ -51,22 +39,20 @@ const TOPIC_CONFIG = {
     text: "text-indigo-300",
     ring: "ring-indigo-500/40",
   },
-  percentages: {
-    label: "Percentages",
+  geometry: {
+    label: "Geometry",
     icon: (
-      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-        <line x1="19" y1="5" x2="5" y2="19" />
-        <circle cx="6.5" cy="6.5" r="2.25" />
-        <circle cx="17.5" cy="17.5" r="2.25" />
+      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 19L12 5l9 14H3z" />
       </svg>
     ),
-    border: "border-cyan-500/50",
-    bg: "bg-cyan-500/10",
-    text: "text-cyan-300",
-    ring: "ring-cyan-500/40",
+    border: "border-emerald-500/50",
+    bg: "bg-emerald-500/10",
+    text: "text-emerald-300",
+    ring: "ring-emerald-500/40",
   },
   fractions: {
-    label: "Fractions",
+    label: "Fractions / % / Decimals",
     icon: (
       <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
         <line x1="5" y1="12" x2="19" y2="12" />
@@ -79,11 +65,23 @@ const TOPIC_CONFIG = {
     text: "text-teal-300",
     ring: "ring-teal-500/40",
   },
-  powers: {
-    label: "Powers",
+  ratios: {
+    label: "Ratios",
     icon: (
-      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M5 19l14-14M15 5h4v4" />
+      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M7 7h10M7 17h10M9 7v10" />
+      </svg>
+    ),
+    border: "border-cyan-500/50",
+    bg: "bg-cyan-500/10",
+    text: "text-cyan-300",
+    ring: "ring-cyan-500/40",
+  },
+  exponents: {
+    label: "Exponents / Roots",
+    icon: (
+      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 17h14M7 7h4v4H7zM15 7h4" />
       </svg>
     ),
     border: "border-amber-500/50",
@@ -91,11 +89,49 @@ const TOPIC_CONFIG = {
     text: "text-amber-300",
     ring: "ring-amber-500/40",
   },
-  mixed: {
-    label: "Mixed",
+  statistics: {
+    label: "Data / Stats",
     icon: (
-      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
+      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 19V5M4 19h16M8 15v-5M12 19V9M16 19v-8" />
+      </svg>
+    ),
+    border: "border-violet-500/50",
+    bg: "bg-violet-500/10",
+    text: "text-violet-300",
+    ring: "ring-violet-500/40",
+  },
+  trigonometry: {
+    label: "Trigonometry",
+    icon: (
+      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 19h16L4 5v14z" />
+      </svg>
+    ),
+    border: "border-fuchsia-500/50",
+    bg: "bg-fuchsia-500/10",
+    text: "text-fuchsia-300",
+    ring: "ring-fuchsia-500/40",
+  },
+  functions: {
+    label: "Functions / Graphs",
+    icon: (
+      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 19V5M4 19h16" />
+        <path d="M6 15c2-6 4-6 6 0s4 6 6 0" />
+      </svg>
+    ),
+    border: "border-sky-500/50",
+    bg: "bg-sky-500/10",
+    text: "text-sky-300",
+    ring: "ring-sky-500/40",
+  },
+  calculus: {
+    label: "Calculus",
+    icon: (
+      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M10 6c-3 0-4 6-1 6s3 6 0 6" />
+        <path d="M14 6h6M14 18h6" />
       </svg>
     ),
     border: "border-rose-500/50",

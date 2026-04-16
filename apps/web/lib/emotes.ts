@@ -4,6 +4,8 @@ export type Emote = {
   id: string;
   label: string;
   icon: string;
+  category: "bm" | "celebration" | "neutral";
+  pack: string;
 };
 
 export const EMOTES = emotesData as Emote[];

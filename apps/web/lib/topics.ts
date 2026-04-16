@@ -1,11 +1,14 @@
 export const TOPICS = [
   "arithmetic",
-  "mental-math",
   "algebra",
-  "percentages",
+  "geometry",
   "fractions",
-  "powers",
-  "mixed"
+  "ratios",
+  "exponents",
+  "statistics",
+  "trigonometry",
+  "functions",
+  "calculus"
 ] as const;
 
 export type Topic = (typeof TOPICS)[number];
