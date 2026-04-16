@@ -1030,7 +1030,11 @@ export function GameClient({
       setCountdownValue(payload.value);
       setFrozenUntil(0);
       setShieldBlockedUntil(0);
-      setEmoteBarOpen(false);
+      // Don't force-close the emote picker during countdown; it prevents
+      // users from seeing/clicking emote buttons before "GO".
+      if (payload.value === "GO") {
+        setEmoteBarOpen(true);
+      }
       setRematchRequested(false);
       setOpponentRematchRequested(false);
       setRematchProgress({ requestedPlayers: 0, requiredPlayers: 2 });
@@ -1813,7 +1817,11 @@ export function GameClient({
     }) => {
       console.log("[client] emotePlayed received", payload);
       if (currentMatchRoomIdRef.current && payload.roomId !== currentMatchRoomIdRef.current) {
-        return;
+        console.warn("[client] emotePlayed room mismatch; updating room ref", {
+          currentRoomId: currentMatchRoomIdRef.current,
+          payloadRoomId: payload.roomId
+        });
+        currentMatchRoomIdRef.current = payload.roomId;
       }
       const who = payload.senderSocketId === nextSocket.id ? "you" : "opponent";
       pushEmoteLabel(who, payload.emoteId, payload.clientMessageId);
@@ -2241,7 +2249,8 @@ export function GameClient({
     }, 2000);
 
     setEmoteCooldownUntil(now + EMOTE_COOLDOWN_MS);
-    setEmoteBarOpen(false);
+    // Keep the emote picker open so players can immediately see they pressed
+    // an emote (and optionally press another after cooldown).
     socket.emit("sendEmote", { emoteId, clientMessageId });
   };
 
@@ -2257,8 +2266,8 @@ export function GameClient({
   const isRoomLobby = status === "room-lobby";
   const isOpponentLeft = status === "opponent-left";
   const isWaitingState = status === "connecting" || status === "waiting";
-  const isActiveGameplay = status === "playing" || status === "countdown";
-  const emotesEnabled = isActiveGameplay || isFinished;
+  const isActiveGameplay = status === "playing";
+  const emotesEnabled = status === "playing" || status === "countdown" || status === "finished";
   const youEliminated = eliminated.you;
   const opponentEliminated = eliminated.opponent;
 
@@ -2548,6 +2557,16 @@ export function GameClient({
         {/* Overlays */}
         <GameOverOverlay result={null} />
         <UltimateActivationOverlay cue={ultimateCue} />
+
+        {/* Emote bubbles (HUD layout doesn't render PlayerPanels) */}
+        <div className="pointer-events-none absolute left-0 right-0 top-16 z-30 flex items-start justify-between gap-3 px-3 sm:px-5">
+          <div className="relative h-14 w-[46%] max-w-sm">
+            <EmoteDisplay items={youEmoteItems} />
+          </div>
+          <div className="relative h-14 w-[46%] max-w-sm">
+            <EmoteDisplay items={opponentEmoteItems} />
+          </div>
+        </div>
 
         <div className="flex h-[100dvh] flex-col overflow-hidden">
           {/* Top HUD */}
