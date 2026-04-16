@@ -375,7 +375,16 @@ export function ProfileClient() {
           ratings: nextData.ratings.length,
           matches: nextData.matches.length
         });
-        setData(nextData);
+        // Source of truth for paid ownership is Supabase `user_emote_packs`.
+        // The game server "enriched profile" payload doesn't always include ownership,
+        // so preserve it from the initial Supabase load to avoid UI flicker back to Locked.
+        setData({
+          ...nextData,
+          ownedEmotePacks:
+            Array.isArray(nextData.ownedEmotePacks) && nextData.ownedEmotePacks.length > 0
+              ? nextData.ownedEmotePacks
+              : fallbackData.ownedEmotePacks,
+        });
       } catch (fetchError) {
         if (controller.signal.aborted) {
           return;
