@@ -19,8 +19,11 @@ const {
   getOrCreateRating,
   getLeaderboard,
   getProfileSummary,
+  getPlayerCosmetics,
   saveMatch,
-  updateRatingsAfterMatch
+  updateRatingsAfterMatch,
+  normalizeStreakEffectId,
+  normalizeEmotePackId
 } = require("./lib/persistence");
 const { calculateEloDelta, deriveMatchOutcome } = require("./lib/rating");
 
@@ -1444,14 +1447,24 @@ function removeFromGame(socket) {
 async function resolveSocketPlayer(socket, topic, accessToken) {
   const authUser = await verifyAccessToken(accessToken);
   const player = await findOrCreatePlayerFromAuthUser(authUser);
-  const rating = await getOrCreateRating(player.id, topic);
+
+  // Cosmetics are fetched in a separate query with a safe fallback so that
+  // joinQueue / custom rooms continue working even if the DB migration has
+  // not been applied yet (columns missing → defaults are used silently).
+  const [rating, cosmetics] = await Promise.all([
+    getOrCreateRating(player.id, topic),
+    getPlayerCosmetics(player.id)
+  ]);
 
   return {
     socketId: socket.id,
     playerId: player.id,
     name: player.display_name ?? player.username,
     rating: rating.rating,
-    avatar: normalizeAvatarId(player.avatar_id)
+    avatar: normalizeAvatarId(player.avatar_id),
+    // Cosmetics — visual only, no gameplay effect
+    streakEffect: cosmetics.streakEffect,
+    emotePack: cosmetics.emotePack
   };
 }
 
@@ -1540,6 +1553,10 @@ function createActiveGame(players, topic, difficulty, customRoomCode = null) {
       you: players[0].rating,
       opponent: players[1].rating
     },
+    // Cosmetics — visual only
+    yourStreakEffect: players[0].streakEffect,
+    opponentStreakEffect: players[1].streakEffect,
+    yourEmotePack: players[0].emotePack,
     ...buildPlayerPowerState(game, players[0].socketId)
   });
 
@@ -1554,6 +1571,10 @@ function createActiveGame(players, topic, difficulty, customRoomCode = null) {
       you: players[1].rating,
       opponent: players[0].rating
     },
+    // Cosmetics — visual only
+    yourStreakEffect: players[1].streakEffect,
+    opponentStreakEffect: players[0].streakEffect,
+    yourEmotePack: players[1].emotePack,
     ...buildPlayerPowerState(game, players[1].socketId)
   });
 

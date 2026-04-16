@@ -1,6 +1,8 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import { getStreakEffectVisuals, type StreakEffectId } from "@/lib/cosmetics";
+import { RankBadge } from "@/components/rank-badge";
 
 type PlayerPanelProps = {
   label: string;
@@ -11,6 +13,8 @@ type PlayerPanelProps = {
   avatar?: string;
   streakLabel?: string | null;
   streakLevel?: "fire" | "unstoppable" | null;
+  /** Equipped cosmetic streak effect — visual only, no gameplay effect. */
+  streakEffect?: StreakEffectId;
   fastActive?: boolean;
   highlighted?: boolean;
   pulseKey: number;
@@ -30,6 +34,7 @@ export function PlayerPanel({
   avatar,
   streakLabel,
   streakLevel,
+  streakEffect,
   fastActive = false,
   highlighted = false,
   pulseKey,
@@ -39,6 +44,8 @@ export function PlayerPanel({
   ultimateFxKey = 0,
   ultimateFxType = null
 }: PlayerPanelProps) {
+  const streakVisuals = getStreakEffectVisuals(streakEffect);
+
   const ultimateFxByType: Record<NonNullable<PlayerPanelProps["ultimateFxType"]>, { tint: string; ring: string }> = {
     rapid_fire: { tint: "rgba(250,204,21,0.45)", ring: "rgba(250,204,21,0.82)" },
     jam: { tint: "rgba(167,139,250,0.48)", ring: "rgba(167,139,250,0.82)" },
@@ -58,9 +65,9 @@ export function PlayerPanel({
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: -4 }}
               transition={{ duration: 0.22 }}
-              className="text-xs font-bold uppercase tracking-[0.25em] text-sky-300"
+              className={`text-xs font-bold uppercase tracking-[0.25em] ${streakVisuals.colorClass}`}
             >
-              {streakLabel} {streakLevel === "unstoppable" ? "?" : "??"}
+              {streakLabel} {streakLevel === "unstoppable" ? streakVisuals.maxIcon : streakVisuals.icon}
             </motion.p>
           ) : null}
         </AnimatePresence>
@@ -100,16 +107,21 @@ export function PlayerPanel({
         >
           {avatar ? <p className="text-2xl leading-none sm:text-3xl">{avatar}</p> : null}
           <p className="mt-1 truncate px-1 text-xs uppercase tracking-[0.2em] text-slate-400">{label}</p>
-          <div className="mt-1 flex h-4 items-center justify-center">
+          {/* Rank badge — primary identity signal */}
+          <div className="mt-1.5 flex min-h-[1.25rem] items-center justify-center">
             {typeof rating === "number" ? (
-              <p className="truncate text-[11px] uppercase tracking-[0.16em] text-slate-500">Rating {rating}</p>
+              <RankBadge rating={rating} size="md" />
             ) : (
-              <p className="text-[11px] uppercase tracking-[0.16em] text-transparent">Rating</p>
+              <span className="invisible text-[11px]">—</span>
             )}
           </div>
-          <div className="mt-0.5 flex h-4 items-center justify-center">
-            <p className={`text-[11px] uppercase tracking-[0.16em] ${eliminated ? "text-rose-300" : "text-slate-500"}`}>
-              Strikes {strikes}/3
+          {/* Supporting stats: rating + strikes */}
+          <div className="mt-1 flex items-center justify-center gap-2">
+            {typeof rating === "number" ? (
+              <p className="text-[10px] tabular-nums text-slate-600">{rating}</p>
+            ) : null}
+            <p className={`text-[10px] ${eliminated ? "text-rose-400" : "text-slate-600"}`}>
+              {strikes}/3
             </p>
           </div>
           <div className="mt-2 flex h-11 items-center justify-center sm:h-12">

@@ -23,9 +23,12 @@ import {
   validateDisplayName
 } from "@/lib/auth";
 import { getSupabaseClient } from "@/lib/supabase";
+import { getRankFromRating } from "@/lib/ranks";
+import { RankBadge } from "@/components/rank-badge";
 
 type AuthMode = "login" | "signup";
 type HomeIdentityRow = {
+  id: string;
   display_name: string | null;
   username: string | null;
   avatar_id: string | null;
@@ -512,6 +515,7 @@ export function HomeHero() {
   const [accountIdentity, setAccountIdentity] = useState<{
     displayName: string;
     avatarId: string | null;
+    highestRating?: number;
   } | null>(null);
   const isGuest = isAnonymousUser(user);
   const suggestedGuestName = user ? getGuestUsername(user.id) : "";
@@ -552,7 +556,7 @@ export function HomeHero() {
         const supabase = getSupabaseClient();
         const { data, error } = await supabase
           .from("players")
-          .select("display_name, username, avatar_id")
+          .select("id, display_name, username, avatar_id")
           .eq("auth_user_id", user.id)
           .maybeSingle();
 
@@ -564,9 +568,24 @@ export function HomeHero() {
         const row = data as HomeIdentityRow | null;
 
         if (mounted && row) {
+          let highestRating: number | undefined;
+          try {
+            const { data: ratingRow } = await supabase
+              .from("ratings")
+              .select("rating")
+              .eq("player_id", row.id)
+              .order("rating", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            highestRating = (ratingRow as { rating: number } | null)?.rating;
+          } catch {
+            // Non-critical — rank just won't show on home screen
+          }
+
           setAccountIdentity({
             displayName: row.display_name ?? row.username ?? "Player",
-            avatarId: row.avatar_id ?? null
+            avatarId: row.avatar_id ?? null,
+            highestRating,
           });
         }
       } catch (error) {
@@ -689,16 +708,22 @@ export function HomeHero() {
 
           {user ? (
             <div className="flex items-center justify-center gap-3 rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-left">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-sky-400/20 bg-slate-950/80 text-2xl">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-sky-400/20 bg-slate-950/80 text-2xl">
                 {getAvatar(accountIdentity?.avatarId).icon}
               </div>
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
                   {isGuest ? "Guest Account" : "Account Ready"}
                 </p>
                 <p className="text-base font-semibold text-white">
                   {accountIdentity?.displayName ?? (isGuest ? suggestedGuestName : "Player")}
                 </p>
+                {!isGuest && accountIdentity?.highestRating !== undefined ? (
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <RankBadge rating={accountIdentity.highestRating} size="sm" />
+                    <span className="text-[10px] text-slate-500">{accountIdentity.highestRating}</span>
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : null}

@@ -4,5 +4,8 @@
   { "id": "get-ready", "label": "Get Ready", "icon": "😈" },
   { "id": "oops", "label": "Oops", "icon": "😂" },
   { "id": "focus", "label": "Focus", "icon": "😤" },
-  { "id": "lets-go", "label": "Let's Go", "icon": "🎉" }
+  { "id": "lets-go", "label": "Let's Go", "icon": "🎉" },
+  { "id": "lucky", "label": "Lucky", "icon": "🍀" },
+  { "id": "close-one", "label": "Close One", "icon": "😅" },
+  { "id": "gg", "label": "GG", "icon": "🤝" }
 ]

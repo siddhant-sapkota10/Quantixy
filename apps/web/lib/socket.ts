@@ -3,12 +3,38 @@
 import { io, type Socket } from "socket.io-client";
 import type { PowerUpId } from "@/lib/powerups";
 
-const socketUrl =
-  process.env.NEXT_PUBLIC_SERVER_URL ??
-  (typeof window !== "undefined" ? window.location.origin : undefined);
+/**
+ * Resolve the game server URL.
+ *
+ * Priority:
+ *  1. NEXT_PUBLIC_SERVER_URL env var (always used in production / explicit override)
+ *  2. Derived from browser origin: same hostname as the frontend, port 3001.
+ *     This makes BOTH localhost and LAN IP work without changing env vars:
+ *       - http://localhost:3000  → http://localhost:3001
+ *       - http://192.168.1.x:3000 → http://192.168.1.x:3001
+ *  3. Static fallback for SSR: http://localhost:3001
+ */
+function resolveGameServerUrl(): string {
+  const envUrl = (process.env.NEXT_PUBLIC_SERVER_URL ?? "").trim();
 
-if (typeof window !== "undefined") {
-  console.log("[socket] server URL ->", socketUrl ?? "(none - check NEXT_PUBLIC_SERVER_URL)");
+  // Use env var only when it is a real URL (guard against the "http://" stub)
+  if (envUrl && envUrl !== "http://" && envUrl !== "https://") {
+    return envUrl;
+  }
+
+  // Browser: derive from the page's own origin so localhost and LAN both work
+  if (typeof window !== "undefined") {
+    const { protocol, hostname } = window.location;
+    return `${protocol}//${hostname}:3001`;
+  }
+
+  return "http://localhost:3001";
+}
+
+const socketUrl = resolveGameServerUrl();
+
+if (process.env.NODE_ENV === "development" && typeof window !== "undefined") {
+  console.log("[socket] resolved game server URL ->", socketUrl);
 }
 
 type UltimateStatePayload = {
@@ -288,10 +314,6 @@ export type ClientToServerEvents = {
 export type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 export const createGameSocket = (): GameSocket => {
-  if (!socketUrl) {
-    throw new Error("NEXT_PUBLIC_SERVER_URL is not set and no browser origin fallback is available.");
-  }
-
   return io(socketUrl, {
     // Prefer WebSocket over long-polling.  WebSocket upgrades are a single
     // HTTP request with an Upgrade header; there is no back-and-forth polling

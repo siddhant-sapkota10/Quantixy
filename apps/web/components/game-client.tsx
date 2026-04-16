@@ -12,7 +12,16 @@ import { soundManager } from "@/lib/sounds";
 import { formatTopicLabel, getSafeDifficulty, getSafeTopic } from "@/lib/topics";
 import { getAvatar } from "@/lib/avatars";
 import { EMOTES, getEmoteById } from "@/lib/emotes";
+import {
+  normalizeStreakEffectId,
+  normalizeEmotePackId,
+  getEmotePack,
+  type StreakEffectId,
+  type EmotePackId,
+} from "@/lib/cosmetics";
 import { getPowerUpMeta, POWER_UPS, type PowerUpId } from "@/lib/powerups";
+import { getRankFromRating, RANKS } from "@/lib/ranks";
+import { RankBadge } from "@/components/rank-badge";
 
 // Feature flag — set to true to re-enable the powerup system in live matches.
 // While false, powerup UI is hidden and powerup socket events are no-ops.
@@ -348,6 +357,12 @@ export function GameClient({
   const [opponentUltimateFxKey, setOpponentUltimateFxKey] = useState(0);
   const [youUltimateFxType, setYouUltimateFxType] = useState<UltimateType | null>(null);
   const [opponentUltimateFxType, setOpponentUltimateFxType] = useState<UltimateType | null>(null);
+
+  // Cosmetic state — visual only, never affects gameplay
+  const [yourStreakEffect, setYourStreakEffect] = useState<StreakEffectId>("none");
+  const [opponentStreakEffect, setOpponentStreakEffect] = useState<StreakEffectId>("none");
+  const [yourEmotePack, setYourEmotePack] = useState<EmotePackId>("basic");
+
   const [isFinalPhase, setIsFinalPhase] = useState(false);
   const [scoreImpactKey, setScoreImpactKey] = useState({ you: 0, opponent: 0 });
   const [clutchMoment, setClutchMoment] = useState<{ key: number; side: "you" | "opponent" | null }>({
@@ -478,6 +493,9 @@ export function GameClient({
     setOpponentUltimateFxKey(0);
     setYouUltimateFxType(null);
     setOpponentUltimateFxType(null);
+    setYourStreakEffect("none");
+    setOpponentStreakEffect("none");
+    setYourEmotePack("basic");
     setIsFinalPhase(false);
     setScoreImpactKey({ you: 0, opponent: 0 });
     setClutchMoment({ key: 0, side: null });
@@ -719,6 +737,10 @@ export function GameClient({
         you: number;
         opponent: number;
       };
+      // Cosmetics — visual only
+      yourStreakEffect?: string;
+      opponentStreakEffect?: string;
+      yourEmotePack?: string;
       ultimateType?: string;
       ultimateName?: string;
       ultimateCharge?: number;
@@ -750,6 +772,10 @@ export function GameClient({
       setOpponentName(payload.opponentName ?? payload.opponent?.name ?? "Opponent");
       setYourAvatar(getAvatar(payload.yourAvatar).emoji);
       setOpponentAvatar(getAvatar(payload.opponentAvatar).emoji);
+      // Apply cosmetics — visual only, no gameplay effect
+      setYourStreakEffect(normalizeStreakEffectId(payload.yourStreakEffect));
+      setOpponentStreakEffect(normalizeStreakEffectId(payload.opponentStreakEffect));
+      setYourEmotePack(normalizeEmotePackId(payload.yourEmotePack));
       if (payload.ratings) {
         setRatings(payload.ratings);
       }
@@ -1961,6 +1987,13 @@ export function GameClient({
     socket.emit("sendEmote", { emoteId, clientMessageId });
   };
 
+  // Filter the emote bar to only show emotes in the player's equipped pack
+  const availableEmotes = useMemo(() => {
+    const pack = getEmotePack(yourEmotePack);
+    const packIds = new Set(pack.emoteIds);
+    return EMOTES.filter((emote) => packIds.has(emote.id));
+  }, [yourEmotePack]);
+
   const isFinished = status === "finished";
   const isCountdown = status === "countdown";
   const isRoomLobby = status === "room-lobby";
@@ -2309,7 +2342,7 @@ export function GameClient({
           <div className="mt-2 min-h-[2.75rem]">
             {isActiveGameplay ? (
               <EmoteBar
-                emotes={EMOTES}
+                emotes={availableEmotes}
                 open={emoteBarOpen}
                 onToggle={() => setEmoteBarOpen((o) => !o)}
                 onSend={handleSendEmote}
@@ -2336,6 +2369,7 @@ export function GameClient({
               avatar={yourAvatar}
               streakLabel={isActiveGameplay ? yourStreakLabel : null}
               streakLevel={isActiveGameplay ? yourStreakLevel : null}
+              streakEffect={yourStreakEffect}
               fastActive={isActiveGameplay && feedback.youFast}
               highlighted={
                 isActiveGameplay &&
@@ -2437,6 +2471,7 @@ export function GameClient({
               avatar={opponentAvatar}
               streakLabel={isActiveGameplay ? opponentStreakLabel : null}
               streakLevel={isActiveGameplay ? opponentStreakLevel : null}
+              streakEffect={opponentStreakEffect}
               fastActive={isActiveGameplay && feedback.opponentFast}
               highlighted={
                 isActiveGameplay &&
@@ -2832,7 +2867,32 @@ export function GameClient({
                   {gameResult.ratingChange.you} rating
                 </p>
               ) : null}
-              {gameResult?.newRatings ? (
+              {gameResult?.newRatings && gameResult?.ratingChange ? (() => {
+                const newRating = gameResult.newRatings.you;
+                const prevRating = newRating - gameResult.ratingChange.you;
+                const prevRank = getRankFromRating(prevRating);
+                const newRank = getRankFromRating(newRating);
+                const rankChanged = prevRank.id !== newRank.id;
+                const rankUp = rankChanged &&
+                  RANKS.findIndex((r) => r.id === newRank.id) > RANKS.findIndex((r) => r.id === prevRank.id);
+                return (
+                  <div className="mt-2 space-y-1">
+                    {rankChanged && rankUp ? (
+                      <p className="text-xs font-bold uppercase tracking-[0.25em] text-emerald-300">
+                        Rank Up!
+                      </p>
+                    ) : rankChanged ? (
+                      <p className="text-xs font-semibold uppercase tracking-[0.25em] text-rose-400">
+                        Rank Down
+                      </p>
+                    ) : null}
+                    <div className="flex items-center justify-center gap-2">
+                      <RankBadge rank={newRank} size="md" />
+                      <p className="text-sm text-slate-300">{newRating}</p>
+                    </div>
+                  </div>
+                );
+              })() : gameResult?.newRatings ? (
                 <p className="mt-1 text-sm text-slate-300">New Rating: {gameResult.newRatings.you}</p>
               ) : null}
 

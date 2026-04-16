@@ -22,6 +22,13 @@ add column if not exists auth_user_id uuid;
 alter table public.players
 add column if not exists avatar_id text not null default 'fox';
 
+-- Cosmetic loadout columns (visual only — no gameplay effect)
+alter table public.players
+add column if not exists streak_effect text not null default 'none';
+
+alter table public.players
+add column if not exists emote_pack text not null default 'basic';
+
 alter table public.players
 add column if not exists display_name text;
 

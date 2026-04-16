@@ -1,0 +1,10 @@
+{
+  "ranks": [
+    { "id": "bronze",   "name": "Bronze",   "minRating": 0,    "shortLabel": "BR" },
+    { "id": "silver",   "name": "Silver",   "minRating": 900,  "shortLabel": "SL" },
+    { "id": "gold",     "name": "Gold",     "minRating": 1100, "shortLabel": "GL" },
+    { "id": "platinum", "name": "Platinum", "minRating": 1300, "shortLabel": "PL" },
+    { "id": "diamond",  "name": "Diamond",  "minRating": 1500, "shortLabel": "DM" },
+    { "id": "master",   "name": "Master",   "minRating": 1700, "shortLabel": "MS" }
+  ]
+}

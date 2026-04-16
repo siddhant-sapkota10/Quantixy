@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/button";
 import { Dropdown } from "@/components/dropdown";
+import { RankBadge } from "@/components/rank-badge";
 import { getAvatar } from "@/lib/avatars";
 import { getSupabaseClient } from "@/lib/supabase";
 import { TOPICS, Topic, formatTopicLabel } from "@/lib/topics";
@@ -140,8 +141,8 @@ export function LeaderboardClient() {
         </div>
 
         <div className="overflow-x-auto rounded-3xl border border-slate-800 bg-slate-900/70">
-          <div className="grid min-w-[320px] grid-cols-[56px_1fr_80px] gap-2 border-b border-slate-800 px-3 py-3 text-xs font-semibold uppercase tracking-[0.25em] text-slate-400 sm:grid-cols-[80px_1.5fr_140px_1fr] sm:gap-4 sm:px-6 sm:py-4">
-            <span>Rank</span>
+          <div className="grid min-w-[300px] grid-cols-[44px_1fr_68px] gap-2 border-b border-slate-800 px-3 py-3 text-xs font-semibold uppercase tracking-[0.25em] text-slate-400 sm:grid-cols-[68px_1fr_96px_1fr] sm:gap-4 sm:px-6 sm:py-4">
+            <span>#</span>
             <span>Player</span>
             <span>Rating</span>
             <span className="hidden sm:block">Topic</span>
@@ -162,25 +163,40 @@ export function LeaderboardClient() {
                 return (
                   <div
                     key={entry.playerId}
-                    className={`grid min-w-[320px] grid-cols-[56px_1fr_80px] gap-2 border-b border-slate-800/80 px-3 py-3 text-sm last:border-b-0 sm:grid-cols-[80px_1.5fr_140px_1fr] sm:gap-4 sm:px-6 sm:py-4 ${
+                    className={`grid min-w-[300px] grid-cols-[44px_1fr_68px] items-center gap-2 border-b border-slate-800/80 px-3 py-3 text-sm last:border-b-0 sm:grid-cols-[68px_1fr_96px_1fr] sm:gap-4 sm:px-6 sm:py-4 ${
                       isCurrentUser
-                        ? "bg-sky-500/12"
+                        ? "bg-sky-500/[0.08]"
                         : isTopThree
-                          ? "bg-sky-500/6"
+                          ? "bg-sky-500/[0.04]"
                           : ""
                     }`}
                   >
-                    <span className={`font-bold ${isTopThree ? "text-sky-300" : "text-slate-300"}`}>#{entry.rank}</span>
-                    <span className="flex min-w-0 items-center gap-2 font-semibold text-white sm:gap-3">
-                      <span className="text-xl leading-none sm:text-2xl">{getAvatar(entry.avatarId).icon}</span>
-                      <span className="truncate">{entry.name}</span>
-                      {isCurrentUser ? (
-                        <span className="rounded-full border border-sky-400/40 bg-sky-500/15 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-sky-200">
-                          You
-                        </span>
-                      ) : null}
+                    {/* Position */}
+                    <span className={`text-sm font-bold tabular-nums ${isTopThree ? "text-sky-300" : "text-slate-500"}`}>
+                      {entry.rank}
                     </span>
-                    <span className="font-bold text-slate-100">{entry.rating}</span>
+
+                    {/* Player identity — avatar, name, rank badge */}
+                    <span className="flex min-w-0 items-center gap-2 sm:gap-2.5">
+                      <span className="shrink-0 text-xl leading-none sm:text-2xl">{getAvatar(entry.avatarId).icon}</span>
+                      <span className="min-w-0">
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span className="truncate font-semibold text-white">{entry.name}</span>
+                          {isCurrentUser ? (
+                            <span className="shrink-0 rounded-full border border-sky-400/40 bg-sky-500/15 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] text-sky-200">
+                              You
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="mt-0.5 block">
+                          <RankBadge rating={entry.rating} size="sm" />
+                        </span>
+                      </span>
+                    </span>
+
+                    {/* Rating — clean number, secondary to rank identity */}
+                    <span className="font-bold tabular-nums text-slate-100">{entry.rating}</span>
+
                     <span className="hidden text-slate-400 sm:block">{formatTopicLabel(entry.topic as Topic)}</span>
                   </div>
                 );
@@ -190,13 +206,21 @@ export function LeaderboardClient() {
         </div>
 
         {showMyRankCard && myRank ? (
-          <div className="rounded-2xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 sm:px-5">
-            <p className="text-xs uppercase tracking-[0.22em] text-sky-200">My Rank</p>
-            <div className="mt-2 flex flex-wrap items-center gap-3 text-sm sm:text-base">
-              <span className="font-bold text-sky-100">#{myRank.rank}</span>
-              <span className="font-semibold text-white">{myRank.name}</span>
-              <span className="text-slate-300">Rating {myRank.rating}</span>
-              <span className="text-slate-400">{formatTopicLabel(myRank.topic as Topic)}</span>
+          <div className="rounded-2xl border border-sky-500/25 bg-sky-500/[0.07] px-4 py-4 sm:px-5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-sky-400">Your Standing</p>
+            <div className="mt-2 flex items-center gap-3">
+              <span className="text-2xl font-black tabular-nums text-sky-100">#{myRank.rank}</span>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-white">{myRank.name}</span>
+                  <RankBadge rating={myRank.rating} size="md" />
+                </div>
+                <p className="text-xs text-slate-400">
+                  <span className="font-semibold tabular-nums text-slate-300">{myRank.rating}</span>
+                  {" · "}
+                  {formatTopicLabel(myRank.topic as Topic)}
+                </p>
+              </div>
             </div>
           </div>
         ) : null}

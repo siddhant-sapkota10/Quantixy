@@ -1,8 +1,11 @@
 const { supabaseAdmin } = require("./supabase");
 const AVATARS = require("../../../packages/shared/avatars.json");
+const COSMETICS = require("../../../packages/shared/cosmetics.json");
 
 const DEFAULT_RATING = 1000;
 const VALID_AVATAR_IDS = new Set((AVATARS ?? []).map((avatar) => avatar.id));
+const VALID_STREAK_EFFECT_IDS = new Set((COSMETICS.streakEffects ?? []).map((e) => e.id));
+const VALID_EMOTE_PACK_IDS = new Set((COSMETICS.emotePacks ?? []).map((p) => p.id));
 
 function deriveResultFromScores(yourScore, opponentScore) {
   if (yourScore > opponentScore) return "win";
@@ -29,6 +32,48 @@ function normalizeAvatarId(value) {
   }
 
   return "flash";
+}
+
+function normalizeStreakEffectId(value) {
+  if (typeof value === "string" && VALID_STREAK_EFFECT_IDS.has(value)) return value;
+  return "none";
+}
+
+function normalizeEmotePackId(value) {
+  if (typeof value === "string" && VALID_EMOTE_PACK_IDS.has(value)) return value;
+  return "basic";
+}
+
+const COSMETICS_DEFAULT = { streakEffect: "none", emotePack: "basic" };
+
+/**
+ * Fetch cosmetic fields for a player by their internal UUID.
+ *
+ * This query is intentionally isolated from the main player queries so that
+ * if the DB columns do not exist yet (migration not applied), it returns safe
+ * defaults instead of crashing joinQueue / leaderboard.
+ *
+ * Postgres error 42703 = "column does not exist".
+ */
+async function getPlayerCosmetics(playerId) {
+  const { data, error } = await supabaseAdmin
+    .from("players")
+    .select("streak_effect, emote_pack")
+    .eq("id", playerId)
+    .maybeSingle();
+
+  if (error) {
+    // Columns may not exist yet — degrade gracefully
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[persistence] getPlayerCosmetics failed (columns missing?), using defaults:", error.message);
+    }
+    return COSMETICS_DEFAULT;
+  }
+
+  return {
+    streakEffect: normalizeStreakEffectId(data?.streak_effect ?? null),
+    emotePack: normalizeEmotePackId(data?.emote_pack ?? null)
+  };
 }
 
 function isNoRowsError(error) {
@@ -459,10 +504,14 @@ async function getProfileSummary(authUserId) {
   const sortedRatings = (ratings ?? []).sort((left, right) => right.rating - left.rating);
   const highestRatedTopic = sortedRatings[0]?.topic ?? null;
 
+  const cosmetics = await getPlayerCosmetics(player.id);
+
   return {
     username: player.display_name ?? player.username,
     displayName: player.display_name ?? player.username,
     avatarId: normalizeAvatarId(player.avatar_id),
+    streakEffect: cosmetics.streakEffect,
+    emotePack: cosmetics.emotePack,
     summary: {
       totalMatches: matchRows.length,
       wins,
@@ -507,5 +556,8 @@ module.exports = {
   updateRatingsAfterMatch,
   saveMatch,
   getLeaderboard,
-  getProfileSummary
+  getProfileSummary,
+  getPlayerCosmetics,
+  normalizeStreakEffectId,
+  normalizeEmotePackId
 };

@@ -1,0 +1,43 @@
+{
+  "streakEffects": [
+    {
+      "id": "none",
+      "name": "Default",
+      "description": "Clean streak display with standard visuals.",
+      "previewLabel": "Standard",
+      "unlockedByDefault": true,
+      "isPremium": false,
+      "unlockType": "default"
+    },
+    {
+      "id": "fire",
+      "name": "Blaze",
+      "description": "Your streak burns with fiery orange heat.",
+      "previewLabel": "On Fire",
+      "unlockedByDefault": true,
+      "isPremium": false,
+      "unlockType": "default"
+    },
+    {
+      "id": "lightning",
+      "name": "Lightning",
+      "description": "An electric charge follows every right answer.",
+      "previewLabel": "Electrified",
+      "unlockedByDefault": true,
+      "isPremium": false,
+      "unlockType": "default"
+    }
+  ],
+  "emotePacks": [
+    {
+      "id": "basic",
+      "name": "Basic",
+      "description": "Standard in-match communication pack.",
+      "previewLabel": "Standard",
+      "unlockedByDefault": true,
+      "isPremium": false,
+      "unlockType": "default",
+      "emoteIds": ["too-easy", "lucky", "close-one", "gg"]
+    }
+  ]
+}

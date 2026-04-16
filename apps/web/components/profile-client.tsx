@@ -8,11 +8,24 @@ import { DEFAULT_AVATAR_ID, getAvatar, normalizeAvatarId, type AvatarId } from "
 import { getReadableAuthError, sanitizeDisplayName, validateDisplayName } from "@/lib/auth";
 import { getSupabaseClient } from "@/lib/supabase";
 import { formatTopicLabel, type Topic } from "@/lib/topics";
+import {
+  STREAK_EFFECTS,
+  EMOTE_PACKS,
+  normalizeStreakEffectId,
+  normalizeEmotePackId,
+  type StreakEffectId,
+  type EmotePackId,
+} from "@/lib/cosmetics";
+import { getRankFromRating, getNextRankInfo } from "@/lib/ranks";
+import { RankBadge } from "@/components/rank-badge";
+import { EMOTES } from "@/lib/emotes";
 
 type ProfileResponse = {
   username?: string;
   displayName?: string;
   avatarId?: string;
+  streakEffect?: string;
+  emotePack?: string;
   summary: {
     totalMatches: number;
     wins: number;
@@ -45,6 +58,11 @@ type PlayerQueryRow = {
   username: string;
   display_name: string | null;
   avatar_id: string | null;
+};
+
+type CosmeticQueryRow = {
+  streak_effect: string | null;
+  emote_pack: string | null;
 };
 
 type RatingQueryRow = {
@@ -97,6 +115,21 @@ async function loadProfileFromSupabase(authUserId: string): Promise<ProfileRespo
   if (!player) {
     console.warn("[profile] no player row found for auth user", { authUserId });
     throw new Error("Your player profile has not been created yet.");
+  }
+
+  // Cosmetic columns are fetched separately so the profile page loads even if
+  // the DB migration has not been applied yet (columns missing → safe defaults).
+  let streakEffect = "none";
+  let emotePack = "basic";
+  const { data: cosmeticData, error: cosmeticError } = await supabase
+    .from("players")
+    .select("streak_effect, emote_pack")
+    .eq("id", player.id)
+    .maybeSingle();
+  if (!cosmeticError && cosmeticData) {
+    const cosRow = cosmeticData as CosmeticQueryRow;
+    streakEffect = normalizeStreakEffectId(cosRow.streak_effect);
+    emotePack = normalizeEmotePackId(cosRow.emote_pack);
   }
 
   console.log("[profile] querying ratings", { playerId: player.id });
@@ -168,6 +201,8 @@ async function loadProfileFromSupabase(authUserId: string): Promise<ProfileRespo
     username: player.username,
     displayName: player.display_name ?? player.username,
     avatarId: normalizeAvatarId(player.avatar_id),
+    streakEffect,
+    emotePack,
     summary: {
       totalMatches: matchRows.length,
       wins,
@@ -224,6 +259,10 @@ export function ProfileClient() {
   const [savingAvatarId, setSavingAvatarId] = useState<AvatarId | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [previewAvatarId, setPreviewAvatarId] = useState<AvatarId>(DEFAULT_AVATAR_ID);
+  const [savingStreakEffect, setSavingStreakEffect] = useState<StreakEffectId | null>(null);
+  const [streakEffectError, setStreakEffectError] = useState<string | null>(null);
+  const [savingEmotePack, setSavingEmotePack] = useState<EmotePackId | null>(null);
+  const [emotePackError, setEmotePackError] = useState<string | null>(null);
   const [navPending, setNavPending] = useState(false);
 
   useEffect(() => {
@@ -310,6 +349,8 @@ export function ProfileClient() {
 
         const nextData = (await response.json()) as ProfileResponse;
         nextData.avatarId = normalizeAvatarId(nextData.avatarId);
+        nextData.streakEffect = normalizeStreakEffectId(nextData.streakEffect);
+        nextData.emotePack = normalizeEmotePackId(nextData.emotePack);
         console.log("[profile] enriched profile loaded", {
           ratings: nextData.ratings.length,
           matches: nextData.matches.length
@@ -454,6 +495,61 @@ export function ProfileClient() {
     }
   };
 
+  const selectedStreakEffect = normalizeStreakEffectId(data?.streakEffect);
+  const selectedEmotePack = normalizeEmotePackId(data?.emotePack);
+
+  const handleStreakEffectSelect = async (effectId: StreakEffectId) => {
+    if (!authUserId || !data || savingStreakEffect || data.streakEffect === effectId) return;
+
+    const previousEffect = data.streakEffect;
+    setStreakEffectError(null);
+    setSavingStreakEffect(effectId);
+    setData((current) => (current ? { ...current, streakEffect: effectId } : current));
+
+    try {
+      const supabase = getSupabaseClient();
+      const { error: updateError } = await supabase
+        .from("players")
+        .update({ streak_effect: effectId } as never)
+        .eq("auth_user_id", authUserId);
+
+      if (updateError) throw new Error("Unable to update streak effect.");
+    } catch (updateError) {
+      setData((current) => (current ? { ...current, streakEffect: previousEffect } : current));
+      setStreakEffectError(
+        updateError instanceof Error ? updateError.message : "Unable to update streak effect."
+      );
+    } finally {
+      setSavingStreakEffect(null);
+    }
+  };
+
+  const handleEmotePackSelect = async (packId: EmotePackId) => {
+    if (!authUserId || !data || savingEmotePack || data.emotePack === packId) return;
+
+    const previousPack = data.emotePack;
+    setEmotePackError(null);
+    setSavingEmotePack(packId);
+    setData((current) => (current ? { ...current, emotePack: packId } : current));
+
+    try {
+      const supabase = getSupabaseClient();
+      const { error: updateError } = await supabase
+        .from("players")
+        .update({ emote_pack: packId } as never)
+        .eq("auth_user_id", authUserId);
+
+      if (updateError) throw new Error("Unable to update emote pack.");
+    } catch (updateError) {
+      setData((current) => (current ? { ...current, emotePack: previousPack } : current));
+      setEmotePackError(
+        updateError instanceof Error ? updateError.message : "Unable to update emote pack."
+      );
+    } finally {
+      setSavingEmotePack(null);
+    }
+  };
+
   return (
     <section className="w-full max-w-6xl rounded-[2rem] border border-white/10 bg-slate-950/70 p-4 shadow-glow backdrop-blur sm:p-6 md:p-10">
       <div className="flex flex-col gap-8">
@@ -573,15 +669,138 @@ export function ProfileClient() {
           ) : null}
         </div>
 
+        {/* ── Cosmetics ─────────────────────────────────────────── */}
+        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-4 sm:p-6">
+          <div className="space-y-1">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex rounded-full border border-violet-400/30 bg-violet-400/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.3em] text-violet-300">
+                Cosmetics
+              </span>
+            </div>
+            <h2 className="text-2xl font-bold text-white">Identity</h2>
+            <p className="text-sm text-slate-400">
+              Personalise how you look and feel in matches. All items are free.
+            </p>
+          </div>
+
+          {/* Streak Effect */}
+          <div className="mt-6">
+            <p className="text-sm uppercase tracking-[0.25em] text-slate-400">Streak Effect</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Visual style shown when you're on a streak mid-match.
+            </p>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {STREAK_EFFECTS.map((effect) => {
+                const isSelected = selectedStreakEffect === effect.id;
+                const isSaving = savingStreakEffect === effect.id;
+                const icon = effect.id === "none" ? "—" : effect.id === "fire" ? "🔥" : "⚡";
+                return (
+                  <button
+                    key={effect.id}
+                    type="button"
+                    onClick={() => void handleStreakEffectSelect(effect.id as StreakEffectId)}
+                    disabled={loading || Boolean(savingStreakEffect) || isSelected}
+                    className={`relative flex flex-col items-start rounded-2xl border px-4 py-4 text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
+                      isSelected
+                        ? "border-sky-400/60 bg-sky-500/10 shadow-[0_0_12px_rgba(56,189,248,0.10)]"
+                        : "border-slate-700 bg-slate-950/60 hover:border-slate-600 hover:bg-slate-900 active:scale-[0.98]"
+                    } ${isSaving ? "opacity-60" : ""}`}
+                  >
+                    <span className={`text-xl ${effect.id === "none" ? "text-slate-500" : ""}`}>
+                      {icon}
+                    </span>
+                    <p className={`mt-2 text-sm font-semibold ${isSelected ? "text-white" : "text-slate-300"}`}>
+                      {effect.name}
+                    </p>
+                    <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
+                      {effect.description}
+                    </p>
+                    {isSelected && (
+                      <span className="absolute right-3 top-3 text-[10px] font-bold uppercase tracking-[0.2em] text-sky-300">
+                        Equipped
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            {streakEffectError ? (
+              <p className="mt-3 text-sm text-rose-300">{streakEffectError}</p>
+            ) : null}
+          </div>
+
+          {/* Emote Pack */}
+          <div className="mt-6">
+            <p className="text-sm uppercase tracking-[0.25em] text-slate-400">Emote Pack</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Quick messages you can send to your opponent during a match.
+            </p>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {EMOTE_PACKS.map((pack) => {
+                const isSelected = selectedEmotePack === pack.id;
+                const isSaving = savingEmotePack === pack.id;
+                return (
+                  <button
+                    key={pack.id}
+                    type="button"
+                    onClick={() => void handleEmotePackSelect(pack.id as EmotePackId)}
+                    disabled={loading || Boolean(savingEmotePack) || isSelected}
+                    className={`relative flex flex-col items-start rounded-2xl border px-4 py-4 text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
+                      isSelected
+                        ? "border-sky-400/60 bg-sky-500/10 shadow-[0_0_12px_rgba(56,189,248,0.10)]"
+                        : "border-slate-700 bg-slate-950/60 hover:border-slate-600 hover:bg-slate-900 active:scale-[0.98]"
+                    } ${isSaving ? "opacity-60" : ""}`}
+                  >
+                    <div className="flex w-full items-start justify-between gap-2">
+                      <p className={`text-sm font-semibold ${isSelected ? "text-white" : "text-slate-300"}`}>
+                        {pack.name}
+                      </p>
+                      {isSelected && (
+                        <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.2em] text-sky-300">
+                          Equipped
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
+                      {pack.description}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {pack.emoteIds.map((emoteId) => {
+                        const emote = EMOTES.find((e) => e.id === emoteId);
+                        return emote ? (
+                          <span
+                            key={emoteId}
+                            title={emote.label}
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-300"
+                          >
+                            <span>{emote.icon}</span>
+                            <span>{emote.label}</span>
+                          </span>
+                        ) : null;
+                      })}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            {emotePackError ? (
+              <p className="mt-3 text-sm text-rose-300">{emotePackError}</p>
+            ) : null}
+          </div>
+        </div>
+
         <div className="grid gap-6 lg:grid-cols-[1.1fr_1.6fr]">
           <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-4 sm:p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm uppercase tracking-[0.25em] text-slate-400">Ratings</p>
                 <h2 className="mt-2 text-2xl font-bold text-white">Current Ratings</h2>
-                <p className="mt-1 text-sm text-slate-400">
-                  Peak Rating: <span className="font-semibold text-white">{data?.summary.highestRating ?? 1000}</span>
-                </p>
+                <div className="mt-1 flex items-center gap-2">
+                  <RankBadge rating={data?.summary.highestRating ?? 1000} size="md" />
+                  <p className="text-sm text-slate-400">
+                    Peak <span className="font-semibold text-white">{data?.summary.highestRating ?? 1000}</span>
+                  </p>
+                </div>
               </div>
 
               <div className="text-right">
@@ -590,9 +809,51 @@ export function ProfileClient() {
               </div>
             </div>
 
+            {/* Rank progress toward next tier */}
+            {(() => {
+              const peakRating = data?.summary.highestRating ?? 1000;
+              const { nextRank, progress, pointsNeeded } = getNextRankInfo(peakRating);
+              const currentRank = getRankFromRating(peakRating);
+              if (!nextRank) {
+                return (
+                  <div className="mt-4 flex items-center gap-2.5 rounded-2xl border border-pink-500/20 bg-pink-500/[0.08] px-4 py-3">
+                    <RankBadge rank={currentRank} size="md" />
+                    <p className="text-xs font-semibold text-pink-200">
+                      Max rank — you&apos;ve reached the top.
+                    </p>
+                  </div>
+                );
+              }
+              return (
+                <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <RankBadge rank={currentRank} size="sm" />
+                      <span className="text-[10px] text-slate-500">current</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-slate-500">{pointsNeeded} pts away</span>
+                      <RankBadge rank={nextRank} size="sm" />
+                    </div>
+                  </div>
+                  {/* Progress track */}
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800">
+                    <div
+                      className={`h-full rounded-full transition-all duration-700 ${nextRank.progressClass}`}
+                      style={{ width: `${Math.round(progress * 100)}%` }}
+                    />
+                  </div>
+                  <p className="mt-1.5 text-right text-[10px] tabular-nums text-slate-500">
+                    {Math.round(progress * 100)}%
+                  </p>
+                </div>
+              );
+            })()}
+
             <div className="mt-6 space-y-3">
               {(data?.ratings ?? []).map((entry, index) => {
                 const isBest = index === 0 && totalMatches > 0;
+                const entryRank = getRankFromRating(entry.rating);
 
                 return (
                   <div
@@ -613,7 +874,10 @@ export function ProfileClient() {
                         </p>
                       ) : null}
                     </div>
-                    <p className="text-xl font-black text-white">{entry.rating}</p>
+                    <div className="flex items-center gap-2">
+                      <RankBadge rank={entryRank} size="md" />
+                      <p className="text-xl font-black text-white">{entry.rating}</p>
+                    </div>
                   </div>
                 );
               })}
