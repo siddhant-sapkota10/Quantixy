@@ -7,9 +7,14 @@ const inter = Inter({
   display: "swap"
 });
 
-export const metadata: Metadata = {
+export const metadata = {
   title: "Quantixy",
-  description: "Real-time multiplayer math game"
+  description: "Real-time multiplayer math game",
+  icons: {
+    icon: "/assets/quantixytransparent.png",
+    shortcut: "/assets/quantixytransparent.png",
+    apple: "/assets/quantixytransparent.png",
+  },
 };
 
 export default function RootLayout({
