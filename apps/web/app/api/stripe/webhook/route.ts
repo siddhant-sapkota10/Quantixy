@@ -4,6 +4,7 @@ import { getStripe } from "@/lib/stripe";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
       const supabaseAdmin = getSupabaseAdmin();
 
       // Insert ownership (idempotent via UNIQUE(user_id, pack_id))
-      await supabaseAdmin
+      const { error: ownershipError } = await supabaseAdmin
         .from("user_emote_packs")
         .upsert(
           {
@@ -60,6 +61,16 @@ export async function POST(request: Request) {
           } as never,
           { onConflict: "user_id,pack_id" }
         );
+      if (ownershipError) {
+        console.error("[stripe-webhook] failed to upsert user_emote_packs", {
+          eventId: event.id,
+          sessionId: session.id,
+          userId,
+          packId,
+          error: ownershipError,
+        });
+        throw new Error("Failed to write emote pack ownership.");
+      }
 
       // Optional: also mirror into players.unlocked_emote_packs if the column exists.
       // This keeps older codepaths safe even if they still read the legacy column.
@@ -72,10 +83,20 @@ export async function POST(request: Request) {
       if (player?.id) {
         const current = Array.isArray((player as any).unlocked_emote_packs) ? (player as any).unlocked_emote_packs : [];
         const next = Array.from(new Set(["starter", ...current, packId]));
-        await supabaseAdmin
+        const { error: legacyError } = await supabaseAdmin
           .from("players")
           .update({ unlocked_emote_packs: next } as never)
           .eq("id", player.id);
+        if (legacyError) {
+          console.error("[stripe-webhook] failed to mirror players.unlocked_emote_packs", {
+            eventId: event.id,
+            sessionId: session.id,
+            playerId: player.id,
+            userId,
+            packId,
+            error: legacyError,
+          });
+        }
       }
     }
 

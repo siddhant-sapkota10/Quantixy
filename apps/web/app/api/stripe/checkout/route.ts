@@ -54,8 +54,8 @@ export async function POST(request: Request) {
       mode: "payment",
       line_items: [{ price: priceId, quantity: 1 }],
       allow_promotion_codes: true,
-      success_url: getURL(`shop/success?session_id={CHECKOUT_SESSION_ID}`),
-      cancel_url: getURL("shop/cancel"),
+      success_url: getURL(`/shop/success?session_id={CHECKOUT_SESSION_ID}`),
+      cancel_url: getURL("/shop/cancel"),
       metadata: {
         user_id: data.user.id,
         pack_id: pack,
