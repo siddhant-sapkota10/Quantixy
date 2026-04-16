@@ -10,14 +10,15 @@
       "glow": "rgba(56,189,248,0.45)"
     },
     "description": "Outrun the clock and stack points fast.",
+    "passive": "High-speed pressure style. Answers quickly and piles on damage through sheer volume — the faster you strike, the harder every hit lands.",
     "ultimateId": "rapid_fire",
     "ultimateName": "Rapid Fire",
-    "ultimateDescription": "For 3 seconds, each correct answer grants +1 extra point.",
+    "ultimateDescription": "For 8 seconds, each correct answer deals +1 extra damage. Sustained non-stop pressure.",
     "ultimateMeta": {
       "effectType": "timed_bonus",
-      "durationMs": 3000,
+      "durationMs": 8000,
       "bonusPoints": 1,
-      "chargeMultiplier": 1
+      "chargeMultiplier": 1.0
     }
   },
   {
@@ -31,12 +32,13 @@
       "glow": "rgba(167,139,250,0.42)"
     },
     "description": "Break the opponent rhythm with precise disruption.",
+    "passive": "Timing and control. Charges ultimate slightly faster — more opportunities to shut the opponent down at the worst moment.",
     "ultimateId": "jam",
     "ultimateName": "Jam",
-    "ultimateDescription": "For 2 seconds, the opponent cannot type.",
+    "ultimateDescription": "Locks the opponent out for 5 seconds — they cannot type a single answer while you freely score.",
     "ultimateMeta": {
       "effectType": "disable_input",
-      "durationMs": 2000,
+      "durationMs": 5000,
       "chargeMultiplier": 1.02
     }
   },
@@ -51,13 +53,14 @@
       "glow": "rgba(52,211,153,0.4)"
     },
     "description": "Hold your line and neutralize incoming pressure.",
+    "passive": "Defensive anchor. Consistent answering builds an unbreakable wall — absorb pressure while you chip away at the opponent.",
     "ultimateId": "shield",
-    "ultimateName": "Shield",
-    "ultimateDescription": "Blocks the next negative effect.",
+    "ultimateName": "Fortress Shield",
+    "ultimateDescription": "Deploys a fortress shield for 10 seconds that absorbs up to 2 incoming abilities — including Jam.",
     "ultimateMeta": {
       "effectType": "protective_block",
-      "blocks": 1,
-      "durationMs": 7000,
+      "blocks": 2,
+      "durationMs": 10000,
       "chargeMultiplier": 0.98
     }
   },
@@ -72,12 +75,13 @@
       "glow": "rgba(251,113,133,0.43)"
     },
     "description": "Convert one clean answer into explosive momentum.",
+    "passive": "Pure burst power. Slightly slower charge — but when the ultimate fires, it deals more damage than any other character can match.",
     "ultimateId": "double",
-    "ultimateName": "Double",
-    "ultimateDescription": "Your next correct answer gives +2 points.",
+    "ultimateName": "Inferno Strike",
+    "ultimateDescription": "Arms your next correct answer for a devastating +3 bonus damage hit — maximum burst in a single shot.",
     "ultimateMeta": {
       "effectType": "next_correct_bonus",
-      "minimumPoints": 2,
+      "minimumPoints": 3,
       "chargeMultiplier": 0.95
     }
   }

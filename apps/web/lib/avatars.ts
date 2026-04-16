@@ -27,6 +27,7 @@ export type Avatar = {
   emoji: string;
   theme: AvatarTheme;
   description: string;
+  passive: string;
   ultimateId: AvatarUltimateId;
   ultimateName: string;
   ultimateDescription: string;

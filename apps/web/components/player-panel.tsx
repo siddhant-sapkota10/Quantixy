@@ -23,6 +23,14 @@ type PlayerPanelProps = {
   powerUpGlowKey?: number;
   ultimateFxKey?: number;
   ultimateFxType?: "rapid_fire" | "jam" | "shield" | "double" | null;
+  /** Current HP (0–100). When undefined, HP bar is hidden. */
+  hp?: number;
+  /** Max HP for the bar calculation. Defaults to 100. */
+  maxHp?: number;
+  /** Increment to trigger a red hit-flash + shake animation. */
+  hitKey?: number;
+  /** Damage taken on the latest hit — shows as a floating "-X HP" label. */
+  latestDamage?: number | null;
 };
 
 export function PlayerPanel({
@@ -42,7 +50,11 @@ export function PlayerPanel({
   shieldBlockFlashKey = 0,
   powerUpGlowKey = 0,
   ultimateFxKey = 0,
-  ultimateFxType = null
+  ultimateFxType = null,
+  hp,
+  maxHp = 100,
+  hitKey = 0,
+  latestDamage = null,
 }: PlayerPanelProps) {
   const streakVisuals = getStreakEffectVisuals(streakEffect);
 
@@ -53,6 +65,13 @@ export function PlayerPanel({
     double: { tint: "rgba(251,113,133,0.48)", ring: "rgba(251,113,133,0.82)" }
   };
   const ultimateFx = ultimateFxType ? ultimateFxByType[ultimateFxType] : null;
+
+  const showHp = typeof hp === "number";
+  const hpPercent = showHp ? Math.max(0, Math.min(100, (hp / maxHp) * 100)) : 100;
+  const hpBarColor =
+    hpPercent > 60 ? "bg-emerald-400" :
+    hpPercent > 30 ? "bg-amber-400" :
+    "bg-rose-500";
 
   return (
     <div className="flex min-w-0 flex-col items-center gap-2">
@@ -82,13 +101,32 @@ export function PlayerPanel({
               transition={{ duration: 0.2 }}
               className="mt-1 text-[11px] font-bold uppercase tracking-[0.25em] text-amber-300"
             >
-              FAST ?
+              FAST ⚡
             </motion.p>
           ) : null}
         </AnimatePresence>
       </div>
 
       <div className="relative w-full">
+        {/* HP bar — shown above the main card */}
+        {showHp ? (
+          <div className="mb-1.5 px-0.5">
+            <div className="flex items-center justify-between mb-0.5">
+              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">HP</p>
+              <p className={`text-[9px] font-bold tabular-nums ${hpPercent <= 30 ? "text-rose-400" : hpPercent <= 60 ? "text-amber-400" : "text-emerald-400"}`}>
+                {Math.max(0, Math.round(hp ?? 0))}
+              </p>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+              <motion.div
+                className={`h-full rounded-full transition-colors duration-500 ${hpBarColor}`}
+                animate={{ width: `${hpPercent}%` }}
+                transition={{ duration: 0.35, ease: "easeOut" }}
+              />
+            </div>
+          </div>
+        ) : null}
+
         <motion.div
           key={pulseKey}
           initial={{ scale: 1 }}
@@ -107,7 +145,7 @@ export function PlayerPanel({
         >
           {avatar ? <p className="text-2xl leading-none sm:text-3xl">{avatar}</p> : null}
           <p className="mt-1 truncate px-1 text-xs uppercase tracking-[0.2em] text-slate-400">{label}</p>
-          {/* Rank badge — primary identity signal */}
+          {/* Rank badge */}
           <div className="mt-1.5 flex min-h-[1.25rem] items-center justify-center">
             {typeof rating === "number" ? (
               <RankBadge rating={rating} size="md" />
@@ -115,7 +153,7 @@ export function PlayerPanel({
               <span className="invisible text-[11px]">—</span>
             )}
           </div>
-          {/* Supporting stats: rating + strikes */}
+          {/* Supporting stats */}
           <div className="mt-1 flex items-center justify-center gap-2">
             {typeof rating === "number" ? (
               <p className="text-[10px] tabular-nums text-slate-600">{rating}</p>
@@ -129,6 +167,7 @@ export function PlayerPanel({
           </div>
         </motion.div>
 
+        {/* Score glow */}
         {scoreGlowKey > 0 && (
           <motion.div
             key={`sg-${scoreGlowKey}`}
@@ -143,6 +182,7 @@ export function PlayerPanel({
           />
         )}
 
+        {/* Shield block flash */}
         {shieldBlockFlashKey > 0 && (
           <>
             <motion.div
@@ -163,6 +203,7 @@ export function PlayerPanel({
           </>
         )}
 
+        {/* Power-up glow */}
         {powerUpGlowKey > 0 && (
           <motion.div
             key={`pg-${powerUpGlowKey}`}
@@ -177,6 +218,7 @@ export function PlayerPanel({
           />
         )}
 
+        {/* Ultimate FX */}
         {ultimateFxKey > 0 && ultimateFx ? (
           <>
             <motion.div
@@ -199,6 +241,39 @@ export function PlayerPanel({
             />
           </>
         ) : null}
+
+        {/* Hit flash — red overlay when this player takes damage */}
+        <AnimatePresence>
+          {hitKey > 0 && (
+            <motion.div
+              key={`hit-${hitKey}`}
+              className="pointer-events-none absolute inset-0 rounded-2xl"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: [0, 0.55, 0.3, 0] }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.42, ease: "easeOut" }}
+              style={{ background: "rgba(239,68,68,0.48)" }}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Floating damage number */}
+        <AnimatePresence>
+          {latestDamage !== null && latestDamage > 0 && hitKey > 0 && (
+            <motion.div
+              key={`dmg-${hitKey}`}
+              className="pointer-events-none absolute left-1/2 top-2 z-20 -translate-x-1/2 whitespace-nowrap"
+              initial={{ opacity: 0, y: 0, scale: 0.7 }}
+              animate={{ opacity: [0, 1, 1, 0], y: -32, scale: [0.7, 1.1, 1, 0.95] }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.82, ease: "easeOut" }}
+            >
+              <span className="rounded-full border border-rose-500/50 bg-rose-950/90 px-2.5 py-1 text-sm font-black text-rose-300 shadow-lg">
+                -{latestDamage} HP
+              </span>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

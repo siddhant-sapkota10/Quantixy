@@ -249,6 +249,18 @@ const statusHeading: Record<GameStatus, string> = {
   failed: "Connection Failed"
 };
 
+/**
+ * Calculate HP damage from a scored point.
+ * Base 8 per point + bonuses for fast answer and streak level.
+ */
+function calcDamage(points: number, fast: boolean, streak: number): number {
+  if (points <= 0) return 0;
+  const base = points * 8;
+  const fastBonus = fast ? 4 : 0;
+  const streakBonus = streak >= 5 ? 4 : streak >= 3 ? 2 : 0;
+  return base + fastBonus + streakBonus;
+}
+
 const statusCopy: Record<GameStatus, string> = {
   connecting: "Connecting you to the multiplayer server.",
   waiting: "You are in queue. We will pair you up as soon as another player joins.",
@@ -362,6 +374,19 @@ export function GameClient({
   const [yourStreakEffect, setYourStreakEffect] = useState<StreakEffectId>("none");
   const [opponentStreakEffect, setOpponentStreakEffect] = useState<StreakEffectId>("none");
   const [yourEmotePack, setYourEmotePack] = useState<EmotePackId>("basic");
+
+  // Health bar system — client-side only, derived from pointScored events
+  const MAX_HP = 100;
+  const HP_BASE_PER_POINT = 8;
+  const HP_FAST_BONUS = 4;
+  const HP_STREAK_3_BONUS = 2;
+  const HP_STREAK_5_BONUS = 4;
+  const [youDamageTaken, setYouDamageTaken] = useState(0);
+  const [opponentDamageTaken, setOpponentDamageTaken] = useState(0);
+  const [youHitKey, setYouHitKey] = useState(0);
+  const [opponentHitKey, setOpponentHitKey] = useState(0);
+  const [latestYouDamage, setLatestYouDamage] = useState<number | null>(null);
+  const [latestOpponentDamage, setLatestOpponentDamage] = useState<number | null>(null);
 
   const [isFinalPhase, setIsFinalPhase] = useState(false);
   const [scoreImpactKey, setScoreImpactKey] = useState({ you: 0, opponent: 0 });
@@ -588,7 +613,9 @@ export function GameClient({
     const handleAuthRequired = (payload: { message?: string }) => {
       console.log("[client] authRequired received", payload);
       nextSocket.disconnect();
-      router.push("/");
+      // Gracefully redirect to home — session expired or invalid
+      // Use a short delay so any in-flight UI can settle cleanly
+      setTimeout(() => router.push("/"), 300);
     };
 
     const applyRoomLobby = (payload: RoomLobbyState) => {
@@ -827,6 +854,13 @@ export function GameClient({
       // Reset peak streak tracking for new match
       peakYouStreakRef.current = 0;
       peakOpponentStreakRef.current = 0;
+      // Reset HP damage tracking for new match
+      setYouDamageTaken(0);
+      setOpponentDamageTaken(0);
+      setYouHitKey(0);
+      setOpponentHitKey(0);
+      setLatestYouDamage(null);
+      setLatestOpponentDamage(null);
     };
 
     const handleCountdown = (payload: { value: string }) => {
@@ -850,6 +884,12 @@ export function GameClient({
         }
         peakYouStreakRef.current = 0;
         peakOpponentStreakRef.current = 0;
+        setYouDamageTaken(0);
+        setOpponentDamageTaken(0);
+        setYouHitKey(0);
+        setOpponentHitKey(0);
+        setLatestYouDamage(null);
+        setLatestOpponentDamage(null);
       }
       setStatus("countdown");
       setCurrentQuestion("");
@@ -1110,6 +1150,26 @@ export function GameClient({
       const opponentScored = newOpponentScore > prevScores.opponent;
       if (newYouScore > prevScores.you) triggerScoreGlow("you");
       if (newOpponentScore > prevScores.opponent) triggerScoreGlow("opponent");
+
+      // HP damage tracking — apply damage when either player scores
+      if (youScored) {
+        const youPointsDelta = newYouScore - prevScores.you;
+        const dmgDealt = calcDamage(youPointsDelta, payload.fastAnswer ?? false, streakValue);
+        if (dmgDealt > 0) {
+          setOpponentDamageTaken((prev) => prev + dmgDealt);
+          setLatestOpponentDamage(dmgDealt);
+          setOpponentHitKey((prev) => prev + 1);
+        }
+      }
+      if (opponentScored) {
+        const oppPointsDelta = newOpponentScore - prevScores.opponent;
+        const dmgTaken = calcDamage(oppPointsDelta, payload.opponentFastAnswer ?? false, opponentStreakValue);
+        if (dmgTaken > 0) {
+          setYouDamageTaken((prev) => prev + dmgTaken);
+          setLatestYouDamage(dmgTaken);
+          setYouHitKey((prev) => prev + 1);
+        }
+      }
       const secondsRemaining = timerSecondsRef.current;
       const isCloseRace = Math.abs(newYouScore - newOpponentScore) <= CLOSE_SCORE_DELTA;
       const endgameBoost = isCloseRace ? 2 : 1;
@@ -2002,6 +2062,11 @@ export function GameClient({
   const isActiveGameplay = status === "playing";
   const youEliminated = eliminated.you;
   const opponentEliminated = eliminated.opponent;
+
+  // Derived HP values — client-side health bar visualization
+  const youHP = Math.max(0, MAX_HP - youDamageTaken);
+  const opponentHP = Math.max(0, MAX_HP - opponentDamageTaken);
+  const showHP = isActiveGameplay || isFinished;
   const emoteCoolingDown = emoteCooldownUntil > Date.now();
   const isJamActive = ultimate.blackoutUntil > Date.now();
   const isRapidFireActive = ultimate.overclockUntil > Date.now();
@@ -2049,29 +2114,29 @@ export function GameClient({
    */
   const primaryStatus = isActiveGameplay
     ? isJamActive
-      ? { text: "Jam Active",       color: "text-violet-200",  large: false }
+      ? { text: "⚫ Jammed — Input Blocked",       color: "text-violet-200",  large: false }
       : isRapidFireActive
-      ? { text: "Rapid Fire",       color: "text-cyan-200",    large: false }
+      ? { text: "⚡ Rapid Fire Active",             color: "text-amber-200",   large: false }
       : isGuardianShieldActive
-      ? { text: "Guardian Shield",  color: "text-teal-200",    large: false }
+      ? { text: `🛡️ Fortress Shield — ${ultimate.fortressBlocksRemaining} block${ultimate.fortressBlocksRemaining !== 1 ? "s" : ""} left`, color: "text-teal-200", large: false }
       : youEliminated
-      ? { text: "Eliminated ✕",     color: "text-rose-300",    large: false }
+      ? { text: "Eliminated ✕",                    color: "text-rose-300",    large: false }
       : feedback.youAnsweredCurrent
-      ? { text: "Waiting...",        color: "text-slate-400",   large: false }
+      ? { text: "Waiting...",                       color: "text-slate-400",   large: false }
       : showFinalPhase
-      ? { text: isFinalSeconds ? "Final Seconds" : "Final 10 Seconds", color: "text-rose-200", large: false }
+      ? { text: isFinalSeconds ? "⚠ Final Seconds" : "⚠ Final 10 Seconds",   color: "text-rose-200", large: false }
       : null
     : null;
 
   const secondaryStatus = (() => {
     if (!isActiveGameplay) return null;
     const parts = [
-      isOpponentRapidFireActive      && "Opp. Rapid Fire",
-      isOpponentGuardianShieldActive && "Opp. Guardian Shield",
+      isOpponentRapidFireActive      && "⚡ Opp. Rapid Fire Active",
+      isOpponentGuardianShieldActive && `🛡️ Opp. Fortress Shield (${ultimate.opponentFortressBlocksRemaining} blocks)`,
       !youEliminated && opponentEliminated && "Opponent Eliminated",
       !feedback.youAnsweredCurrent && feedback.opponentAnsweredCurrent && "Opponent answered — still your turn",
     ].filter(Boolean) as string[];
-    return parts.length > 0 ? parts.join("  |  ") : null;
+    return parts.length > 0 ? parts.join("  ·  ") : null;
   })();
 
   const getStreakLabel = (streak: number) => {
@@ -2214,11 +2279,11 @@ export function GameClient({
     if (normalizedType === "rapid_fire") {
       const until = side === "you" ? ultimate.overclockUntil : ultimate.opponentOverclockUntil;
       const active = until > now;
-      const total = vfx.durationMs ?? 3000;
+      const total = vfx.durationMs ?? 8000;
       const progress = active ? Math.max(0, Math.min(1, (until - now) / total)) : 0;
       return {
         label: active ? "Rapid Fire Active" : "Rapid Fire",
-        sublabel: active ? "Speed bonus live" : "Stand by",
+        sublabel: active ? `+1 dmg per answer` : "Stand by",
         progress: active ? progress : null,
         accent: "bg-amber-400"
       };
@@ -2227,11 +2292,11 @@ export function GameClient({
     if (normalizedType === "jam") {
       const until = side === "you" ? ultimate.blackoutUntil : ultimate.opponentBlackoutUntil;
       const active = until > now;
-      const total = vfx.durationMs ?? 2000;
+      const total = vfx.durationMs ?? 5000;
       const progress = active ? Math.max(0, Math.min(1, (until - now) / total)) : 0;
       return {
-        label: active ? "Jam Active" : "Jam Ready",
-        sublabel: active ? "Input disruption online" : "Stand by",
+        label: active ? "Jam Active" : "Jam",
+        sublabel: active ? "Opponent locked out" : "Stand by",
         progress: active ? progress : null,
         accent: "bg-violet-400"
       };
@@ -2241,11 +2306,11 @@ export function GameClient({
       const until = side === "you" ? ultimate.fortressUntil : ultimate.opponentFortressUntil;
       const blocks = side === "you" ? ultimate.fortressBlocksRemaining : ultimate.opponentFortressBlocksRemaining;
       const active = until > now && blocks > 0;
-      const total = vfx.durationMs ?? 7000;
+      const total = vfx.durationMs ?? 10000;
       const progress = active ? Math.max(0, Math.min(1, (until - now) / total)) : 0;
       return {
-        label: active ? "Shield Active" : "Shield",
-        sublabel: `Blocks ${blocks}`,
+        label: active ? "Fortress Active" : "Fortress Shield",
+        sublabel: active ? `${blocks} block${blocks !== 1 ? "s" : ""} remaining` : "Stand by",
         progress: active ? progress : null,
         accent: "bg-cyan-400"
       };
@@ -2253,8 +2318,8 @@ export function GameClient({
 
     const armed = side === "you" ? ultimate.infernoPending : ultimate.opponentInfernoPending;
     return {
-      label: armed ? "Double Armed" : "Double",
-      sublabel: armed ? "Next correct +2" : "Waiting",
+      label: armed ? "Inferno Armed" : "Inferno Strike",
+      sublabel: armed ? "Next correct +3 dmg" : "Stand by",
       progress: null,
       accent: "bg-rose-400"
     };
@@ -2381,6 +2446,10 @@ export function GameClient({
               powerUpGlowKey={animState.youPowerUpGlowKey}
               ultimateFxKey={youUltimateFxKey}
               ultimateFxType={youUltimateFxType}
+              hp={showHP ? youHP : undefined}
+              maxHp={MAX_HP}
+              hitKey={youHitKey}
+              latestDamage={latestYouDamage}
             />
             <AnimatePresence>
               {scoreImpactKey.you > 0 ? (
@@ -2409,46 +2478,51 @@ export function GameClient({
                 <span>{ultimate.name}</span>
                 <span>{Math.round(ultimate.charge)}%</span>
               </div>
-              <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-800">
+              {/* Charge bar */}
+              <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-slate-800">
                 <motion.div
-                  className={`h-full ${ultimate.ready ? "bg-emerald-400" : "bg-sky-400"}`}
+                  className={`h-full rounded-full transition-colors duration-300 ${ultimate.ready ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" : "bg-sky-400"}`}
                   animate={{ width: `${Math.max(0, Math.min(100, ultimate.charge))}%` }}
-                  transition={{ duration: 0.2 }}
+                  transition={{ duration: 0.25 }}
                 />
               </div>
-              <p className="mt-1 h-8 overflow-hidden text-[10px] text-slate-400">
-                {ultimate.description}
-              </p>
-              <div className="mt-1 min-h-[1.9rem] rounded-md border border-slate-800 bg-slate-900/70 px-2 py-1">
-                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-300">{localUltimateStatus.label}</p>
-                <p className="mt-0.5 text-[10px] text-slate-500">{localUltimateStatus.sublabel}</p>
+
+              {/* Active effect progress bar */}
+              {localUltimateStatus.progress !== null && (
+                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800">
+                  <motion.div
+                    className={`h-full ${localUltimateStatus.accent}`}
+                    animate={{ width: `${Math.round((localUltimateStatus.progress) * 100)}%` }}
+                    transition={{ duration: 0.2 }}
+                  />
+                </div>
+              )}
+
+              {/* Status label */}
+              <div className="mt-1.5 flex items-center justify-between gap-1">
+                <p className={`text-[10px] font-bold uppercase tracking-[0.18em] ${
+                  ultimate.ready && !ultimate.used ? "text-emerald-300" :
+                  localUltimateStatus.progress !== null ? "text-sky-300" :
+                  "text-slate-400"
+                }`}>
+                  {localUltimateStatus.label}
+                </p>
+                <p className="text-[9px] text-slate-500">{localUltimateStatus.sublabel}</p>
               </div>
-              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800">
-                <motion.div
-                  className={`h-full ${localUltimateStatus.accent}`}
-                  animate={{
-                    width: `${Math.round(((localUltimateStatus.progress ?? 0) * 100))}%`,
-                    opacity: localUltimateStatus.progress === null ? 0 : 1
-                  }}
-                  transition={{ duration: 0.2 }}
-                />
-              </div>
-              <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-slate-300">
-                {ultimate.used ? "Used" : ultimate.ready ? "Ready" : "Charging"}
-              </p>
+
               <Button
-                className={`mt-2 w-full py-2 text-xs ${canUseUltimate ? "shadow-lg shadow-emerald-500/20" : ""}`}
+                className={`mt-2 w-full py-2 text-xs font-bold ${canUseUltimate ? "shadow-lg shadow-emerald-500/25" : ""}`}
                 onClick={handleActivateUltimate}
                 disabled={!canUseUltimate}
                 loading={ultimateActivating}
                 loadingText="Activating..."
               >
                 {ultimate.used
-                  ? "Ultimate Used"
+                  ? "Used"
                   : !ultimate.implemented
-                  ? "Ultimate Soon"
+                  ? "Coming Soon"
                   : ultimate.ready
-                  ? "Ready - Activate Ultimate"
+                  ? `⚡ Activate ${ultimate.name}`
                   : `Charging ${Math.round(ultimate.charge)}%`}
               </Button>
             </div>
@@ -2483,6 +2557,10 @@ export function GameClient({
               powerUpGlowKey={animState.opponentPowerUpGlowKey}
               ultimateFxKey={opponentUltimateFxKey}
               ultimateFxType={opponentUltimateFxType}
+              hp={showHP ? opponentHP : undefined}
+              maxHp={MAX_HP}
+              hitKey={opponentHitKey}
+              latestDamage={latestOpponentDamage}
             />
             <AnimatePresence>
               {scoreImpactKey.opponent > 0 ? (
@@ -2507,42 +2585,49 @@ export function GameClient({
               isActive={isActiveGameplay}
             />
             <div
-              className={`min-h-[8.5rem] rounded-xl border bg-slate-950/70 px-3 py-2 ${
-                ultimate.opponentReady && !ultimate.opponentUsed ? "border-rose-500/40" : "border-slate-800"
+              className={`min-h-[8.5rem] rounded-xl border bg-slate-950/70 px-3 py-2 transition-colors duration-300 ${
+                ultimate.opponentReady && !ultimate.opponentUsed ? "border-rose-500/50 shadow-[0_0_10px_rgba(239,68,68,0.15)]" : "border-slate-800"
               }`}
             >
               <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-slate-400">
-                <span>{ultimate.opponentName}</span>
+                <span className={ultimate.opponentReady && !ultimate.opponentUsed ? "text-rose-300 font-bold" : ""}>{ultimate.opponentName}</span>
                 <span>{Math.round(ultimate.opponentCharge)}%</span>
               </div>
-              <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-800">
+              {/* Charge bar */}
+              <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-slate-800">
                 <motion.div
-                  className={`h-full ${ultimate.opponentReady ? "bg-rose-400" : "bg-slate-500"}`}
+                  className={`h-full rounded-full transition-colors duration-300 ${ultimate.opponentReady ? "bg-rose-400 shadow-[0_0_8px_rgba(248,113,133,0.6)]" : "bg-slate-500"}`}
                   animate={{ width: `${Math.max(0, Math.min(100, ultimate.opponentCharge))}%` }}
                   transition={{ duration: 0.2 }}
                 />
               </div>
-              <div className="mt-1 min-h-[1.9rem] rounded-md border border-slate-800 bg-slate-900/70 px-2 py-1 text-left">
-                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-300">{opponentUltimateStatus.label}</p>
-                <p className="mt-0.5 text-[10px] text-slate-500">{opponentUltimateStatus.sublabel}</p>
+              {/* Active effect progress */}
+              {opponentUltimateStatus.progress !== null && (
+                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800">
+                  <motion.div
+                    className={`h-full ${opponentUltimateStatus.accent}`}
+                    animate={{ width: `${Math.round((opponentUltimateStatus.progress) * 100)}%` }}
+                    transition={{ duration: 0.2 }}
+                  />
+                </div>
+              )}
+              <div className="mt-1.5 flex items-center justify-between gap-1">
+                <p className={`text-[10px] font-bold uppercase tracking-[0.18em] ${
+                  ultimate.opponentReady && !ultimate.opponentUsed ? "text-rose-300" :
+                  opponentUltimateStatus.progress !== null ? "text-sky-300" :
+                  "text-slate-400"
+                }`}>
+                  {opponentUltimateStatus.label}
+                </p>
+                <p className="text-[9px] text-slate-500">{opponentUltimateStatus.sublabel}</p>
               </div>
-              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800">
-                <motion.div
-                  className={`h-full ${opponentUltimateStatus.accent}`}
-                  animate={{
-                    width: `${Math.round(((opponentUltimateStatus.progress ?? 0) * 100))}%`,
-                    opacity: opponentUltimateStatus.progress === null ? 0 : 1
-                  }}
-                  transition={{ duration: 0.2 }}
-                />
-              </div>
-              <p className="mt-2 text-center text-[10px] uppercase tracking-[0.18em] text-slate-400">
+              <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-slate-500">
                 {ultimate.opponentUsed
                   ? "Used"
                   : !ultimate.opponentImplemented
                   ? "Soon"
                   : ultimate.opponentReady
-                  ? "Ready"
+                  ? "⚠ Opponent Ready"
                   : "Charging"}
               </p>
             </div>

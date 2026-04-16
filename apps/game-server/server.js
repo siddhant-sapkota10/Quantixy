@@ -31,8 +31,9 @@ const HOST = "0.0.0.0";
 const PORT = Number(process.env.PORT || 3001);
 
 const DEFAULT_ALLOWED_ORIGINS = [
-  "https://math-battle-web.vercel.app",
+  "https://quantixy.vercel.app",
   "http://localhost:3000",
+  "http://127.0.0.1:3000",
   "http://192.168.1.102:3000"
 ];
 const ALLOWED_ORIGINS = (process.env.CORS_ORIGIN || "")
@@ -63,6 +64,12 @@ const ULTIMATE_TIME_CHARGE_PER_SECOND = 1.4;
 const ULTIMATE_CORRECT_CHARGE = 18;
 const ULTIMATE_STREAK_BONUS_CHARGE = 6;
 const ULTIMATE_DEFAULT_DURATION_MS = 6000;
+// Health (HP) win condition — server authoritative.
+const MAX_HP = 100;
+const HP_BASE_PER_POINT = 8;
+const HP_FAST_BONUS = 4;
+const HP_STREAK_3_BONUS = 2;
+const HP_STREAK_5_BONUS = 4;
 const ROOM_CODE_LENGTH = 6;
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -337,6 +344,10 @@ function buildScoreMap(players) {
   return Object.fromEntries(players.map((player) => [player.socketId, 0]));
 }
 
+function buildHpMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, MAX_HP]));
+}
+
 function buildPowerUpInventoryMap(players) {
   const initialInventory = Object.fromEntries(POWER_UP_IDS.map((powerUpId) => [powerUpId, true]));
   return Object.fromEntries(
@@ -441,7 +452,7 @@ function buildPlayerQuestionState(players) {
     players.map((player) => [
       player.socketId,
       {
-        // No per-player index — question progression is room-level (game.questionIndex).
+        questionIndex: 0,
         answered: false,
         questionSentAt: null,
         currentQuestion: null,
@@ -469,6 +480,14 @@ function clearMatchEffects(game) {
   game.emoteCooldownUntil = buildEmoteCooldownMap(game.players);
   game.emoteTimestamps = Object.fromEntries(game.players.map((p) => [p.socketId, []]));
   clearUltimateEffects(game);
+}
+
+function calcDamage(points, fast, streak) {
+  if (!Number.isFinite(points) || points <= 0) return 0;
+  const base = points * HP_BASE_PER_POINT;
+  const fastBonus = fast ? HP_FAST_BONUS : 0;
+  const streakBonus = streak >= 5 ? HP_STREAK_5_BONUS : streak >= 3 ? HP_STREAK_3_BONUS : 0;
+  return base + fastBonus + streakBonus;
 }
 
 function buildTimerPayload(game) {
@@ -788,10 +807,6 @@ function emitQuestionState(roomId) {
     return;
   }
 
-  // Players always share the same question; winnersByIndex tracks who scored first.
-  const questionIndex = game.questionIndex;
-  const winnerSocketId = game.questionWinnersByIndex[questionIndex] ?? null;
-
   for (const player of game.players) {
     const opponent = getOpponent(game, player.socketId);
 
@@ -801,17 +816,11 @@ function emitQuestionState(roomId) {
 
     const youState = game.playerQuestionState[player.socketId];
     const opponentState = game.playerQuestionState[opponent.socketId];
-    const winner =
-      !winnerSocketId
-        ? null
-        : winnerSocketId === player.socketId
-          ? "you"
-          : "opponent";
 
     io.to(player.socketId).emit("questionState", {
       youAnswered: !!youState?.answered,
       opponentAnswered: !!opponentState?.answered,
-      winner,
+      winner: null,
       youEliminated: !!game.eliminated[player.socketId],
       opponentEliminated: !!game.eliminated[opponent.socketId],
       ...buildPlayerUltimateState(game, player.socketId)
@@ -821,14 +830,13 @@ function emitQuestionState(roomId) {
 
 function resetGameState(game) {
   game.questionBank = [];
-  game.questionIndex = 0;
-  game.questionWinnersByIndex = {};
   game.playerQuestionState = buildPlayerQuestionState(game.players);
   game.questionTimeouts = Object.fromEntries(game.players.map((player) => [player.socketId, null]));
   game.startedAt = null;
   game.endsAt = null;
   game.phase = "countdown";
   game.scores = buildScoreMap(game.players);
+  game.hp = buildHpMap(game.players);
   game.strikes = buildStrikeMap(game.players);
   game.eliminated = buildEliminatedMap(game.players);
   game.streaks = buildScoreMap(game.players);
@@ -883,8 +891,7 @@ function emitNewQuestionToPlayer(roomId, socketId) {
     return;
   }
 
-  // All players share the same question index — per-player state tracks completion only.
-  const question = ensureQuestionAtIndex(game, game.questionIndex);
+  const question = ensureQuestionAtIndex(game, questionState.questionIndex);
   if (!question) {
     return;
   }
@@ -898,7 +905,7 @@ function emitNewQuestionToPlayer(roomId, socketId) {
   clearPlayerQuestionTimer(game, socketId);
 
   const payload = { question: question.prompt, token: questionState.generation };
-  console.log(`[server] newQuestion emitted -> room=${roomId} player=${socketId} qi=${game.questionIndex} token=${questionState.generation}`);
+  console.log(`[server] newQuestion emitted -> room=${roomId} player=${socketId} qi=${questionState.questionIndex} token=${questionState.generation}`);
   io.to(socketId).emit("newQuestion", payload);
   emitQuestionState(roomId);
 }
@@ -941,7 +948,7 @@ function startMatchTimer(roomId) {
 
     if (secondsLeft <= 0) {
       clearMatchTimer(activeGame);
-      finishGame(roomId);
+      finishGame(roomId, { endCondition: "time" });
     }
   }, TIMER_UPDATE_INTERVAL_MS);
 }
@@ -999,6 +1006,9 @@ async function finishGame(roomId, options = {}) {
   }
 
   const reason = typeof options.reason === "string" ? options.reason : null;
+  const endCondition = typeof options.endCondition === "string" ? options.endCondition : null;
+  const forcedWinnerSocketId =
+    typeof options.forceWinnerSocketId === "string" ? options.forceWinnerSocketId : null;
 
   clearCountdown(game);
   clearAllQuestionTimers(game);
@@ -1016,27 +1026,55 @@ async function finishGame(roomId, options = {}) {
 
   const playerOneScore = game.scores[playerOne.socketId] ?? 0;
   const playerTwoScore = game.scores[playerTwo.socketId] ?? 0;
-  const outcome = deriveMatchOutcome(playerOneScore, playerTwoScore);
-  const isDraw = outcome.result === "draw";
-  const winner = outcome.winnerSide === "player_one" ? playerOne : outcome.winnerSide === "player_two" ? playerTwo : null;
+  const playerOneHp = game.hp?.[playerOne.socketId] ?? null;
+  const playerTwoHp = game.hp?.[playerTwo.socketId] ?? null;
+
+  let winnerSocketId = null;
+  let isDraw = false;
+
+  if (forcedWinnerSocketId && (forcedWinnerSocketId === playerOne.socketId || forcedWinnerSocketId === playerTwo.socketId)) {
+    winnerSocketId = forcedWinnerSocketId;
+  } else if (endCondition === "time" && typeof playerOneHp === "number" && typeof playerTwoHp === "number") {
+    if (playerOneHp > playerTwoHp) {
+      winnerSocketId = playerOne.socketId;
+    } else if (playerTwoHp > playerOneHp) {
+      winnerSocketId = playerTwo.socketId;
+    } else if (playerOneScore !== playerTwoScore) {
+      winnerSocketId = playerOneScore > playerTwoScore ? playerOne.socketId : playerTwo.socketId;
+    } else {
+      isDraw = true;
+    }
+  } else {
+    if (playerOneScore !== playerTwoScore) {
+      winnerSocketId = playerOneScore > playerTwoScore ? playerOne.socketId : playerTwo.socketId;
+    } else {
+      isDraw = true;
+    }
+  }
+
+  const winner = isDraw ? null : winnerSocketId === playerOne.socketId ? playerOne : playerTwo;
   const loser = isDraw ? null : winner?.socketId === playerOne.socketId ? playerTwo : playerOne;
-  const playerOneDelta = calculateEloDelta(
-    playerOne.rating,
-    playerTwo.rating,
-    outcome.playerOneActualScore
-  );
-  const playerTwoDelta = calculateEloDelta(
-    playerTwo.rating,
-    playerOne.rating,
-    outcome.playerTwoActualScore
-  );
+  const playerOneActualScore = isDraw ? 0.5 : winnerSocketId === playerOne.socketId ? 1 : 0;
+  const playerTwoActualScore = isDraw ? 0.5 : winnerSocketId === playerTwo.socketId ? 1 : 0;
+  const playerOneDelta = calculateEloDelta(playerOne.rating, playerTwo.rating, playerOneActualScore);
+  const playerTwoDelta = calculateEloDelta(playerTwo.rating, playerOne.rating, playerTwoActualScore);
   const nextPlayerOneRating = playerOne.rating + playerOneDelta;
   const nextPlayerTwoRating = playerTwo.rating + playerTwoDelta;
-  const message = isDraw
-    ? `Draw ${playerOneScore}-${playerTwoScore}.`
-    : reason
-      ? reason
-      : `${winner?.name ?? "Player"} defeats ${loser?.name ?? "Opponent"} ${Math.max(playerOneScore, playerTwoScore)}-${Math.min(playerOneScore, playerTwoScore)}.`;
+  const message = (() => {
+    if (reason) return reason;
+    if (isDraw) {
+      if (endCondition === "time" && typeof playerOneHp === "number" && typeof playerTwoHp === "number") {
+        return `Time! Draw on HP (${playerOneHp}-${playerTwoHp}) and score (${playerOneScore}-${playerTwoScore}).`;
+      }
+      return `Draw ${playerOneScore}-${playerTwoScore}.`;
+    }
+    if (endCondition === "time" && typeof playerOneHp === "number" && typeof playerTwoHp === "number") {
+      const hpLine = `HP ${playerOneHp}-${playerTwoHp}`;
+      const scoreLine = `score ${playerOneScore}-${playerTwoScore}`;
+      return `Time! ${winner?.name ?? "Player"} wins — ${hpLine}${playerOneHp === playerTwoHp ? `, ${scoreLine}` : ""}.`;
+    }
+    return `${winner?.name ?? "Player"} defeats ${loser?.name ?? "Opponent"} ${Math.max(playerOneScore, playerTwoScore)}-${Math.min(playerOneScore, playerTwoScore)}.`;
+  })();
 
   try {
     await Promise.all([
@@ -1092,6 +1130,7 @@ async function finishGame(roomId, options = {}) {
       winnerName: winner?.name ?? null,
       result: isDraw ? "draw" : player.socketId === winner?.socketId ? "win" : "loss",
       message,
+      endCondition: endCondition ?? (forcedWinnerSocketId ? "forced" : "score"),
       opponentName: opponent.name,
       scores: {
         you: game.scores[player.socketId] ?? 0,
@@ -1135,36 +1174,40 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
   questionState.answered = true;
   clearPlayerQuestionTimer(game, playerSocketId);
 
-  const questionIndex = game.questionIndex;
-  const existingWinner = game.questionWinnersByIndex[questionIndex] ?? null;
-  const isFirstCorrect = !existingWinner;
+  // Each player answers their own independent question — every correct answer earns points.
   const fastAnswer =
-    isFirstCorrect &&
     typeof questionState.questionSentAt === "number" &&
     Date.now() - questionState.questionSentAt <= FAST_ANSWER_MS;
-  let awardedPoints = 0;
+  let awardedPoints = pointsAwarded;
 
-  if (isFirstCorrect) {
-    // First correct answer wins the point.
-    game.questionWinnersByIndex[questionIndex] = playerSocketId;
-    awardedPoints = pointsAwarded;
-
-    if (game.infernoPending[playerSocketId]) {
-      awardedPoints = Math.max(awardedPoints, 2);
-      game.infernoPending[playerSocketId] = false;
-    }
-
-    if (isActiveUntil(game.overclockUntil[playerSocketId])) {
-      awardedPoints += 1;
-    }
-
-    game.scores[playerSocketId] = (game.scores[playerSocketId] ?? 0) + awardedPoints;
+  if (game.infernoPending[playerSocketId]) {
+    const infernoMeta = getUltimateMeta("double");
+    const infernoMin = typeof infernoMeta.minimumPoints === "number" ? infernoMeta.minimumPoints : 2;
+    awardedPoints = Math.max(awardedPoints, infernoMin);
+    game.infernoPending[playerSocketId] = false;
   }
 
-  // Any correct answer (first or second) advances streak and ultimate charge.
+  if (isActiveUntil(game.overclockUntil[playerSocketId])) {
+    awardedPoints += 1;
+  }
+
+  game.scores[playerSocketId] = (game.scores[playerSocketId] ?? 0) + awardedPoints;
   game.streaks[playerSocketId] = (game.streaks[playerSocketId] ?? 0) + 1;
   const streakBonus = game.streaks[playerSocketId] >= 3 ? ULTIMATE_STREAK_BONUS_CHARGE : 0;
   increaseUltimateCharge(game, playerSocketId, ULTIMATE_CORRECT_CHARGE + streakBonus);
+
+  // Apply HP damage to opponent (server authoritative KO condition).
+  const opponent = getOpponent(game, playerSocketId);
+  const damage = opponent ? calcDamage(awardedPoints, fastAnswer, game.streaks[playerSocketId] ?? 0) : 0;
+  let knockedOutOpponent = false;
+  if (opponent) {
+    if (!game.hp) {
+      game.hp = buildHpMap(game.players);
+    }
+    const nextOpponentHp = Math.max(0, (game.hp[opponent.socketId] ?? MAX_HP) - damage);
+    game.hp[opponent.socketId] = nextOpponentHp;
+    knockedOutOpponent = nextOpponentHp <= 0;
+  }
 
   const playerOneSocketId = game.players[0].socketId;
   const playerTwoSocketId = game.players[1].socketId;
@@ -1172,9 +1215,8 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
 
   console.log(`[server] correct answer -> room=${roomId}`, {
     player: playerSocketId,
-    isFirstCorrect,
     awardedPoints,
-    questionIndex,
+    playerQi: questionState.questionIndex,
     scores: game.scores,
     fastAnswer
   });
@@ -1185,6 +1227,10 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     scores: {
       you: game.scores[playerOneSocketId],
       opponent: game.scores[playerTwoSocketId]
+    },
+    hp: {
+      you: game.hp?.[playerOneSocketId] ?? null,
+      opponent: game.hp?.[playerTwoSocketId] ?? null
     },
     streak: game.streaks[playerOneSocketId],
     opponentStreak: game.streaks[playerTwoSocketId],
@@ -1203,6 +1249,10 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
       you: game.scores[playerTwoSocketId],
       opponent: game.scores[playerOneSocketId]
     },
+    hp: {
+      you: game.hp?.[playerTwoSocketId] ?? null,
+      opponent: game.hp?.[playerOneSocketId] ?? null
+    },
     streak: game.streaks[playerTwoSocketId],
     opponentStreak: game.streaks[playerOneSocketId],
     fastAnswer: scorerSocketId === playerTwoSocketId ? fastAnswer : false,
@@ -1215,36 +1265,45 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     ...buildPlayerPowerState(game, playerTwoSocketId)
   });
 
-  // Broadcast the current completion state (youAnswered / opponentAnswered / winner).
+  // Broadcast the current completion state (youAnswered / opponentAnswered).
   emitQuestionState(roomId);
   emitLiveLeaderboard(roomId);
 
-  // Fast reaction loop behavior:
-  // as soon as the first correct answer lands, advance everyone immediately.
-  // This prevents the scorer from being blocked waiting for the opponent.
-  if (isFirstCorrect) {
-    advanceRoomQuestion(roomId);
+  if (knockedOutOpponent && opponent) {
+    void finishGame(roomId, {
+      forceWinnerSocketId: playerSocketId,
+      endCondition: "ko",
+      reason: `${game.players.find((p) => p.socketId === playerSocketId)?.name ?? "Player"} wins by KO.`
+    });
+    return;
   }
+
+  // Advance only the scorer to their next question — opponent is unaffected.
+  advancePlayerQuestion(roomId, playerSocketId);
 }
 
 /**
- * Advance the shared room question index and push the new question to every
- * active player simultaneously.
+ * Advance a single player's question index and push their next question.
+ * The opponent's question is completely unaffected.
  */
-function advanceRoomQuestion(roomId) {
+function advancePlayerQuestion(roomId, socketId) {
   const game = activeGames.get(roomId);
 
   if (!game || game.phase !== "playing") {
     return;
   }
 
-  game.questionIndex += 1;
-  console.log(`[server] advanceRoomQuestion -> room=${roomId} qi=${game.questionIndex}`);
+  const questionState = game.playerQuestionState[socketId];
 
-  for (const player of game.players) {
-    if (!game.eliminated[player.socketId]) {
-      emitNewQuestionToPlayer(roomId, player.socketId);
-    }
+  if (!questionState) {
+    return;
+  }
+
+  questionState.questionIndex += 1;
+  console.log(`[server] advancePlayerQuestion -> room=${roomId} player=${socketId} qi=${questionState.questionIndex}`);
+
+  if (!game.eliminated[socketId]) {
+    emitNewQuestionToPlayer(roomId, socketId);
   }
 }
 
@@ -1477,14 +1536,13 @@ function createActiveGame(players, topic, difficulty, customRoomCode = null) {
     customRoomCode,
     players,
     questionBank: [],
-    questionIndex: 0,
-    questionWinnersByIndex: {},
     playerQuestionState: buildPlayerQuestionState(players),
     questionTimeouts: Object.fromEntries(players.map((player) => [player.socketId, null])),
     startedAt: null,
     endsAt: null,
     phase: "waiting",
     scores: buildScoreMap(players),
+    hp: buildHpMap(players),
     strikes: buildStrikeMap(players),
     eliminated: buildEliminatedMap(players),
     streaks: buildScoreMap(players),
@@ -2288,6 +2346,10 @@ io.on("connection", (socket) => {
     const game = roomId ? activeGames.get(roomId) : null;
 
     if (!game) {
+      return;
+    }
+
+    if (game.phase !== "playing") {
       return;
     }
 

@@ -70,6 +70,13 @@ function getPose(offset: number, sideOffset: number, farOffset: number): CardPos
   };
 }
 
+const ROLE_COLORS: Record<string, { badge: string; accent: string }> = {
+  Speed:   { badge: "border-sky-400/40 bg-sky-500/15 text-sky-200",    accent: "bg-sky-400" },
+  Disrupt: { badge: "border-violet-400/40 bg-violet-500/15 text-violet-200", accent: "bg-violet-400" },
+  Defense: { badge: "border-emerald-400/40 bg-emerald-500/15 text-emerald-200", accent: "bg-emerald-400" },
+  Burst:   { badge: "border-rose-400/40 bg-rose-500/15 text-rose-200",  accent: "bg-rose-400" },
+};
+
 function AvatarCard({
   avatar,
   isActive,
@@ -83,6 +90,8 @@ function AvatarCard({
   disabled: boolean;
   onSelect: () => void;
 }) {
+  const roleStyle = ROLE_COLORS[avatar.role] ?? ROLE_COLORS["Speed"];
+
   return (
     <button
       type="button"
@@ -111,25 +120,40 @@ function AvatarCard({
         style={{ background: avatar.theme.accent }}
       />
 
+      {/* Header: role badge + icon */}
       <div className="relative z-10 flex items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">{avatar.role}</p>
-          <h3 className="mt-1 text-xl font-black text-white sm:text-2xl">{avatar.name}</h3>
+          <span
+            className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.22em] ${roleStyle.badge}`}
+          >
+            {avatar.role}
+          </span>
+          <h3 className="mt-1.5 text-xl font-black text-white sm:text-2xl">{avatar.name}</h3>
         </div>
         <div className="text-4xl leading-none sm:text-5xl" aria-hidden="true">
           {avatar.icon}
         </div>
       </div>
 
-      <p className="relative z-10 mt-3 min-h-[2.5rem] text-xs text-slate-300 sm:text-sm">{avatar.description}</p>
-
-      <div className="relative z-10 mt-4 rounded-xl border border-slate-700/70 bg-slate-900/80 px-3 py-2.5">
-        <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Ultimate</p>
-        <p className="mt-1 text-sm font-semibold text-white">{avatar.ultimateName}</p>
-        <p className="mt-1 min-h-[2rem] text-xs text-slate-300">{avatar.ultimateDescription}</p>
+      {/* Passive / playstyle */}
+      <div className="relative z-10 mt-3 rounded-xl border border-slate-700/60 bg-slate-900/60 px-3 py-2">
+        <p className="text-[9px] font-bold uppercase tracking-[0.22em] text-slate-500">Playstyle</p>
+        <p className="mt-1 min-h-[2.25rem] text-[11px] leading-relaxed text-slate-300">{avatar.passive}</p>
       </div>
 
-      <div className="relative z-10 mt-4 flex min-h-[1.5rem] items-center justify-between">
+      {/* Ultimate ability */}
+      <div className="relative z-10 mt-2.5 rounded-xl border border-slate-700/70 bg-slate-900/80 px-3 py-2.5">
+        <div className="flex items-center gap-1.5">
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${roleStyle.accent}`}
+          />
+          <p className="text-[9px] font-bold uppercase tracking-[0.22em] text-slate-400">Signature Ultimate</p>
+        </div>
+        <p className="mt-1 text-sm font-bold text-white">{avatar.ultimateName}</p>
+        <p className="mt-1 min-h-[2rem] text-[11px] leading-relaxed text-slate-300">{avatar.ultimateDescription}</p>
+      </div>
+
+      <div className="relative z-10 mt-3 flex min-h-[1.5rem] items-center justify-between">
         <span
           className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] ${
             isActive
@@ -197,7 +221,7 @@ export function AvatarCarousel({
       <div
         className="relative mx-auto w-full max-w-3xl"
         role="region"
-        aria-label="Avatar carousel"
+        aria-label="Character selection"
         onKeyDown={(event) => {
           if (event.key === "ArrowLeft") {
             event.preventDefault();
@@ -213,7 +237,7 @@ export function AvatarCarousel({
         <div className="pointer-events-none absolute inset-0 rounded-[1.8rem] border border-slate-800/80 bg-gradient-to-b from-slate-900/42 via-slate-950/30 to-slate-950/55" />
 
         <motion.div
-          className="relative h-[23.5rem] overflow-hidden px-2 pt-4 sm:h-[25.5rem] sm:px-4 sm:pt-5"
+          className="relative h-[26rem] overflow-hidden px-2 pt-4 sm:h-[28rem] sm:px-4 sm:pt-5"
           drag="x"
           dragConstraints={{ left: 0, right: 0 }}
           dragElastic={0.08}
@@ -246,7 +270,7 @@ export function AvatarCarousel({
                   style={{ zIndex: pose.zIndex }}
                 >
                   <motion.div
-                    className="pointer-events-auto h-[19.25rem] w-[min(92vw,18.1rem)] sm:h-[21.25rem] sm:w-[19.4rem]"
+                    className="pointer-events-auto h-[21.75rem] w-[min(92vw,18.1rem)] sm:h-[23.75rem] sm:w-[19.4rem]"
                     animate={{
                       x: pose.x,
                       scale: pose.scale,
@@ -279,7 +303,7 @@ export function AvatarCarousel({
             onClick={goPrev}
             disabled={disabled}
             className="h-11 min-w-[3rem] rounded-xl border border-slate-700 bg-slate-950/82 px-3 text-base font-semibold text-slate-100 transition-all duration-150 ease-out hover:border-slate-500 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 disabled:cursor-not-allowed disabled:opacity-55 disabled:saturate-50"
-            aria-label="Previous avatar"
+            aria-label="Previous character"
           >
             {"<"}
           </button>
@@ -294,7 +318,7 @@ export function AvatarCarousel({
                 transition={{ duration: 0.18 }}
                 className="truncate text-xs uppercase tracking-[0.24em] text-slate-300 sm:text-sm"
               >
-                {focusedAvatar.name} - {focusedAvatar.role}
+                {focusedAvatar.name} — {focusedAvatar.role}
               </motion.p>
             </AnimatePresence>
             <div className="flex items-center justify-center gap-1.5" aria-hidden="true">
@@ -317,7 +341,7 @@ export function AvatarCarousel({
             onClick={goNext}
             disabled={disabled}
             className="h-11 min-w-[3rem] rounded-xl border border-slate-700 bg-slate-950/82 px-3 text-base font-semibold text-slate-100 transition-all duration-150 ease-out hover:border-slate-500 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 disabled:cursor-not-allowed disabled:opacity-55 disabled:saturate-50"
-            aria-label="Next avatar"
+            aria-label="Next character"
           >
             {">"}
           </button>

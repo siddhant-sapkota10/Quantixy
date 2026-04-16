@@ -6,10 +6,13 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace @mathbattle/web",
+    "dev": "concurrently --names \"server,web\" --prefix-colors \"cyan,blue\" \"npm run dev --workspace @mathbattle/game-server\" \"npm run dev --workspace @mathbattle/web\"",
     "dev:web": "npm run dev --workspace @mathbattle/web",
     "dev:server": "npm run dev --workspace @mathbattle/game-server",
     "build": "npm run build --workspace @mathbattle/web",
     "start": "npm run start --workspace @mathbattle/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }

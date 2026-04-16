@@ -47,7 +47,6 @@ function AuthModal({
   initialDisplayName: string;
   onClose: () => void;
 }) {
-  const router = useRouter();
   const { user, loading } = useSupabaseAuth();
   const [authMode, setAuthMode] = useState<AuthMode>(mode);
   const [email, setEmail] = useState("");
@@ -77,9 +76,8 @@ function AuthModal({
   useEffect(() => {
     if (user && !isAnonymousUser(user) && open) {
       onClose();
-      router.push("/play");
     }
-  }, [onClose, open, router, user]);
+  }, [onClose, open, user]);
 
   if (!open) {
     return null;
@@ -626,11 +624,6 @@ export function HomeHero() {
   };
 
   const handleGuestContinue = async () => {
-    if (user) {
-      router.push("/play");
-      return;
-    }
-
     try {
       setGuestBusy(true);
       setGuestError(null);
@@ -645,8 +638,6 @@ export function HomeHero() {
       if (data.user) {
         await createPlayerProfileForUser(data.user, getGuestUsername(data.user.id));
       }
-
-      router.push("/play");
     } catch (error) {
       setGuestError(
         error instanceof Error ? getReadableAuthError(error.message) : "Unable to continue as guest."
@@ -683,173 +674,295 @@ export function HomeHero() {
           <p className="text-base text-slate-300 sm:text-lg md:text-xl">Real-time multiplayer math</p>
         </div>
 
-        <div className="mt-8 space-y-4 text-center sm:mt-12">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Button
-              className="w-full py-4 text-lg font-black shadow-lg shadow-sky-500/20 sm:py-5 sm:text-xl"
-              onClick={handlePlayNow}
-              disabled={loading || guestBusy || Boolean(routeBusy)}
-              loading={routeBusy === "play"}
-              loadingText="Opening..."
-            >
-              Play Online
-            </Button>
-            <Button
-              variant="secondary"
-              className="w-full py-4 text-lg font-bold sm:py-5 sm:text-xl"
-              onClick={handlePlayVsAi}
-              disabled={loading || guestBusy || Boolean(routeBusy)}
-              loading={routeBusy === "ai"}
-              loadingText="Opening..."
-            >
-              Play vs AI 🤖
-            </Button>
-          </div>
-
-          {user ? (
-            <div className="flex items-center justify-center gap-3 rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-left">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-sky-400/20 bg-slate-950/80 text-2xl">
-                {getAvatar(accountIdentity?.avatarId).icon}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                  {isGuest ? "Guest Account" : "Account Ready"}
-                </p>
-                <p className="text-base font-semibold text-white">
-                  {accountIdentity?.displayName ?? (isGuest ? suggestedGuestName : "Player")}
-                </p>
-                {!isGuest && accountIdentity?.highestRating !== undefined ? (
-                  <div className="mt-1 flex items-center gap-1.5">
-                    <RankBadge rating={accountIdentity.highestRating} size="sm" />
-                    <span className="text-[10px] text-slate-500">{accountIdentity.highestRating}</span>
-                  </div>
-                ) : null}
-              </div>
+        <div className="mt-8 space-y-5 sm:mt-10">
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-sky-400/30 border-t-sky-400" />
             </div>
-          ) : null}
-
-          {!user ? (
-            <div className="grid gap-3 sm:grid-cols-1">
-               <Button
-                className="w-full"
-                onClick={() => openAuthModal("login")}
-                disabled={loading}
-              >
-                Log In
-              </Button>
-              <Button
-                className="w-full"
-                onClick={() => openAuthModal("signup")}
-                disabled={loading}
-              >
-                Create Account
-              </Button>
-              <Button
-                variant="secondary"
-                className="w-full"
+          ) : !user ? (
+            // No session — identity first
+            <div className="space-y-2.5">
+              {/* Hero guest CTA */}
+              <motion.button
                 onClick={handleGuestContinue}
-                disabled={guestBusy || loading}
-                loading={guestBusy}
-                loadingText="Continuing..."
+                disabled={guestBusy}
+                whileHover={guestBusy ? undefined : { scale: 1.01, y: -1 }}
+                whileTap={guestBusy ? undefined : { scale: 0.99 }}
+                transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
+                className="group w-full rounded-2xl border border-sky-500/30 bg-gradient-to-br from-sky-500/15 via-sky-500/5 to-transparent p-5 text-left transition-colors hover:border-sky-400/50 hover:from-sky-500/20 disabled:cursor-not-allowed disabled:opacity-55"
               >
-                Continue as Guest
-              </Button>
-              <Button
-                variant="secondary"
-                className="w-full sm:col-span-2"
-                onClick={() => {
-                  setRouteBusy("leaderboard");
-                  router.push("/leaderboard");
-                }}
-                loading={routeBusy === "leaderboard"}
-                loadingText="Opening..."
-              >
-                Leaderboard
-              </Button>
-            </div>
-          ) : isGuest ? (
-            <div className="space-y-3">
-              <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
-                You&apos;re playing as a temporary guest. Upgrade to an account to keep your identity across devices.
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Button
-                  className="w-full"
+                <div className="flex items-center gap-4">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-sky-400/30 bg-sky-400/10 text-sky-300">
+                    <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-lg font-black text-white">Continue as Guest</p>
+                    <p className="text-sm text-slate-400">Jump in instantly — no account needed</p>
+                  </div>
+                  {guestBusy ? (
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-sky-400/30 border-t-sky-400" />
+                  ) : (
+                    <svg className="h-5 w-5 shrink-0 text-sky-400 opacity-50 transition-opacity group-hover:opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 18l6-6-6-6" />
+                    </svg>
+                  )}
+                </div>
+              </motion.button>
+
+              <div className="grid gap-2.5 sm:grid-cols-2">
+                <motion.button
                   onClick={() => openAuthModal("signup")}
-                  disabled={loading}
+                  whileHover={{ scale: 1.01, y: -1 }}
+                  whileTap={{ scale: 0.99 }}
+                  transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
+                  className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80"
                 >
-                  Upgrade to Account
-                </Button>
-                <Button
-                  variant="secondary"
-                  className="w-full"
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300">
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM19 8v6M22 11h-6" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-white">Create Account</p>
+                    <p className="text-xs text-slate-500">Save progress across devices</p>
+                  </div>
+                </motion.button>
+
+                <motion.button
                   onClick={() => openAuthModal("login")}
-                  disabled={loading}
+                  whileHover={{ scale: 1.01, y: -1 }}
+                  whileTap={{ scale: 0.99 }}
+                  transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
+                  className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80"
                 >
-                  Log In
-                </Button>
-                <Button
-                  variant="secondary"
-                  className="w-full"
-                  onClick={() => openAuthModal("signup")}
-                  disabled={loading}
-                >
-                  Create Account
-                </Button>
-                <Button
-                  variant="secondary"
-                  className="w-full sm:col-span-2"
-                  onClick={() => {
-                    setRouteBusy("leaderboard");
-                    router.push("/leaderboard");
-                  }}
-                  loading={routeBusy === "leaderboard"}
-                  loadingText="Opening..."
-                >
-                  Leaderboard
-                </Button>
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300">
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-white">Log In</p>
+                    <p className="text-xs text-slate-500">Resume your account</p>
+                  </div>
+                </motion.button>
               </div>
+
+              {guestError ? <p className="text-sm text-rose-300">{guestError}</p> : null}
             </div>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Button
-                variant="secondary"
-                className="w-full"
-                onClick={() => {
-                  setRouteBusy("profile");
-                  router.push("/profile");
-                }}
-                loading={routeBusy === "profile"}
-                loadingText="Opening..."
-              >
-                Profile
-              </Button>
-              <Button
-                variant="secondary"
-                className="w-full"
-                onClick={() => {
-                  setRouteBusy("leaderboard");
-                  router.push("/leaderboard");
-                }}
-                loading={routeBusy === "leaderboard"}
-                loadingText="Opening..."
-              >
-                Leaderboard
-              </Button>
-              <Button
-                variant="secondary"
-                className="w-full"
-                onClick={() => void handleLogout()}
-                disabled={logoutBusy}
-                loading={logoutBusy}
-                loadingText="Logging Out..."
-              >
-                Log Out
-              </Button>
+            // Has session — premium lobby
+            <div className="space-y-5">
+              {/* ── PLAY ─────────────────────────────────────── */}
+              <div className="space-y-2.5">
+                <p className="text-left text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-500">Play</p>
+
+                {/* Play Online — hero CTA */}
+                <motion.button
+                  onClick={handlePlayNow}
+                  disabled={Boolean(routeBusy)}
+                  whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
+                  whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
+                  transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
+                  className="group w-full rounded-2xl border border-sky-500/30 bg-gradient-to-br from-sky-500/15 via-sky-500/5 to-transparent p-5 text-left transition-colors hover:border-sky-400/50 hover:from-sky-500/20 disabled:cursor-not-allowed disabled:opacity-55 sm:p-6"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-sky-400/30 bg-sky-400/10 text-sky-300">
+                      <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-lg font-black text-white sm:text-xl">Play Online</p>
+                      <p className="text-sm text-slate-400">Compete against real players in live duels</p>
+                    </div>
+                    {routeBusy === "play" ? (
+                      <div className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-sky-400/30 border-t-sky-400" />
+                    ) : (
+                      <svg className="h-5 w-5 shrink-0 text-sky-400 opacity-50 transition-opacity group-hover:opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 18l6-6-6-6" />
+                      </svg>
+                    )}
+                  </div>
+                </motion.button>
+
+                {/* Practice vs AI */}
+                <motion.button
+                  onClick={handlePlayVsAi}
+                  disabled={Boolean(routeBusy)}
+                  whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
+                  whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
+                  transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
+                  className="group w-full rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80 disabled:cursor-not-allowed disabled:opacity-55 sm:p-5"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300">
+                      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="11" width="18" height="10" rx="2" />
+                        <path d="M9 11V7a3 3 0 016 0v4M12 15v2M8 15v.01M16 15v.01" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-base font-bold text-white">Practice vs AI</p>
+                      <p className="text-sm text-slate-500">Sharpen your skills offline</p>
+                    </div>
+                    {routeBusy === "ai" ? (
+                      <div className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-slate-500/30 border-t-slate-400" />
+                    ) : (
+                      <svg className="h-4 w-4 shrink-0 text-slate-500 opacity-60 transition-opacity group-hover:opacity-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 18l6-6-6-6" />
+                      </svg>
+                    )}
+                  </div>
+                </motion.button>
+              </div>
+
+              {/* ── IDENTITY PANEL ───────────────────────────── */}
+              <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-900/50 px-4 py-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-sky-400/20 bg-slate-950/80 text-xl">
+                  {getAvatar(accountIdentity?.avatarId).icon}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-sm font-semibold text-white">
+                      {accountIdentity?.displayName ?? (isGuest ? suggestedGuestName : "Player")}
+                    </p>
+                    {!isGuest && accountIdentity?.highestRating !== undefined ? (
+                      <RankBadge rating={accountIdentity.highestRating} size="sm" />
+                    ) : null}
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    {isGuest
+                      ? "Guest · progress not saved"
+                      : accountIdentity?.highestRating !== undefined
+                        ? `Rating ${accountIdentity.highestRating}`
+                        : "Loading profile…"}
+                  </p>
+                </div>
+              </div>
+
+              {/* ── ACCOUNT ──────────────────────────────────── */}
+              <div className="space-y-2.5">
+                <p className="text-left text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-500">Account</p>
+
+                {isGuest ? (
+                  <>
+                    <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-200">
+                      Playing as a guest — progress won&apos;t be saved across sessions.
+                    </div>
+                    <div className="grid gap-2.5 sm:grid-cols-2">
+                      <motion.button
+                        onClick={() => openAuthModal("signup")}
+                        whileHover={{ scale: 1.01, y: -1 }}
+                        whileTap={{ scale: 0.99 }}
+                        transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
+                        className="group flex flex-col gap-3 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80"
+                      >
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300 transition-colors group-hover:border-sky-500/40 group-hover:bg-sky-500/10 group-hover:text-sky-300">
+                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM19 8v6M22 11h-6" />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-white">Upgrade Account</p>
+                          <p className="text-xs text-slate-500">Save stats &amp; earn ranks</p>
+                        </div>
+                      </motion.button>
+
+                      <motion.button
+                        onClick={() => { setRouteBusy("leaderboard"); router.push("/leaderboard"); }}
+                        disabled={Boolean(routeBusy)}
+                        whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
+                        whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
+                        transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
+                        className="group flex flex-col gap-3 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80 disabled:opacity-55"
+                      >
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300 transition-colors group-hover:border-yellow-500/40 group-hover:bg-yellow-500/10 group-hover:text-yellow-300">
+                          {routeBusy === "leaderboard" ? (
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-500/30 border-t-slate-400" />
+                          ) : (
+                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M6 9H4.5a2.5 2.5 0 010-5H6M18 9h1.5a2.5 2.5 0 000-5H18M6 9v8a6 6 0 0012 0V9M6 9H18" />
+                            </svg>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-white">Leaderboard</p>
+                          <p className="text-xs text-slate-500">See the top players</p>
+                        </div>
+                      </motion.button>
+                    </div>
+
+                    <button
+                      onClick={() => openAuthModal("login")}
+                      className="w-full py-1.5 text-xs font-medium uppercase tracking-[0.2em] text-slate-500 transition-colors hover:text-slate-300"
+                    >
+                      Already have an account? Log In
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="grid gap-2.5 sm:grid-cols-2">
+                      <motion.button
+                        onClick={() => { setRouteBusy("profile"); router.push("/profile"); }}
+                        disabled={Boolean(routeBusy)}
+                        whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
+                        whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
+                        transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
+                        className="group flex flex-col gap-3 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80 disabled:opacity-55"
+                      >
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300 transition-colors group-hover:border-sky-500/40 group-hover:bg-sky-500/10 group-hover:text-sky-300">
+                          {routeBusy === "profile" ? (
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-500/30 border-t-slate-400" />
+                          ) : (
+                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z" />
+                            </svg>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-white">Profile</p>
+                          <p className="text-xs text-slate-500">Stats &amp; match history</p>
+                        </div>
+                      </motion.button>
+
+                      <motion.button
+                        onClick={() => { setRouteBusy("leaderboard"); router.push("/leaderboard"); }}
+                        disabled={Boolean(routeBusy)}
+                        whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
+                        whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
+                        transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
+                        className="group flex flex-col gap-3 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80 disabled:opacity-55"
+                      >
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300 transition-colors group-hover:border-yellow-500/40 group-hover:bg-yellow-500/10 group-hover:text-yellow-300">
+                          {routeBusy === "leaderboard" ? (
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-500/30 border-t-slate-400" />
+                          ) : (
+                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M6 9H4.5a2.5 2.5 0 010-5H6M18 9h1.5a2.5 2.5 0 000-5H18M6 9v8a6 6 0 0012 0V9M6 9H18" />
+                            </svg>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-white">Leaderboard</p>
+                          <p className="text-xs text-slate-500">See the top players</p>
+                        </div>
+                      </motion.button>
+                    </div>
+
+                    <button
+                      onClick={() => void handleLogout()}
+                      disabled={logoutBusy}
+                      className="w-full py-1.5 text-xs font-medium uppercase tracking-[0.2em] text-slate-500 transition-colors hover:text-slate-300 disabled:cursor-not-allowed disabled:opacity-55"
+                    >
+                      {logoutBusy ? "Logging out…" : "Log Out"}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           )}
-
-          {guestError ? <p className="text-sm text-rose-300">{guestError}</p> : null}
         </div>
       </motion.section>
 

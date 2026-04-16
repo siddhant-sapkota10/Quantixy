@@ -280,8 +280,9 @@ export function ProfileClient() {
         } = await supabase.auth.getUser();
 
         if (userError) {
-          console.error("[profile] auth.getUser failed", userError);
-          throw new Error("Unable to verify your signed-in session.");
+          console.warn("[profile] auth.getUser failed, redirecting home", userError);
+          router.push("/");
+          return;
         }
 
         if (!user) {
