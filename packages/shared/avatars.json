@@ -9,14 +9,14 @@
       "accent": "#38BDF8",
       "glow": "rgba(56,189,248,0.45)"
     },
-    "description": "Outrun the clock and stack points fast.",
-    "passive": "High-speed pressure style. Answers quickly and piles on damage through sheer volume — the faster you strike, the harder every hit lands.",
+    "description": "Flash channels unstable lightning energy into relentless combo pressure.",
+    "passive": "High-risk, high-reward tempo duelist. The longer his correct-answer chain survives, the deadlier each hit becomes.",
     "ultimateId": "rapid_fire",
-    "ultimateName": "Rapid Fire",
-    "ultimateDescription": "For 8 seconds, each correct answer deals +1 extra damage. Sustained non-stop pressure.",
+    "ultimateName": "Overclock",
+    "ultimateDescription": "Flash enters Overclock for 6 seconds. Each correct answer builds increasing bonus damage. Wrong answers reset the combo.",
     "ultimateMeta": {
       "effectType": "timed_bonus",
-      "durationMs": 8000,
+      "durationMs": 6000,
       "bonusPoints": 1,
       "chargeMultiplier": 1.0
     }
@@ -31,13 +31,13 @@
       "accent": "#A78BFA",
       "glow": "rgba(167,139,250,0.42)"
     },
-    "description": "Break the opponent rhythm with precise disruption.",
-    "passive": "Timing and control. Charges ultimate slightly faster — more opportunities to shut the opponent down at the worst moment.",
-    "ultimateId": "jam",
-    "ultimateName": "Jam",
-    "ultimateDescription": "Locks the opponent out for 5 seconds — they cannot type a single answer while you freely score.",
+    "description": "Shadow infiltrates the flow of the game itself, distorting perception and disrupting focus. As corruption builds, even the smallest mistakes can spiral out of control.",
+    "passive": "Psychological disruptor. He pressures opponents into missteps by bending rhythm and clarity without ever fully taking control away.",
+    "ultimateId": "system_corrupt",
+    "ultimateName": "System Corrupt",
+    "ultimateDescription": "For 5s, corrupt the opponent\u2019s interface. Their mistakes build stacks that detonate for bonus damage.",
     "ultimateMeta": {
-      "effectType": "disable_input",
+      "effectType": "corrupt_interface",
       "durationMs": 5000,
       "chargeMultiplier": 1.02
     }
@@ -52,37 +52,91 @@
       "accent": "#34D399",
       "glow": "rgba(52,211,153,0.4)"
     },
-    "description": "Hold your line and neutralize incoming pressure.",
-    "passive": "Defensive anchor. Consistent answering builds an unbreakable wall — absorb pressure while you chip away at the opponent.",
+    "description": "Guardian stands immovable at the center of the fight, bending incoming force into his own power. Within his Aegis Domain, enemies struggle to break through while their own aggression turns against them.",
+    "passive": "Elite defensive tank that converts enemy pressure into retaliation.",
     "ultimateId": "shield",
-    "ultimateName": "Fortress Shield",
-    "ultimateDescription": "Deploys a fortress shield for 10 seconds that absorbs up to 2 incoming abilities — including Jam.",
+    "ultimateName": "Aegis Domain",
+    "ultimateDescription": "Guardian creates an Aegis Domain for 6 seconds, greatly reducing incoming damage, reflecting minor damage back to attackers, and unleashing a shockwave when the effect ends.",
     "ultimateMeta": {
-      "effectType": "protective_block",
-      "blocks": 2,
-      "durationMs": 10000,
+      "effectType": "domain_reflect",
+      "durationMs": 6000,
       "chargeMultiplier": 0.98
     }
   },
   {
     "id": "inferno",
     "name": "Inferno",
-    "role": "Burst",
+    "role": "Carry",
     "icon": "\uD83D\uDD25",
     "emoji": "\uD83D\uDD25",
     "theme": {
       "accent": "#FB7185",
       "glow": "rgba(251,113,133,0.43)"
     },
-    "description": "Convert one clean answer into explosive momentum.",
-    "passive": "Pure burst power. Slightly slower charge — but when the ultimate fires, it deals more damage than any other character can match.",
+    "description": "Inferno feeds on momentum, turning every correct answer into a growing blaze that consumes his opponent. The longer he stays accurate, the harder it becomes to stop the burn.",
+    "passive": "High-pressure carry that snowballs through accuracy and sustained burn stacks.",
     "ultimateId": "double",
-    "ultimateName": "Inferno Strike",
-    "ultimateDescription": "Arms your next correct answer for a devastating +3 bonus damage hit — maximum burst in a single shot.",
+    "ultimateName": "Blaze Surge",
+    "ultimateDescription": "For 6s, correct answers apply stacking burn damage over time. Stacks grow stronger and refresh, but reset on a wrong answer.",
     "ultimateMeta": {
-      "effectType": "next_correct_bonus",
-      "minimumPoints": 3,
+      "effectType": "stacking_burn_dot",
+      "durationMs": 6000,
+      "tickEveryMs": 800,
       "chargeMultiplier": 0.95
+    }
+  },
+  {
+    "id": "architect",
+    "name": "Architect",
+    "role": "Burst",
+    "icon": "\uD83D\uDCD0",
+    "emoji": "\uD83D\uDCD0",
+    "theme": {
+      "accent": "#FBBF24",
+      "glow": "rgba(251,191,36,0.42)"
+    },
+    "isPremium": true,
+    "priceUsd": 4.99,
+    "storeSku": "avatar_architect",
+    "roleLabel": "Precision / Combo Burst",
+    "premiumTagline": "Premium Strategic Burst",
+    "howItPlays": "Build marks with accurate answers. Land 3 correct answers in a row during your ultimate to consume marks in a decisive Perfect Strike.",
+    "description": "Architect doesn\u2019t rely on chaos\u2014he designs victory. Every correct answer builds toward a calculated sequence, and when executed perfectly, the result is devastating.",
+    "passive": "Precision burst specialist. Planning and consistent accuracy unlocks high-value payoff windows without relying on randomness.",
+    "ultimateId": "perfect_sequence",
+    "ultimateName": "Perfect Sequence",
+    "ultimateDescription": "For 6s, correct answers place marks on the opponent. Land 3 in a row to consume the marks in a powerful Perfect Strike. Wrong answers reset the sequence.",
+    "ultimateMeta": {
+      "effectType": "sequence_burst",
+      "durationMs": 6000,
+      "chargeMultiplier": 0.98
+    }
+  },
+  {
+    "id": "titan",
+    "name": "Titan",
+    "role": "Burst",
+    "icon": "\uD83E\uDEA8",
+    "emoji": "\uD83E\uDEA8",
+    "theme": {
+      "accent": "#F59E0B",
+      "glow": "rgba(245,158,11,0.44)"
+    },
+    "isPremium": true,
+    "priceUsd": 4.99,
+    "storeSku": "avatar_titan",
+    "roleLabel": "Heavy Hitter / Defense Breaker",
+    "premiumTagline": "Premium Raw Force",
+    "howItPlays": "Activate Overpower and keep answering correctly to build momentum. After 2 correct answers in a row, your next hit becomes a Break Hit that smashes through defenses.",
+    "description": "Titan doesn\u2019t rely on precision or tricks\u2014only force. Each strike lands with overwhelming power, and once momentum builds, even the strongest defenses shatter.",
+    "passive": "Raw force premium bruiser. Simple, aggressive, and built for high-impact damage windows earned through correct answers.",
+    "ultimateId": "overpower",
+    "ultimateName": "Overpower",
+    "ultimateDescription": "For 5s, correct answers deal heavy bonus damage. After 2 in a row, the next hit becomes a defense-breaking strike. Wrong answers reset the chain.",
+    "ultimateMeta": {
+      "effectType": "overpower_burst",
+      "durationMs": 5000,
+      "chargeMultiplier": 0.98
     }
   }
 ]

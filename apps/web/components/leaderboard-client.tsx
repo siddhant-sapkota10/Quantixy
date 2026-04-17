@@ -8,6 +8,7 @@ import { RankBadge } from "@/components/rank-badge";
 import { getAvatar } from "@/lib/avatars";
 import { getSupabaseClient } from "@/lib/supabase";
 import { TOPICS, Topic, formatTopicLabel } from "@/lib/topics";
+import { PageContent } from "@/components/page-content";
 
 type LeaderboardEntry = {
   rank: number;
@@ -118,7 +119,7 @@ export function LeaderboardClient() {
   const showMyRankCard = Boolean(myRank && !visiblePlayerIds.has(myRank.playerId));
 
   return (
-    <section className="neon-panel-strong w-full max-w-5xl rounded-[2rem] p-4 sm:p-6 md:p-12">
+    <PageContent size="lg">
       <div className="flex flex-col gap-4 sm:gap-6 md:gap-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="space-y-3">
@@ -230,6 +231,6 @@ export function LeaderboardClient() {
           <Button variant="secondary" onClick={() => router.push("/profile")}>Profile</Button>
         </div>
       </div>
-    </section>
+    </PageContent>
   );
 }

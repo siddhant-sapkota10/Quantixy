@@ -11,6 +11,7 @@ import {
   TOPICS,
   type Topic
 } from "@/lib/topics";
+import { PageContent } from "@/components/page-content";
 
 // ── Topic display config ───────────────────────────────────────────────────────
 
@@ -286,7 +287,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
   const showLoadout = !(mode === "pvp" && matchMode === "join-room");
 
   return (
-    <section className="neon-panel-strong w-full max-w-2xl rounded-[2rem] p-4 sm:p-7 md:p-10">
+    <PageContent size="md">
       {/* ── Header ── */}
       <div className="space-y-3 text-center sm:space-y-4">
         <span
@@ -473,6 +474,6 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
           </Button>
         </div>
       </div>
-    </section>
+    </PageContent>
   );
 }

@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import { Button } from "@/components/button";
-import { getAvatar } from "@/lib/avatars";
+import { DEFAULT_AVATAR_ID, getAvatar, normalizeAvatarId, type AvatarId } from "@/lib/avatars";
 import {
   createPlayerProfileForUser,
   getGuestUsername,
@@ -25,6 +26,7 @@ import {
 import { getSupabaseClient } from "@/lib/supabase";
 import { getRankFromRating } from "@/lib/ranks";
 import { RankBadge } from "@/components/rank-badge";
+import { PageContent } from "@/components/page-content";
 
 type AuthMode = "login" | "signup";
 type HomeIdentityRow = {
@@ -33,6 +35,10 @@ type HomeIdentityRow = {
   username: string | null;
   avatar_id: string | null;
 };
+
+function getAvatarCardSrc(id: AvatarId) {
+  return `/assets/avatarCards/${id}.png`;
+}
 
 function AuthModal({
   open,
@@ -276,7 +282,11 @@ function AuthModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm sm:px-6">
-      <div className="w-full max-w-lg rounded-[2rem] neon-panel-strong p-5 max-h-[90dvh] overflow-y-auto sm:p-6 md:p-8">
+      <PageContent
+        size="md"
+        variant="plain"
+        className="max-w-lg max-h-[90dvh] overflow-y-auto rounded-[2rem] bg-slate-950/70 p-5 shadow-glow backdrop-blur sm:p-6 md:p-8"
+      >
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm uppercase tracking-[0.2em] text-slate-400">Authentication</p>
@@ -363,7 +373,27 @@ function AuthModal({
               loading={authBusy}
               loadingText="Connecting..."
             >
-              Continue with Google
+              <span className="flex items-center justify-center gap-2">
+                <svg className="h-4 w-4" viewBox="0 0 533.5 544.3" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M533.5 278.4c0-17.4-1.6-34.1-4.6-50.2H272v95h146.9c-6.3 34-25.2 62.8-53.8 82v68h86.9c50.8-46.8 81.5-115.8 81.5-194.8z"
+                  />
+                  <path
+                    fill="currentColor"
+                    d="M272 544.3c72.6 0 133.5-24 178-65.3l-86.9-68c-24.1 16.2-55 25.8-91.1 25.8-70 0-129.3-47.2-150.5-110.6h-90.3v69.3c44.2 87.8 135.4 149.8 240.8 149.8z"
+                  />
+                  <path
+                    fill="currentColor"
+                    d="M121.5 326.2c-10.6-31.8-10.6-66.2 0-98l.1-69.3H31.2c-39.5 78.8-39.5 172.9 0 251.7l90.3-69.4z"
+                  />
+                  <path
+                    fill="currentColor"
+                    d="M272 107.7c39.5-.6 77.6 14 107 40.9l79.7-79.7C409.3 24.3 342.7-1 272 0 166.6 0 75.4 62 31.2 149.8l90.4 69.3C142.7 155 202 107.7 272 107.7z"
+                  />
+                </svg>
+                <span>Continue with Google</span>
+              </span>
             </Button>
           ) : null}
 
@@ -496,7 +526,7 @@ function AuthModal({
             </p>
           ) : null}
         </div>
-      </div>
+      </PageContent>
     </div>
   );
 }
@@ -658,12 +688,13 @@ export function HomeHero() {
 
   return (
     <>
-      <motion.section
-        initial={{ opacity: 0, y: 18 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, ease: "easeOut" }}
-        className="w-full max-w-2xl rounded-[2rem] neon-panel-strong p-5 sm:p-8 md:p-12"
-      >
+      <PageContent size="md" className="max-w-2xl">
+        <motion.section
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, ease: "easeOut" }}
+          className="w-full p-2 sm:p-3"
+        >
         <div className="space-y-3 text-center sm:space-y-4">
           <span className="inline-flex rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-sky-200">
             Multiplayer Math Arena
@@ -820,8 +851,15 @@ export function HomeHero() {
 
               {/* ── IDENTITY PANEL ───────────────────────────── */}
               <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-900/50 px-4 py-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-sky-400/20 bg-slate-950/80 text-xl">
-                  {getAvatar(accountIdentity?.avatarId).icon}
+                <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-sky-400/20 bg-slate-950/80">
+                  <Image
+                    src={getAvatarCardSrc(normalizeAvatarId(accountIdentity?.avatarId ?? DEFAULT_AVATAR_ID))}
+                    alt="Equipped avatar"
+                    fill
+                    sizes="44px"
+                    className="object-cover"
+                    priority={false}
+                  />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
@@ -916,9 +954,16 @@ export function HomeHero() {
                           {routeBusy === "profile" ? (
                             <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-500/30 border-t-slate-400" />
                           ) : (
-                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z" />
-                            </svg>
+                            <span className="relative h-7 w-7 overflow-hidden rounded-lg border border-white/10 bg-slate-950/60">
+                              <Image
+                                src={getAvatarCardSrc(normalizeAvatarId(accountIdentity?.avatarId ?? DEFAULT_AVATAR_ID))}
+                                alt="Equipped avatar"
+                                fill
+                                sizes="28px"
+                                className="object-cover"
+                                priority={false}
+                              />
+                            </span>
                           )}
                         </div>
                         <div>
@@ -954,9 +999,14 @@ export function HomeHero() {
                     <button
                       onClick={() => void handleLogout()}
                       disabled={logoutBusy}
-                      className="w-full py-1.5 text-xs font-medium uppercase tracking-[0.2em] text-slate-500 transition-colors hover:text-slate-300 disabled:cursor-not-allowed disabled:opacity-55"
+                      className="group relative w-full overflow-hidden rounded-2xl border border-rose-400/25 bg-gradient-to-r from-rose-500/20 via-rose-500/10 to-transparent px-4 py-3 text-left text-xs font-black uppercase tracking-[0.24em] text-rose-100 shadow-[0_18px_50px_rgba(244,63,94,0.18)] transition-colors hover:border-rose-400/40 hover:from-rose-500/26 disabled:cursor-not-allowed disabled:opacity-55"
                     >
-                      {logoutBusy ? "Logging out…" : "Log Out"}
+                      <span className="relative flex items-center justify-between gap-3">
+                        <span>{logoutBusy ? "Logging out…" : "Log Out"}</span>
+                        <span className="rounded-full border border-rose-200/15 bg-rose-950/30 px-2.5 py-1 text-[10px] font-bold tracking-[0.22em] text-rose-100/90">
+                          Exit
+                        </span>
+                      </span>
                     </button>
                   </>
                 )}
@@ -964,7 +1014,8 @@ export function HomeHero() {
             </div>
           )}
         </div>
-      </motion.section>
+        </motion.section>
+      </PageContent>
 
       <AuthModal
         open={authModalOpen}

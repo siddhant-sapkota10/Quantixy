@@ -56,6 +56,22 @@ type UltimateStatePayload = {
   opponentTitanUntil?: number;
   blackoutUntil?: number;
   opponentBlackoutUntil?: number;
+  shadowCorruptUntil?: number;
+  opponentShadowCorruptUntil?: number;
+  shadowCorruptStacks?: number;
+  opponentShadowCorruptStacks?: number;
+  architectUntil?: number;
+  opponentArchitectUntil?: number;
+  architectMarks?: number;
+  opponentArchitectMarks?: number;
+  architectSequenceStreak?: number;
+  opponentArchitectSequenceStreak?: number;
+  titanOverpowerUntil?: number;
+  opponentTitanOverpowerUntil?: number;
+  titanStreak?: number;
+  opponentTitanStreak?: number;
+  titanBreakArmed?: boolean;
+  opponentTitanBreakArmed?: boolean;
   overclockUntil?: number;
   opponentOverclockUntil?: number;
   fortressUntil?: number;
@@ -67,7 +83,9 @@ type UltimateStatePayload = {
   novaBonusRemaining?: number;
   opponentNovaBonusRemaining?: number;
   infernoPending?: boolean;
+  infernoPendingUntil?: number;
   opponentInfernoPending?: boolean;
+  opponentInfernoPendingUntil?: number;
 };
 
 export type ServerToClientEvents = {
@@ -194,12 +212,24 @@ export type ServerToClientEvents = {
     effect: string;
     durationMs?: number;
     questionsRemaining?: number;
+    damage?: number;
+    marksConsumed?: number;
+    hp?: {
+      you?: number;
+      opponent?: number;
+    };
   } & UltimateStatePayload) => void;
   ultimateEnded: (payload: {
     by: "you" | "opponent";
     target: "you" | "opponent";
     type: string;
     effect: string;
+    damage?: number;
+    corruptionStacks?: number;
+    hp?: {
+      you?: number;
+      opponent?: number;
+    };
   } & UltimateStatePayload) => void;
   powerUpUsed: (payload: {
     type: PowerUpId;
@@ -258,6 +288,16 @@ export type ServerToClientEvents = {
     opponentDoublePointsUntil?: number;
     hintText?: string;
     hintUntil?: number;
+  } & UltimateStatePayload) => void;
+  burnTick: (payload: {
+    by: "you" | "opponent";
+    target: "you" | "opponent";
+    damage?: number;
+    burnStacks?: number;
+    hp?: {
+      you?: number;
+      opponent?: number;
+    };
   } & UltimateStatePayload) => void;
   gameOver: (payload: {
     winnerId?: string;

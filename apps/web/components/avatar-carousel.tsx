@@ -128,6 +128,11 @@ function AvatarCard({
           >
             {avatar.role}
           </span>
+          {avatar.isPremium ? (
+            <span className="ml-2 inline-block rounded-full border border-amber-400/25 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-200">
+              Premium
+            </span>
+          ) : null}
           <h3 className="mt-1.5 text-xl font-black text-white sm:text-2xl">{avatar.name}</h3>
         </div>
         <div className="text-4xl leading-none sm:text-5xl" aria-hidden="true">

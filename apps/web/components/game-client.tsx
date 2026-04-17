@@ -38,6 +38,7 @@ import { EmoteDisplay, type EmoteDisplayItem } from "@/components/EmoteDisplay";
 import { OpponentPresence, type OpponentActivity } from "@/components/OpponentPresence";
 import { QuestionContent } from "@/components/question-content";
 import { WorkingScratchpad } from "@/components/working-scratchpad";
+import { UltimateAbilityButton } from "@/components/ultimate-ability-button";
 import type { DuelQuestion } from "@/lib/question-model";
 import {
   UltimateActivationOverlay,
@@ -109,6 +110,22 @@ type UltimateState = {
   opponentTitanUntil: number;
   blackoutUntil: number;
   opponentBlackoutUntil: number;
+  shadowCorruptUntil: number;
+  opponentShadowCorruptUntil: number;
+  shadowCorruptStacks: number;
+  opponentShadowCorruptStacks: number;
+  architectUntil: number;
+  opponentArchitectUntil: number;
+  architectMarks: number;
+  opponentArchitectMarks: number;
+  architectSequenceStreak: number;
+  opponentArchitectSequenceStreak: number;
+  titanOverpowerUntil: number;
+  opponentTitanOverpowerUntil: number;
+  titanStreak: number;
+  opponentTitanStreak: number;
+  titanBreakArmed: boolean;
+  opponentTitanBreakArmed: boolean;
   overclockUntil: number;
   opponentOverclockUntil: number;
   fortressUntil: number;
@@ -173,14 +190,14 @@ const initialTimer: TimerState = {
 
 const initialUltimate: UltimateState = {
   type: "rapid_fire",
-  name: "Rapid Fire",
+  name: "Overclock",
   description: "",
   charge: 0,
   ready: false,
   used: false,
   implemented: true,
   opponentType: "rapid_fire",
-  opponentName: "Rapid Fire",
+  opponentName: "Overclock",
   opponentCharge: 0,
   opponentReady: false,
   opponentUsed: false,
@@ -189,6 +206,22 @@ const initialUltimate: UltimateState = {
   opponentTitanUntil: 0,
   blackoutUntil: 0,
   opponentBlackoutUntil: 0,
+  shadowCorruptUntil: 0,
+  opponentShadowCorruptUntil: 0,
+  shadowCorruptStacks: 0,
+  opponentShadowCorruptStacks: 0,
+  architectUntil: 0,
+  opponentArchitectUntil: 0,
+  architectMarks: 0,
+  opponentArchitectMarks: 0,
+  architectSequenceStreak: 0,
+  opponentArchitectSequenceStreak: 0,
+  titanOverpowerUntil: 0,
+  opponentTitanOverpowerUntil: 0,
+  titanStreak: 0,
+  opponentTitanStreak: 0,
+  titanBreakArmed: false,
+  opponentTitanBreakArmed: false,
   overclockUntil: 0,
   opponentOverclockUntil: 0,
   fortressUntil: 0,
@@ -806,6 +839,70 @@ export function GameClient({
           typeof payload.opponentBlackoutUntil === "number"
             ? payload.opponentBlackoutUntil
             : previous.opponentBlackoutUntil,
+        shadowCorruptUntil:
+          typeof payload.shadowCorruptUntil === "number"
+            ? payload.shadowCorruptUntil
+            : (previous as UltimateState & { shadowCorruptUntil?: number }).shadowCorruptUntil ?? 0,
+        opponentShadowCorruptUntil:
+          typeof payload.opponentShadowCorruptUntil === "number"
+            ? payload.opponentShadowCorruptUntil
+            : (previous as UltimateState & { opponentShadowCorruptUntil?: number }).opponentShadowCorruptUntil ?? 0,
+        shadowCorruptStacks:
+          typeof payload.shadowCorruptStacks === "number"
+            ? payload.shadowCorruptStacks
+            : (previous as UltimateState & { shadowCorruptStacks?: number }).shadowCorruptStacks ?? 0,
+        opponentShadowCorruptStacks:
+          typeof payload.opponentShadowCorruptStacks === "number"
+            ? payload.opponentShadowCorruptStacks
+            : (previous as UltimateState & { opponentShadowCorruptStacks?: number }).opponentShadowCorruptStacks ?? 0,
+        architectUntil:
+          typeof payload.architectUntil === "number"
+            ? payload.architectUntil
+            : (previous as UltimateState & { architectUntil?: number }).architectUntil ?? 0,
+        opponentArchitectUntil:
+          typeof payload.opponentArchitectUntil === "number"
+            ? payload.opponentArchitectUntil
+            : (previous as UltimateState & { opponentArchitectUntil?: number }).opponentArchitectUntil ?? 0,
+        architectMarks:
+          typeof payload.architectMarks === "number"
+            ? payload.architectMarks
+            : (previous as UltimateState & { architectMarks?: number }).architectMarks ?? 0,
+        opponentArchitectMarks:
+          typeof payload.opponentArchitectMarks === "number"
+            ? payload.opponentArchitectMarks
+            : (previous as UltimateState & { opponentArchitectMarks?: number }).opponentArchitectMarks ?? 0,
+        architectSequenceStreak:
+          typeof payload.architectSequenceStreak === "number"
+            ? payload.architectSequenceStreak
+            : (previous as UltimateState & { architectSequenceStreak?: number }).architectSequenceStreak ?? 0,
+        opponentArchitectSequenceStreak:
+          typeof payload.opponentArchitectSequenceStreak === "number"
+            ? payload.opponentArchitectSequenceStreak
+            : (previous as UltimateState & { opponentArchitectSequenceStreak?: number }).opponentArchitectSequenceStreak ?? 0,
+        titanOverpowerUntil:
+          typeof payload.titanOverpowerUntil === "number"
+            ? payload.titanOverpowerUntil
+            : (previous as UltimateState & { titanOverpowerUntil?: number }).titanOverpowerUntil ?? 0,
+        opponentTitanOverpowerUntil:
+          typeof payload.opponentTitanOverpowerUntil === "number"
+            ? payload.opponentTitanOverpowerUntil
+            : (previous as UltimateState & { opponentTitanOverpowerUntil?: number }).opponentTitanOverpowerUntil ?? 0,
+        titanStreak:
+          typeof payload.titanStreak === "number"
+            ? payload.titanStreak
+            : (previous as UltimateState & { titanStreak?: number }).titanStreak ?? 0,
+        opponentTitanStreak:
+          typeof payload.opponentTitanStreak === "number"
+            ? payload.opponentTitanStreak
+            : (previous as UltimateState & { opponentTitanStreak?: number }).opponentTitanStreak ?? 0,
+        titanBreakArmed:
+          typeof payload.titanBreakArmed === "boolean"
+            ? payload.titanBreakArmed
+            : (previous as UltimateState & { titanBreakArmed?: boolean }).titanBreakArmed ?? false,
+        opponentTitanBreakArmed:
+          typeof payload.opponentTitanBreakArmed === "boolean"
+            ? payload.opponentTitanBreakArmed
+            : (previous as UltimateState & { opponentTitanBreakArmed?: boolean }).opponentTitanBreakArmed ?? false,
         overclockUntil:
           typeof payload.overclockUntil === "number" ? payload.overclockUntil : previous.overclockUntil,
         opponentOverclockUntil:
@@ -1309,11 +1406,12 @@ export function GameClient({
         const youPointsDelta = newYouScore - prevScores.you;
         const dmgDealt = calcDamage(youPointsDelta, payload.fastAnswer ?? false, streakValue);
         if (dmgDealt > 0) {
+          const infernoStacks = Math.max(0, ultimate.novaBonusRemaining ?? 0);
           const isUltimateHit =
             ultimate.overclockUntil > Date.now() ||
-            ultimate.infernoPending;
+            ultimate.infernoPendingUntil > Date.now();
           const type = classifyHit({ streak: streakValue, isUltimate: isUltimateHit });
-          const infernoSpike = ultimate.infernoPending ? 1.35 : 1;
+          const infernoSpike = infernoStacks > 0 ? Math.min(1.45, 1 + infernoStacks * 0.07) : 1;
           const intensity = Math.min(1, intensityFromDamage(dmgDealt) * (type === "ultimate" ? 1.12 : 1) * infernoSpike);
           const delayMs = 80;
           const t = setTimeout(() => {
@@ -1326,7 +1424,7 @@ export function GameClient({
             if (type !== "normal") {
               triggerScreenShake(
                 type === "ultimate"
-                  ? Math.min(1, intensity * (ultimate.infernoPending ? 1.05 : 0.95))
+                  ? Math.min(1, intensity * (infernoStacks > 0 ? 1.05 : 0.95))
                   : Math.min(1, intensity * 0.65)
               );
             }
@@ -1341,11 +1439,12 @@ export function GameClient({
         const oppPointsDelta = newOpponentScore - prevScores.opponent;
         const dmgTaken = calcDamage(oppPointsDelta, payload.opponentFastAnswer ?? false, opponentStreakValue);
         if (dmgTaken > 0) {
+          const infernoStacks = Math.max(0, ultimate.opponentNovaBonusRemaining ?? 0);
           const isUltimateHit =
             ultimate.opponentOverclockUntil > Date.now() ||
-            ultimate.opponentInfernoPending;
+            ultimate.opponentInfernoPendingUntil > Date.now();
           const type = classifyHit({ streak: opponentStreakValue, isUltimate: isUltimateHit });
-          const infernoSpike = ultimate.opponentInfernoPending ? 1.35 : 1;
+          const infernoSpike = infernoStacks > 0 ? Math.min(1.45, 1 + infernoStacks * 0.07) : 1;
           const intensity = Math.min(1, intensityFromDamage(dmgTaken) * (type === "ultimate" ? 1.12 : 1) * infernoSpike);
           const delayMs = 80;
           const t = setTimeout(() => {
@@ -1358,7 +1457,7 @@ export function GameClient({
             if (type !== "normal") {
               triggerScreenShake(
                 type === "ultimate"
-                  ? Math.min(1, intensity * (ultimate.opponentInfernoPending ? 1.05 : 0.95))
+                  ? Math.min(1, intensity * (infernoStacks > 0 ? 1.05 : 0.95))
                   : Math.min(1, intensity * 0.65)
               );
             }
@@ -1541,6 +1640,9 @@ export function GameClient({
       effect: string;
       durationMs?: number;
       questionsRemaining?: number;
+      damage?: number;
+      marksConsumed?: number;
+      hp?: { you?: number; opponent?: number };
       ultimateType?: string;
       ultimateName?: string;
       ultimateCharge?: number;
@@ -1614,6 +1716,31 @@ export function GameClient({
         setFrozenUntil(Date.now() + payload.durationMs);
         triggerFreezeHit("you");
       }
+
+      if (payload.effect === "perfect_strike" && payload.damage && payload.damage > 0 && payload.hp) {
+        // Server-authoritative HP update for the strike burst.
+        if (payload.target === "opponent") {
+          if (typeof payload.hp.opponent === "number") {
+            setOpponentHitType("ultimate");
+            setOpponentHitIntensity(Math.min(1, 0.5 + (payload.marksConsumed ?? 0) * 0.06));
+            setOpponentDamageTaken(Math.max(0, MAX_HP - payload.hp.opponent));
+            setLatestOpponentDamage(Math.max(0, payload.damage));
+            setOpponentHitKey((prev) => prev + 1);
+            soundManager.play("hitUltimate", { volume: 0.28, rate: 1.06, allowOverlap: true });
+            triggerScreenShake(Math.min(1, 0.6 + (payload.marksConsumed ?? 0) * 0.05));
+          }
+        } else if (payload.target === "you") {
+          if (typeof payload.hp.you === "number") {
+            setYouHitType("ultimate");
+            setYouHitIntensity(Math.min(1, 0.5 + (payload.marksConsumed ?? 0) * 0.06));
+            setYouDamageTaken(Math.max(0, MAX_HP - payload.hp.you));
+            setLatestYouDamage(Math.max(0, payload.damage));
+            setYouHitKey((prev) => prev + 1);
+            soundManager.play("hitUltimate", { volume: 0.28, rate: 0.98, allowOverlap: true });
+            triggerScreenShake(Math.min(1, 0.6 + (payload.marksConsumed ?? 0) * 0.05));
+          }
+        }
+      }
     };
 
     const handleUltimateEnded = (payload: {
@@ -1621,6 +1748,9 @@ export function GameClient({
       target: "you" | "opponent";
       type: string;
       effect: string;
+      damage?: number;
+      corruptionStacks?: number;
+      hp?: { you?: number; opponent?: number };
       ultimateType?: string;
       ultimateName?: string;
       ultimateCharge?: number;
@@ -1641,6 +1771,7 @@ export function GameClient({
       opponentFlashBonusRemaining?: number;
       infernoPending?: boolean;
       opponentInfernoPending?: boolean;
+      shockwaveDamage?: number;
     }) => {
       console.log("[client] ultimateEnded received", payload);
       setUltimateActivating(false);
@@ -1659,6 +1790,131 @@ export function GameClient({
 
       if (payload.effect === "jam_ended" && payload.target === "you") {
         setFrozenUntil(0);
+      }
+
+      if (payload.effect === "aegis_domain_ended") {
+        const normalizedType = normalizeUltimateType(payload.type);
+        const cueId = ++ultimateCueIdRef.current;
+        setUltimateCue({
+          id: cueId,
+          by: payload.by,
+          target: payload.target,
+          type: normalizedType
+        });
+        if (ultimateCueTimeoutRef.current) {
+          clearTimeout(ultimateCueTimeoutRef.current);
+        }
+        ultimateCueTimeoutRef.current = setTimeout(() => {
+          setUltimateCue((previous) => (previous?.id === cueId ? null : previous));
+        }, 620);
+
+        if (payload.by === "you") {
+          setYouUltimateFxType(normalizedType);
+          setYouUltimateFxKey((value) => value + 1);
+        } else {
+          setOpponentUltimateFxType(normalizedType);
+          setOpponentUltimateFxKey((value) => value + 1);
+        }
+      }
+
+      if (payload.effect === "system_corrupt_ended") {
+        const normalizedType = normalizeUltimateType(payload.type);
+        const cueId = ++ultimateCueIdRef.current;
+        setUltimateCue({
+          id: cueId,
+          by: payload.by,
+          target: payload.target,
+          type: normalizedType
+        });
+        if (ultimateCueTimeoutRef.current) {
+          clearTimeout(ultimateCueTimeoutRef.current);
+        }
+        ultimateCueTimeoutRef.current = setTimeout(() => {
+          setUltimateCue((previous) => (previous?.id === cueId ? null : previous));
+        }, 680);
+
+        if (payload.by === "you") {
+          setYouUltimateFxType(normalizedType);
+          setYouUltimateFxKey((value) => value + 1);
+        } else {
+          setOpponentUltimateFxType(normalizedType);
+          setOpponentUltimateFxKey((value) => value + 1);
+        }
+      }
+
+      if (payload.effect === "perfect_strike") {
+        const normalizedType = normalizeUltimateType(payload.type);
+        const cueId = ++ultimateCueIdRef.current;
+        setUltimateCue({
+          id: cueId,
+          by: payload.by,
+          target: payload.target,
+          type: normalizedType
+        });
+        if (ultimateCueTimeoutRef.current) {
+          clearTimeout(ultimateCueTimeoutRef.current);
+        }
+        ultimateCueTimeoutRef.current = setTimeout(() => {
+          setUltimateCue((previous) => (previous?.id === cueId ? null : previous));
+        }, 720);
+
+        if (payload.by === "you") {
+          setYouUltimateFxType(normalizedType);
+          setYouUltimateFxKey((value) => value + 1);
+        } else {
+          setOpponentUltimateFxType(normalizedType);
+          setOpponentUltimateFxKey((value) => value + 1);
+        }
+      }
+
+      if (payload.effect === "break_hit") {
+        const normalizedType = normalizeUltimateType(payload.type);
+        const cueId = ++ultimateCueIdRef.current;
+        setUltimateCue({
+          id: cueId,
+          by: payload.by,
+          target: payload.target,
+          type: normalizedType
+        });
+        if (ultimateCueTimeoutRef.current) {
+          clearTimeout(ultimateCueTimeoutRef.current);
+        }
+        ultimateCueTimeoutRef.current = setTimeout(() => {
+          setUltimateCue((previous) => (previous?.id === cueId ? null : previous));
+        }, 680);
+
+        if (payload.by === "you") {
+          setYouUltimateFxType(normalizedType);
+          setYouUltimateFxKey((value) => value + 1);
+        } else {
+          setOpponentUltimateFxType(normalizedType);
+          setOpponentUltimateFxKey((value) => value + 1);
+        }
+      }
+
+      if (payload.effect === "system_corrupt_ended" && payload.damage && payload.damage > 0 && payload.hp) {
+        // Server-authoritative HP update for corruption detonation.
+        if (payload.target === "opponent") {
+          // You detonated on opponent
+          if (typeof payload.hp.opponent === "number") {
+            setOpponentHitType("ultimate");
+            setOpponentHitIntensity(Math.min(1, 0.42 + (payload.corruptionStacks ?? 0) * 0.08));
+            setOpponentDamageTaken(Math.max(0, MAX_HP - payload.hp.opponent));
+            setLatestOpponentDamage(Math.max(0, payload.damage));
+            setOpponentHitKey((prev) => prev + 1);
+            soundManager.play("hitUltimate", { volume: 0.26, rate: 1.02, allowOverlap: true });
+          }
+        } else if (payload.target === "you") {
+          // Opponent detonated on you
+          if (typeof payload.hp.you === "number") {
+            setYouHitType("ultimate");
+            setYouHitIntensity(Math.min(1, 0.42 + (payload.corruptionStacks ?? 0) * 0.08));
+            setYouDamageTaken(Math.max(0, MAX_HP - payload.hp.you));
+            setLatestYouDamage(Math.max(0, payload.damage));
+            setYouHitKey((prev) => prev + 1);
+            soundManager.play("hitUltimate", { volume: 0.26, rate: 0.98, allowOverlap: true });
+          }
+        }
       }
     };
 
@@ -1818,6 +2074,46 @@ export function GameClient({
       // Animate: flash on blocking player's panel + floating "BLOCKED" label
       triggerShieldBlock(payload.target);
       soundManager.play("shieldBlock");
+    };
+
+    const handleBurnTick = (payload: {
+      by: "you" | "opponent";
+      target: "you" | "opponent";
+      damage?: number;
+      burnStacks?: number;
+      hp?: { you?: number; opponent?: number };
+    } & Partial<UltimateState>) => {
+      const damage = Math.max(0, payload.damage ?? 0);
+      if (damage <= 0) {
+        syncUltimateFromPayload(payload);
+        return;
+      }
+
+      syncUltimateFromPayload(payload);
+      soundManager.play("hitUltimate", { volume: 0.26, rate: 1.02, allowOverlap: true });
+      const intensity = Math.min(1, 0.35 + (payload.burnStacks ?? 0) * 0.08);
+
+      if (payload.target === "you") {
+        setYouHitType("ultimate");
+        setYouHitIntensity(intensity);
+        setLatestYouDamage(damage);
+        setYouHitKey((prev) => prev + 1);
+        if (typeof payload.hp?.you === "number") {
+          setYouDamageTaken(Math.max(0, MAX_HP - payload.hp.you));
+        } else {
+          setYouDamageTaken((prev) => prev + damage);
+        }
+      } else {
+        setOpponentHitType("ultimate");
+        setOpponentHitIntensity(intensity);
+        setLatestOpponentDamage(damage);
+        setOpponentHitKey((prev) => prev + 1);
+        if (typeof payload.hp?.opponent === "number") {
+          setOpponentDamageTaken(Math.max(0, MAX_HP - payload.hp.opponent));
+        } else {
+          setOpponentDamageTaken((prev) => prev + damage);
+        }
+      }
     };
 
     const handleEmotePlayed = (payload: {
@@ -2029,6 +2325,7 @@ export function GameClient({
     nextSocket.on("powerUpUsed", handlePowerUpUsed);
     nextSocket.on("shieldActivated", handleShieldActivated);
     nextSocket.on("shieldBlocked", handleShieldBlocked);
+    nextSocket.on("burnTick", handleBurnTick);
     nextSocket.on("emotePlayed", handleEmotePlayed);
     nextSocket.on("opponentTyping", handleOpponentTyping);
     nextSocket.on("gameOver", handleGameOver);
@@ -2066,6 +2363,7 @@ export function GameClient({
       nextSocket.off("powerUpUsed", handlePowerUpUsed);
       nextSocket.off("shieldActivated", handleShieldActivated);
       nextSocket.off("shieldBlocked", handleShieldBlocked);
+      nextSocket.off("burnTick", handleBurnTick);
       nextSocket.off("emotePlayed", handleEmotePlayed);
       nextSocket.off("opponentTyping", handleOpponentTyping);
       nextSocket.off("gameOver", handleGameOver);
@@ -2086,9 +2384,21 @@ export function GameClient({
     // Reset typing throttle so next question triggers fresh emit
     lastTypingEmitRef.current = 0;
 
-    console.log(`[client] submitAnswer emitted -> ${trimmedAnswer} token=${currentQuestionTokenRef.current}`);
-    socket.emit("submitAnswer", { answer: trimmedAnswer, token: currentQuestionTokenRef.current });
-    setAnswer("");
+    const isCorruptActive = ultimate.shadowCorruptUntil > Date.now();
+    const emitSubmit = () => {
+      console.log(`[client] submitAnswer emitted -> ${trimmedAnswer} token=${currentQuestionTokenRef.current}`);
+      socket.emit("submitAnswer", { answer: trimmedAnswer, token: currentQuestionTokenRef.current });
+      setAnswer("");
+    };
+
+    if (!isCorruptActive) {
+      emitSubmit();
+      return;
+    }
+
+    // Subtle input interference: tiny randomized latency (no blocking, no scrambling).
+    const delayMs = 60 + Math.floor(Math.random() * 90);
+    window.setTimeout(emitSubmit, delayMs);
   };
 
   /**
@@ -2291,11 +2601,14 @@ export function GameClient({
   const showHP = isActiveGameplay || isFinished;
   const emoteCoolingDown = emoteCooldownUntil > Date.now();
   const isJamActive = ultimate.blackoutUntil > Date.now();
+  const isSystemCorruptActive = ultimate.shadowCorruptUntil > Date.now();
+  const isTitanOverpowerActive = ultimate.titanOverpowerUntil > Date.now();
   const isRapidFireActive = ultimate.overclockUntil > Date.now();
   const isOpponentRapidFireActive = ultimate.opponentOverclockUntil > Date.now();
-  const isGuardianShieldActive = ultimate.fortressUntil > Date.now() && ultimate.fortressBlocksRemaining > 0;
+  const isGuardianShieldActive = ultimate.fortressUntil > Date.now();
   const isOpponentGuardianShieldActive =
-    ultimate.opponentFortressUntil > Date.now() && ultimate.opponentFortressBlocksRemaining > 0;
+    ultimate.opponentFortressUntil > Date.now();
+  const isArchitectActive = ultimate.architectUntil > Date.now();
   const canUseUltimate =
     isActiveGameplay &&
     ultimate.ready &&
@@ -2308,10 +2621,10 @@ export function GameClient({
   useEffect(() => {
     if (status !== "playing") return;
     if (eliminated.you) return;
-    if (isJamActive || feedback.youAnsweredCurrent) return;
+    if (feedback.youAnsweredCurrent) return;
     const t = setTimeout(() => focusAnswerInput(), 40);
     return () => clearTimeout(t);
-  }, [status, eliminated.you, isJamActive, feedback.youAnsweredCurrent, focusPulseKey]);
+  }, [status, eliminated.you, feedback.youAnsweredCurrent, focusPulseKey]);
   const roomPlayerCount = roomLobby?.players.length ?? 0;
   const roomReady = roomPlayerCount === 2;
   const rematchCtaLabel = rematchRequested
@@ -2345,11 +2658,33 @@ export function GameClient({
    */
   const primaryStatus = isActiveGameplay
     ? isJamActive
-      ? { text: "⚫ Jammed — Input Blocked",       color: "text-violet-200",  large: false }
+      ? { text: "⚫ Blackout — Submits Blocked", color: "text-violet-200",  large: false }
+      : isSystemCorruptActive
+      ? {
+          text: `🟣 System Corrupt — Corruption x${Math.max(0, ultimate.shadowCorruptStacks)}`,
+          color: "text-violet-200",
+          large: false
+        }
+      : isTitanOverpowerActive
+      ? {
+          text: `🪨 Overpower — Chain ${Math.max(0, ultimate.titanStreak)}/2${ultimate.titanBreakArmed ? " · BREAK ARMED" : ""}`,
+          color: "text-amber-200",
+          large: false
+        }
+      : isArchitectActive
+      ? {
+          text: `🟡 Perfect Sequence — Marks x${Math.max(0, ultimate.architectMarks)} · ${Math.max(0, ultimate.architectSequenceStreak)}/3`,
+          color: "text-amber-200",
+          large: false
+        }
       : isRapidFireActive
-      ? { text: "⚡ Rapid Fire Active",             color: "text-amber-200",   large: false }
+      ? {
+          text: `⚡ Overclock Active${ultimate.flashBonusRemaining > 0 ? ` · Combo x${ultimate.flashBonusRemaining}` : ""}`,
+          color: "text-amber-200",
+          large: false
+        }
       : isGuardianShieldActive
-      ? { text: `🛡️ Fortress Shield — ${ultimate.fortressBlocksRemaining} block${ultimate.fortressBlocksRemaining !== 1 ? "s" : ""} left`, color: "text-teal-200", large: false }
+      ? { text: `🛡️ Aegis Domain — Stored ${ultimate.fortressBlocksRemaining} energy`, color: "text-teal-200", large: false }
       : youEliminated
       ? { text: "Eliminated ✕",                    color: "text-rose-300",    large: false }
       : feedback.youAnsweredCurrent
@@ -2362,8 +2697,8 @@ export function GameClient({
   const secondaryStatus = (() => {
     if (!isActiveGameplay) return null;
     const parts = [
-      isOpponentRapidFireActive      && "⚡ Opp. Rapid Fire Active",
-      isOpponentGuardianShieldActive && `🛡️ Opp. Fortress Shield (${ultimate.opponentFortressBlocksRemaining} blocks)`,
+      isOpponentRapidFireActive      && `⚡ Opp. Overclock${ultimate.opponentFlashBonusRemaining > 0 ? ` x${ultimate.opponentFlashBonusRemaining}` : ""}`,
+      isOpponentGuardianShieldActive && `🛡️ Opp. Aegis Domain (${ultimate.opponentFortressBlocksRemaining} stored)`,
       !youEliminated && opponentEliminated && "Opponent Eliminated",
       !feedback.youAnsweredCurrent && feedback.opponentAnsweredCurrent && "Opponent answered — still your turn",
     ].filter(Boolean) as string[];
@@ -2512,52 +2847,93 @@ export function GameClient({
       const active = until > now;
       const total = vfx.durationMs ?? 8000;
       const progress = active ? Math.max(0, Math.min(1, (until - now) / total)) : 0;
+      const combo = side === "you" ? ultimate.flashBonusRemaining : ultimate.opponentFlashBonusRemaining;
       return {
-        label: active ? "Rapid Fire Active" : "Rapid Fire",
-        sublabel: active ? `+1 dmg per answer` : "Stand by",
+        label: active ? "Overclock Active" : "Overclock",
+        sublabel: active
+          ? combo > 0
+            ? `Combo x${combo} · +${combo} bonus damage`
+            : "Combo chain armed"
+          : "Stand by",
         progress: active ? progress : null,
-        accent: "bg-amber-400"
+        accent: "bg-amber-300"
       };
     }
 
-    if (normalizedType === "jam") {
-      const until = side === "you" ? ultimate.blackoutUntil : ultimate.opponentBlackoutUntil;
+    if (normalizedType === "system_corrupt") {
+      const until = side === "you" ? ultimate.opponentShadowCorruptUntil : ultimate.shadowCorruptUntil;
+      const stacks = side === "you" ? ultimate.opponentShadowCorruptStacks : ultimate.shadowCorruptStacks;
       const active = until > now;
       const total = vfx.durationMs ?? 5000;
       const progress = active ? Math.max(0, Math.min(1, (until - now) / total)) : 0;
       return {
-        label: active ? "Jam Active" : "Jam",
-        sublabel: active ? "Opponent locked out" : "Stand by",
+        label: active ? "System Corrupt Active" : "System Corrupt",
+        sublabel: active ? `Corruption stacks x${Math.max(0, stacks)}` : "Stand by",
         progress: active ? progress : null,
         accent: "bg-violet-400"
       };
     }
 
+    if (normalizedType === "perfect_sequence") {
+      const until = side === "you" ? ultimate.architectUntil : ultimate.opponentArchitectUntil;
+      const marks = side === "you" ? ultimate.architectMarks : ultimate.opponentArchitectMarks;
+      const streak = side === "you" ? ultimate.architectSequenceStreak : ultimate.opponentArchitectSequenceStreak;
+      const active = until > now;
+      const total = vfx.durationMs ?? 6000;
+      const progress = active ? Math.max(0, Math.min(1, (until - now) / total)) : 0;
+      return {
+        label: active ? "Perfect Sequence Active" : "Perfect Sequence",
+        sublabel: active ? `Marks x${Math.max(0, marks)} · Sequence ${Math.max(0, streak)}/3` : "Stand by",
+        progress: active ? progress : null,
+        accent: "bg-amber-300"
+      };
+    }
+
+    if (normalizedType === "overpower") {
+      const until = side === "you" ? ultimate.titanOverpowerUntil : ultimate.opponentTitanOverpowerUntil;
+      const streak = side === "you" ? ultimate.titanStreak : ultimate.opponentTitanStreak;
+      const armed = side === "you" ? ultimate.titanBreakArmed : ultimate.opponentTitanBreakArmed;
+      const active = until > now;
+      const total = vfx.durationMs ?? 5000;
+      const progress = active ? Math.max(0, Math.min(1, (until - now) / total)) : 0;
+      return {
+        label: active ? "Overpower Active" : "Overpower",
+        sublabel: active ? `Chain ${Math.max(0, streak)}/2${armed ? " · BREAK HIT ARMED" : ""}` : "Stand by",
+        progress: active ? progress : null,
+        accent: "bg-amber-300"
+      };
+    }
+
     if (normalizedType === "shield") {
       const until = side === "you" ? ultimate.fortressUntil : ultimate.opponentFortressUntil;
-      const blocks = side === "you" ? ultimate.fortressBlocksRemaining : ultimate.opponentFortressBlocksRemaining;
-      const active = until > now && blocks > 0;
+      const stored = side === "you" ? ultimate.fortressBlocksRemaining : ultimate.opponentFortressBlocksRemaining;
+      const active = until > now;
       const total = vfx.durationMs ?? 10000;
       const progress = active ? Math.max(0, Math.min(1, (until - now) / total)) : 0;
       return {
-        label: active ? "Fortress Active" : "Fortress Shield",
-        sublabel: active ? `${blocks} block${blocks !== 1 ? "s" : ""} remaining` : "Stand by",
+        label: active ? "Aegis Domain Active" : "Aegis Domain",
+        sublabel: active ? `Damage reduced · Stored ${stored}` : "Stand by",
         progress: active ? progress : null,
         accent: "bg-cyan-400"
       };
     }
 
-    const armed = side === "you" ? ultimate.infernoPending : ultimate.opponentInfernoPending;
+    const until = side === "you" ? ultimate.infernoPendingUntil : ultimate.opponentInfernoPendingUntil;
+    const stacks = side === "you" ? ultimate.novaBonusRemaining : ultimate.opponentNovaBonusRemaining;
+    const active = until > now;
+    const total = vfx.durationMs ?? 6000;
+    const progress = active ? Math.max(0, Math.min(1, (until - now) / total)) : 0;
     return {
-      label: armed ? "Inferno Armed" : "Inferno Strike",
-      sublabel: armed ? "Next correct +3 dmg" : "Stand by",
-      progress: null,
+      label: active ? "Blaze Surge Active" : "Blaze Surge",
+      sublabel: active ? `Burn stacks x${Math.max(0, stacks)}` : "Stand by",
+      progress: active ? progress : null,
       accent: "bg-rose-400"
     };
   };
 
   const localUltimateStatus = getUltimateStatus(ultimate.type, "you");
   const opponentUltimateStatus = getUltimateStatus(ultimate.opponentType, "opponent");
+  const youUltimateActivationKey = ultimateCue?.by === "you" ? ultimateCue.id : 0;
 
   // Dedicated in-match layout (competitive HUD + sticky action bar).
   if (isActiveGameplay) {
@@ -2566,6 +2942,22 @@ export function GameClient({
         {/* Overlays */}
         <GameOverOverlay result={null} />
         <UltimateActivationOverlay cue={ultimateCue} />
+        {isSystemCorruptActive ? (
+          <motion.div
+            key={`corrupt-ui-${ultimate.shadowCorruptUntil}`}
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 z-20 overflow-hidden rounded-[2rem]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0.05, 0.14, 0.08, 0.13, 0.05], x: [0, 1, -1, 1, 0] }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.9, repeat: Infinity, ease: "easeInOut" }}
+            style={{
+              background:
+                "repeating-linear-gradient(180deg, rgba(2,6,23,0.06) 0px, rgba(2,6,23,0.06) 7px, rgba(167,139,250,0.10) 7px, rgba(167,139,250,0.10) 9px)",
+              mixBlendMode: "screen"
+            }}
+          />
+        ) : null}
 
         {/* Emote bubbles (HUD layout doesn't render PlayerPanels) */}
         <div className="pointer-events-none absolute left-0 right-0 top-16 z-30 flex items-start justify-between gap-3 px-3 sm:px-5">
@@ -2611,10 +3003,14 @@ export function GameClient({
                     implemented: ultimate.implemented,
                     overclockUntil: ultimate.overclockUntil,
                     blackoutUntil: ultimate.blackoutUntil,
+                    architectUntil: ultimate.architectUntil,
+                    architectMarks: ultimate.architectMarks,
+                    architectSequenceStreak: ultimate.architectSequenceStreak,
                     fortressUntil: ultimate.fortressUntil,
                     fortressBlocksRemaining: ultimate.fortressBlocksRemaining,
                     infernoPending: ultimate.infernoPending,
                     infernoPendingUntil: ultimate.infernoPendingUntil,
+                    infernoStacks: ultimate.novaBonusRemaining,
                   }}
                 />
 
@@ -2648,10 +3044,14 @@ export function GameClient({
                     implemented: ultimate.opponentImplemented,
                     overclockUntil: ultimate.opponentOverclockUntil,
                     blackoutUntil: ultimate.opponentBlackoutUntil,
+                    architectUntil: ultimate.opponentArchitectUntil,
+                    architectMarks: ultimate.opponentArchitectMarks,
+                    architectSequenceStreak: ultimate.opponentArchitectSequenceStreak,
                     fortressUntil: ultimate.opponentFortressUntil,
                     fortressBlocksRemaining: ultimate.opponentFortressBlocksRemaining,
                     infernoPending: ultimate.opponentInfernoPending,
                     infernoPendingUntil: ultimate.opponentInfernoPendingUntil,
+                    infernoStacks: ultimate.opponentNovaBonusRemaining,
                   }}
                 />
               </div>
@@ -2716,7 +3116,7 @@ export function GameClient({
                 onChange={(event) => handleAnswerChange(event.target.value)}
                 placeholder={
                   isJamActive
-                    ? "Jammed..."
+                    ? "Signal jam active - prep your answer..."
                     : youEliminated
                       ? "Eliminated"
                       : feedback.youAnsweredCurrent
@@ -2725,7 +3125,7 @@ export function GameClient({
                           ? "Type text or symbol answer..."
                           : "Type answer..."
                 }
-                disabled={isJamActive || youEliminated || feedback.youAnsweredCurrent}
+                disabled={youEliminated || feedback.youAnsweredCurrent}
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
@@ -2741,16 +3141,19 @@ export function GameClient({
                 >
                   Submit
                 </Button>
-                <Button
-                  className="h-11 w-full"
-                  onClick={handleActivateUltimate}
+                <UltimateAbilityButton
+                  type={ultimate.type}
+                  ultimateName={ultimate.name}
+                  charge={ultimate.charge}
+                  ready={ultimate.ready}
+                  used={ultimate.used}
+                  implemented={ultimate.implemented}
+                  activating={ultimateActivating}
                   disabled={!canUseUltimate}
-                  loading={ultimateActivating}
-                  loadingText="Activating..."
-                  type="button"
-                >
-                  {ultimate.ready && !ultimate.used ? "Ultimate" : "Charge"}
-                </Button>
+                  onActivate={handleActivateUltimate}
+                  activationBurstKey={youUltimateActivationKey}
+                  size="compact"
+                />
               </div>
               </form>
             </div>
@@ -3012,9 +3415,24 @@ export function GameClient({
                 ultReadyCueKey={ultReadyCueKey.you}
                 overclockUntil={ultimate.overclockUntil}
                 blackoutUntil={ultimate.blackoutUntil}
+                shadowCorruptUntil={ultimate.shadowCorruptUntil}
+                shadowCorruptStacks={ultimate.shadowCorruptStacks}
+                architectUntil={ultimate.architectUntil}
+                architectMarks={ultimate.architectMarks}
+                architectSequenceStreak={ultimate.architectSequenceStreak}
+                opponentArchitectUntil={ultimate.opponentArchitectUntil}
+                opponentArchitectMarks={ultimate.opponentArchitectMarks}
+                opponentArchitectSequenceStreak={ultimate.opponentArchitectSequenceStreak}
+                titanOverpowerUntil={ultimate.titanOverpowerUntil}
+                titanStreak={ultimate.titanStreak}
+                titanBreakArmed={ultimate.titanBreakArmed}
+                opponentTitanOverpowerUntil={ultimate.opponentTitanOverpowerUntil}
+                opponentTitanStreak={ultimate.opponentTitanStreak}
+                opponentTitanBreakArmed={ultimate.opponentTitanBreakArmed}
                 fortressUntil={ultimate.fortressUntil}
                 fortressBlocksRemaining={ultimate.fortressBlocksRemaining}
                 infernoPendingUntil={ultimate.infernoPendingUntil}
+                infernoStacks={ultimate.novaBonusRemaining}
               />
               <AnimatePresence>
                 {scoreImpactKey.you > 0 ? (
@@ -3052,26 +3470,22 @@ export function GameClient({
                     fortressBlocksRemaining: ultimate.fortressBlocksRemaining,
                     infernoPending: ultimate.infernoPending,
                     infernoPendingUntil: ultimate.infernoPendingUntil,
+                    infernoStacks: ultimate.novaBonusRemaining,
                   }}
                 />
 
-                <Button
-                  className={`w-full py-2 text-xs font-black uppercase tracking-[0.2em] ${
-                    canUseUltimate ? "shadow-lg shadow-emerald-500/25" : ""
-                  }`}
-                  onClick={handleActivateUltimate}
+                <UltimateAbilityButton
+                  type={ultimate.type}
+                  ultimateName={ultimate.name}
+                  charge={ultimate.charge}
+                  ready={ultimate.ready}
+                  used={ultimate.used}
+                  implemented={ultimate.implemented}
+                  activating={ultimateActivating}
                   disabled={!canUseUltimate}
-                  loading={ultimateActivating}
-                  loadingText="Activating..."
-                >
-                  {ultimate.used
-                    ? "Used"
-                    : !ultimate.implemented
-                      ? "Coming Soon"
-                      : ultimate.ready
-                        ? "Activate Ultimate"
-                        : `Charging ${Math.round(ultimate.charge)}%`}
-                </Button>
+                  onActivate={handleActivateUltimate}
+                  activationBurstKey={youUltimateActivationKey}
+                />
               </div>
               <FloatingLabel items={youFloatingItems} />
               <EmoteDisplay items={youEmoteItems} />
@@ -3123,9 +3537,24 @@ export function GameClient({
                 ultReadyCueKey={ultReadyCueKey.opponent}
                 overclockUntil={ultimate.opponentOverclockUntil}
                 blackoutUntil={ultimate.opponentBlackoutUntil}
+                shadowCorruptUntil={ultimate.opponentShadowCorruptUntil}
+                shadowCorruptStacks={ultimate.opponentShadowCorruptStacks}
+                architectUntil={ultimate.opponentArchitectUntil}
+                architectMarks={ultimate.opponentArchitectMarks}
+                architectSequenceStreak={ultimate.opponentArchitectSequenceStreak}
+                opponentArchitectUntil={ultimate.architectUntil}
+                opponentArchitectMarks={ultimate.architectMarks}
+                opponentArchitectSequenceStreak={ultimate.architectSequenceStreak}
+                titanOverpowerUntil={ultimate.opponentTitanOverpowerUntil}
+                titanStreak={ultimate.opponentTitanStreak}
+                titanBreakArmed={ultimate.opponentTitanBreakArmed}
+                opponentTitanOverpowerUntil={ultimate.titanOverpowerUntil}
+                opponentTitanStreak={ultimate.titanStreak}
+                opponentTitanBreakArmed={ultimate.titanBreakArmed}
                 fortressUntil={ultimate.opponentFortressUntil}
                 fortressBlocksRemaining={ultimate.opponentFortressBlocksRemaining}
                 infernoPendingUntil={ultimate.opponentInfernoPendingUntil}
+                infernoStacks={ultimate.opponentNovaBonusRemaining}
               />
               <AnimatePresence>
                 {scoreImpactKey.opponent > 0 ? (
@@ -3166,6 +3595,7 @@ export function GameClient({
                   fortressBlocksRemaining: ultimate.opponentFortressBlocksRemaining,
                   infernoPending: ultimate.opponentInfernoPending,
                   infernoPendingUntil: ultimate.opponentInfernoPendingUntil,
+                  infernoStacks: ultimate.opponentNovaBonusRemaining,
                 }}
               />
               <FloatingLabel items={opponentFloatingItems} />

@@ -81,7 +81,7 @@ export function useSupabaseAuth() {
 
 export async function signInWithGoogle() {
   const supabase = getSupabaseClient();
-  const redirectTo = getURL();
+  const redirectTo = getURL("/auth/callback");
 
   if (process.env.NODE_ENV !== "production") {
     console.debug("[auth] signInWithGoogle:redirectTo", redirectTo);
@@ -175,6 +175,37 @@ export async function createPlayerProfileForUser(user: User, displayName: string
 
   console.log("[auth] createPlayerProfileForUser:created", createdPlayer);
   return createdPlayer;
+}
+
+export async function ensurePlayerProfileForUser(user: User) {
+  if (!user || user.is_anonymous) {
+    return null;
+  }
+
+  const baseCandidate = sanitizeDisplayName(getUserDisplayName(user) || getProfileUsername(user));
+  const base = baseCandidate.length >= DISPLAY_NAME_MIN_LENGTH ? baseCandidate : "Player";
+
+  let attempt = base;
+  let lastError: unknown = null;
+
+  for (let i = 0; i < 6; i += 1) {
+    try {
+      return await createPlayerProfileForUser(user, attempt);
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message.toLowerCase() : "";
+
+      // Retry only when name collisions happen.
+      if (!message.includes("display name") && !message.includes("already taken")) {
+        throw error;
+      }
+
+      const suffix = Math.floor(1000 + Math.random() * 9000);
+      attempt = sanitizeDisplayName(`${base}-${suffix}`);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Unable to create player profile.");
 }
 
 export async function signUpWithPassword(email: string, password: string, displayName: string) {

@@ -1,9 +1,15 @@
 import avatarsJson from "../../../packages/shared/avatars.json";
 
-export const AVATAR_IDS = ["flash", "shadow", "guardian", "inferno"] as const;
+export const AVATAR_IDS = ["flash", "shadow", "guardian", "inferno", "architect", "titan"] as const;
 export type AvatarId = (typeof AVATAR_IDS)[number];
 export type AvatarRole = "Speed" | "Disrupt" | "Defense" | "Burst";
-export type AvatarUltimateId = "rapid_fire" | "jam" | "shield" | "double";
+export type AvatarUltimateId =
+  | "rapid_fire"
+  | "system_corrupt"
+  | "perfect_sequence"
+  | "overpower"
+  | "shield"
+  | "double";
 
 export type AvatarUltimateMeta = {
   effectType: string;
@@ -26,6 +32,12 @@ export type Avatar = {
   icon: string;
   emoji: string;
   theme: AvatarTheme;
+  isPremium?: boolean;
+  priceUsd?: number;
+  storeSku?: string;
+  roleLabel?: string;
+  premiumTagline?: string;
+  howItPlays?: string;
   description: string;
   passive: string;
   ultimateId: AvatarUltimateId;
@@ -38,7 +50,7 @@ export const AVATARS = avatarsJson as Avatar[];
 export const AVATAR_MAP = new Map<AvatarId, Avatar>(AVATARS.map((avatar) => [avatar.id, avatar]));
 export const DEFAULT_AVATAR_ID: AvatarId = "flash";
 const LEGACY_AVATAR_FALLBACKS: Record<string, AvatarId> = {
-  titan: "guardian",
+  titan: "titan",
   aegis: "guardian",
   frost: "guardian",
   volt: "flash",

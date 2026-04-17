@@ -2,12 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/button";
 import { ProfileCharacterSelector } from "@/components/profile-character-selector";
 import { DEFAULT_AVATAR_ID, getAvatar, normalizeAvatarId, type AvatarId } from "@/lib/avatars";
 import { getReadableAuthError, sanitizeDisplayName, validateDisplayName } from "@/lib/auth";
 import { getSupabaseClient } from "@/lib/supabase";
+import { PurchaseSuccessModal } from "@/components/PurchaseSuccessModal";
+import { getPremiumItem, type PremiumItem, type PremiumItemType } from "@/lib/premium-items";
 import { formatTopicLabel, type Topic } from "@/lib/topics";
+import { PageContent } from "@/components/page-content";
 import {
   STREAK_EFFECTS,
   EMOTE_PACKS,
@@ -27,6 +31,7 @@ type ProfileResponse = {
   streakEffect?: string;
   emotePack?: string;
   ownedEmotePacks?: string[];
+  ownedAvatars?: string[];
   summary: {
     totalMatches: number;
     wins: number;
@@ -148,6 +153,22 @@ async function loadProfileFromSupabase(authUserId: string): Promise<ProfileRespo
     // If table/migration not applied yet, fall back to starter-only.
   }
 
+  // Owned avatars (premium) are sourced from user_avatars.
+  // Free avatars are always considered owned.
+  let ownedAvatars: string[] = [];
+  try {
+    const { data: ownedRows, error: ownedError } = await supabase
+      .from("user_avatars")
+      .select("avatar_id")
+      .eq("user_id", authUserId);
+    if (!ownedError && Array.isArray(ownedRows)) {
+      const rows = ownedRows as Array<{ avatar_id: string }>;
+      ownedAvatars = rows.map((r) => r.avatar_id);
+    }
+  } catch {
+    // If table/migration not applied yet, fall back to free-only.
+  }
+
   console.log("[profile] querying ratings", { playerId: player.id });
   const { data: ratings, error: ratingsError } = await supabase
     .from("ratings")
@@ -220,6 +241,7 @@ async function loadProfileFromSupabase(authUserId: string): Promise<ProfileRespo
     streakEffect,
     emotePack,
     ownedEmotePacks,
+    ownedAvatars,
     summary: {
       totalMatches: matchRows.length,
       wins,
@@ -265,6 +287,7 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
 
 export function ProfileClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [data, setData] = useState<ProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -283,6 +306,16 @@ export function ProfileClient() {
   const [buyingPack, setBuyingPack] = useState<EmotePackId | null>(null);
   const [emoteShopError, setEmoteShopError] = useState<string | null>(null);
   const [navPending, setNavPending] = useState(false);
+
+  const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
+  const [purchaseConfirming, setPurchaseConfirming] = useState(false);
+  const [purchaseError, setPurchaseError] = useState<string | null>(null);
+  const [purchaseItem, setPurchaseItem] = useState<PremiumItem | null>(null);
+
+  const refreshProfile = async (authId: string) => {
+    const next = await loadProfileFromSupabase(authId);
+    setData((current) => (current ? { ...current, ...next } : next));
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -410,6 +443,73 @@ export function ProfileClient() {
     };
   }, [router]);
 
+  // Post-purchase UX: confirm session, refresh ownership instantly, then show premium unlock modal.
+  useEffect(() => {
+    const purchase = searchParams?.get("purchase");
+    const sessionId = searchParams?.get("session_id");
+    if (!purchase || purchase !== "success" || !sessionId) return;
+    if (!authUserId) return;
+
+    let cancelled = false;
+    const run = async () => {
+      setPurchaseModalOpen(true);
+      setPurchaseConfirming(true);
+      setPurchaseError(null);
+      setPurchaseItem(null);
+      try {
+        const supabase = getSupabaseClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session?.access_token) {
+          throw new Error("You are not signed in.");
+        }
+
+        const response = await fetch("/api/stripe/confirm", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ sessionId }),
+        });
+        const payload = (await response.json()) as
+          | { status: "pending" }
+          | { status: "confirmed"; itemType: PremiumItemType; itemId: string }
+          | { error: string };
+
+        if (!response.ok) {
+          throw new Error("error" in payload ? payload.error : "Unable to confirm purchase.");
+        }
+
+        if ("status" in payload && payload.status === "pending") {
+          throw new Error("Payment is still processing. Please wait a moment and refresh your profile.");
+        }
+
+        const confirmed = payload as { status: "confirmed"; itemType: PremiumItemType; itemId: string };
+        const item = getPremiumItem(confirmed.itemType, confirmed.itemId);
+        if (item) {
+          setPurchaseItem(item);
+        }
+
+        await refreshProfile(authUserId);
+      } catch (e) {
+        setPurchaseError(e instanceof Error ? e.message : "Unable to confirm purchase.");
+      } finally {
+        if (!cancelled) {
+          setPurchaseConfirming(false);
+          // Clean URL so the modal doesn't re-open on future visits.
+          router.replace("/profile");
+        }
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [authUserId, router, searchParams]);
+
   const bestTopicLabel = useMemo(() => {
     if (!data?.summary.highestRatedTopic) {
       return "No matches yet";
@@ -427,6 +527,16 @@ export function ProfileClient() {
 
   const handleAvatarSelect = async (avatarId: AvatarId) => {
     if (!authUserId || !data || savingAvatarId === avatarId || data.avatarId === avatarId) {
+      return;
+    }
+
+    // Premium avatar guard (no payment flow here — selection requires ownership).
+    const freeAvatarIds = new Set(["flash", "shadow", "guardian", "inferno"]);
+    const owned = new Set([...(data.ownedAvatars ?? []), ...Array.from(freeAvatarIds)]);
+    const selectingPremium = avatarId === "architect" || avatarId === "titan";
+    if (selectingPremium && !owned.has(avatarId)) {
+      const label = avatarId === "titan" ? "Titan" : "Architect";
+      setAvatarError(`${label} is a premium character and is currently locked on your account.`);
       return;
     }
 
@@ -528,6 +638,8 @@ export function ProfileClient() {
   const selectedEmotePack = normalizeEmotePackId(data?.emotePack);
   const ownedEmotePacks = new Set((data?.ownedEmotePacks ?? ["starter"]).map(String));
   const isPackOwned = (packId: EmotePackId) => packId === "starter" || ownedEmotePacks.has(packId);
+  const ownedAvatars = new Set((data?.ownedAvatars ?? []).map(String));
+  const isAvatarOwned = (avatarId: "architect" | "titan") => ownedAvatars.has(avatarId);
 
   const handleStreakEffectSelect = async (effectId: StreakEffectId) => {
     if (!authUserId || !data || savingStreakEffect || data.streakEffect === effectId) return;
@@ -630,8 +742,79 @@ export function ProfileClient() {
     }
   };
 
+  const [buyingAvatar, setBuyingAvatar] = useState<"architect" | "titan" | null>(null);
+  const [avatarShopError, setAvatarShopError] = useState<string | null>(null);
+
+  const handleBuyAvatar = async (avatarId: "architect" | "titan") => {
+    setAvatarShopError(null);
+    if (buyingAvatar) return;
+    if (!data) return;
+    if (isAvatarOwned(avatarId)) return;
+
+    const supabase = getSupabaseClient();
+    const {
+      data: { session }
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      setAvatarShopError("You must be signed in to purchase premium characters.");
+      return;
+    }
+
+    if (session.user?.is_anonymous) {
+      setAvatarShopError("Guest accounts cannot make purchases. Sign in with a real account to buy characters.");
+      return;
+    }
+
+    setBuyingAvatar(avatarId);
+    try {
+      const response = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ itemType: "avatar", itemId: avatarId }),
+      });
+
+      const payload = (await response.json()) as { url?: string; error?: string };
+      if (!response.ok || !payload.url) {
+        throw new Error(payload.error ?? "Unable to start checkout.");
+      }
+
+      window.location.href = payload.url;
+    } catch (buyError) {
+      setAvatarShopError(buyError instanceof Error ? buyError.message : "Unable to start checkout.");
+    } finally {
+      setBuyingAvatar(null);
+    }
+  };
+
   return (
-    <section className="w-full max-w-6xl rounded-[2rem] border border-white/10 bg-slate-950/70 p-4 shadow-glow backdrop-blur sm:p-6 md:p-10">
+    <PageContent className="space-y-6 sm:space-y-8 md:space-y-10">
+      <PurchaseSuccessModal
+        open={purchaseModalOpen}
+        item={purchaseItem}
+        confirming={purchaseConfirming}
+        error={purchaseError}
+        onContinue={() => setPurchaseModalOpen(false)}
+        onEquipNow={
+          purchaseItem?.equipAction
+            ? () => {
+                if (!purchaseItem) return;
+                if (purchaseItem.equipAction === "equip_avatar") {
+                  void handleAvatarSelect(purchaseItem.id as AvatarId);
+                  setPurchaseModalOpen(false);
+                  return;
+                }
+                if (purchaseItem.equipAction === "equip_emote_pack") {
+                  void handleEmotePackSelect(purchaseItem.id as EmotePackId);
+                  setPurchaseModalOpen(false);
+                }
+              }
+            : undefined
+        }
+      />
       <div className="flex flex-col gap-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="space-y-3">
@@ -720,6 +903,8 @@ export function ProfileClient() {
             previewId={previewAvatarId}
             savingId={savingAvatarId}
             disabled={loading || Boolean(savingAvatarId)}
+            ownedAvatarIds={[...(data?.ownedAvatars ?? []), "flash", "shadow", "guardian", "inferno"]}
+            onBuyPremiumAvatar={(avatarId) => void handleBuyAvatar(avatarId)}
             onPreviewChange={setPreviewAvatarId}
             onSelect={(avatarId) => void handleAvatarSelect(avatarId)}
           />
@@ -852,13 +1037,13 @@ export function ProfileClient() {
             ) : null}
           </div>
 
-          {/* Emote Shop (simulated unlocks) */}
+          {/* Emote Packs (preview + buy + equip live here) */}
           <div className="mt-8 rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.28em] text-slate-400">Emote Shop</p>
+                <p className="text-xs font-bold uppercase tracking-[0.28em] text-slate-400">Emote Packs</p>
                 <p className="mt-1 text-sm text-slate-300">
-                  Buy packs via Stripe Checkout. Packs unlock only after verified payment (webhook).
+                  Fun quick-send messages used during matches. Preview how they look in-game, then buy or equip.
                 </p>
               </div>
               <span className="rounded-full border border-amber-400/25 bg-amber-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-200">
@@ -866,55 +1051,72 @@ export function ProfileClient() {
               </span>
             </div>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              {EMOTE_PACKS.map((pack) => {
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {EMOTE_PACKS.filter((p) => p.id !== "starter").map((pack) => {
                 const packId = pack.id as EmotePackId;
-                const unlocked = pack.unlockedByDefault || isPackOwned(packId);
+                const owned = isPackOwned(packId);
                 const busy = buyingPack === packId;
+                const selected = selectedEmotePack === packId;
                 return (
-                  <div key={`shop-${pack.id}`} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                  <div
+                    key={`pack-preview-${pack.id}`}
+                    className={`rounded-2xl border p-4 ${
+                      selected ? "border-sky-400/35 bg-sky-500/10" : "border-slate-800 bg-slate-950/60"
+                    }`}
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <p className="text-sm font-bold text-white">{pack.name}</p>
-                        <p className="mt-1 text-[11px] text-slate-400">{pack.previewLabel}</p>
+                        <p className="mt-1 text-[11px] text-slate-400">{pack.description}</p>
                       </div>
                       <span
                         className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.22em] ${
-                          unlocked
+                          owned
                             ? "border-emerald-400/25 bg-emerald-500/10 text-emerald-200"
                             : "border-amber-400/25 bg-amber-500/10 text-amber-200"
                         }`}
                       >
-                        {unlocked ? "Unlocked" : "Locked"}
+                        {owned ? (selected ? "Equipped" : "Owned") : "Locked"}
                       </span>
                     </div>
 
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {pack.emoteIds.map((emoteId) => {
-                        const emote = EMOTES.find((e) => e.id === emoteId);
-                        return emote ? (
-                          <span
-                            key={`shop-${pack.id}-${emoteId}`}
-                            title={emote.label}
-                            className="inline-flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900/60 px-2 py-1 text-xs text-slate-200"
-                          >
-                            <span>{emote.icon}</span>
-                            <span className="text-slate-300">{emote.label}</span>
-                          </span>
-                        ) : null;
-                      })}
+                    {/* In-match mock preview */}
+                    <div className="mt-3 rounded-2xl border border-slate-800 bg-slate-950/65 p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500">
+                        In-match preview
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {pack.emoteIds.slice(0, 4).map((emoteId) => {
+                          const emote = EMOTES.find((e) => e.id === emoteId);
+                          return emote ? (
+                            <span
+                              key={`preview-${pack.id}-${emoteId}`}
+                              className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1.5 text-xs text-slate-200"
+                            >
+                              <span>{emote.icon}</span>
+                              <span className="font-semibold">{emote.label}</span>
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
                     </div>
 
-                    <div className="mt-4">
+                    <div className="mt-4 grid gap-2 sm:grid-cols-2">
                       <Button
-                        variant={unlocked ? "secondary" : "primary"}
-                        className="w-full"
-                        disabled={loading || busy || packId === "starter" || unlocked}
+                        variant={owned ? "primary" : "primary"}
+                        disabled={loading || busy || owned}
                         loading={busy}
                         loadingText="Starting..."
                         onClick={() => void handleBuyEmotePack(packId)}
                       >
-                        {packId === "starter" ? "Included" : unlocked ? "Owned" : "Buy"}
+                        {owned ? "Owned" : "Buy"}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        disabled={loading || Boolean(savingEmotePack) || !owned || selected}
+                        onClick={() => void handleEmotePackSelect(packId)}
+                      >
+                        {selected ? "Equipped" : "Equip now"}
                       </Button>
                     </div>
                   </div>
@@ -1091,6 +1293,6 @@ export function ProfileClient() {
           </div>
         </div>
       </div>
-    </section>
+    </PageContent>
   );
 }

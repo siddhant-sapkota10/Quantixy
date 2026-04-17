@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getStripe, getStripePriceIdForPack } from "@/lib/stripe";
+import { getStripe, getStripePriceIdForAvatar, getStripePriceIdForPack } from "@/lib/stripe";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getURL } from "@/lib/site-url";
 
@@ -8,6 +8,8 @@ export const runtime = "nodejs";
 type Body = {
   pack?: string;
   packId?: string;
+  itemType?: "emote_pack" | "avatar";
+  itemId?: string;
 };
 
 export async function POST(request: Request) {
@@ -28,25 +30,50 @@ export async function POST(request: Request) {
     }
 
     const body = (await request.json()) as Body;
-    const pack = String(body.pack ?? body.packId ?? "");
-    if (pack !== "tilt" && pack !== "clutch") {
-      return NextResponse.json({ error: "Invalid pack." }, { status: 400 });
+    const itemType = body.itemType ?? (body.pack || body.packId ? "emote_pack" : undefined);
+    const itemId = String(body.itemId ?? body.pack ?? body.packId ?? "");
+    if (!itemType || !itemId) {
+      return NextResponse.json({ error: "Invalid purchase." }, { status: 400 });
     }
 
-    const priceId = getStripePriceIdForPack(pack);
+    const isEmotePack = itemType === "emote_pack";
+    const isAvatar = itemType === "avatar";
+    if (!isEmotePack && !isAvatar) {
+      return NextResponse.json({ error: "Invalid purchase." }, { status: 400 });
+    }
+
+    const priceId = isEmotePack ? getStripePriceIdForPack(itemId) : getStripePriceIdForAvatar(itemId);
     if (!priceId) {
-      return NextResponse.json({ error: "Invalid pack." }, { status: 400 });
+      return NextResponse.json({ error: "Invalid purchase item." }, { status: 400 });
     }
 
     // Prevent duplicate ownership (best-effort; webhook is source of truth)
-    const { data: existing } = await supabaseAdmin
-      .from("user_emote_packs")
-      .select("id")
-      .eq("user_id", data.user.id)
-      .eq("pack_id", pack)
-      .maybeSingle();
-    if (existing) {
-      return NextResponse.json({ error: "Pack already owned." }, { status: 409 });
+    if (isEmotePack) {
+      if (itemId !== "tilt" && itemId !== "clutch") {
+        return NextResponse.json({ error: "Invalid pack." }, { status: 400 });
+      }
+      const { data: existing } = await supabaseAdmin
+        .from("user_emote_packs")
+        .select("id")
+        .eq("user_id", data.user.id)
+        .eq("pack_id", itemId)
+        .maybeSingle();
+      if (existing) {
+        return NextResponse.json({ error: "Pack already owned." }, { status: 409 });
+      }
+    } else {
+      if (itemId !== "architect" && itemId !== "titan") {
+        return NextResponse.json({ error: "Invalid avatar." }, { status: 400 });
+      }
+      const { data: existing } = await supabaseAdmin
+        .from("user_avatars")
+        .select("avatar_id")
+        .eq("user_id", data.user.id)
+        .eq("avatar_id", itemId)
+        .maybeSingle();
+      if (existing) {
+        return NextResponse.json({ error: "Avatar already owned." }, { status: 409 });
+      }
     }
 
     const stripe = getStripe();
@@ -54,11 +81,14 @@ export async function POST(request: Request) {
       mode: "payment",
       line_items: [{ price: priceId, quantity: 1 }],
       allow_promotion_codes: true,
-      success_url: getURL(`/shop/success?session_id={CHECKOUT_SESSION_ID}`),
-      cancel_url: getURL("/shop/cancel"),
+      success_url: getURL(`/profile?purchase=success&session_id={CHECKOUT_SESSION_ID}`),
+      cancel_url: getURL("/profile?purchase=cancel"),
       metadata: {
         user_id: data.user.id,
-        pack_id: pack,
+        item_type: itemType,
+        item_id: itemId,
+        // Back-compat (older webhook logic / dashboards)
+        pack_id: isEmotePack ? itemId : undefined,
       },
     });
 

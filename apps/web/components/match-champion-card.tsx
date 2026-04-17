@@ -20,10 +20,16 @@ export type MatchChampionCardModel = {
   // Active state timestamps (ms epoch). 0 if inactive.
   overclockUntil?: number;
   blackoutUntil?: number;
+  shadowCorruptUntil?: number;
+  shadowCorruptStacks?: number;
+  architectUntil?: number;
+  architectMarks?: number;
+  architectSequenceStreak?: number;
   fortressUntil?: number;
   fortressBlocksRemaining?: number;
   infernoPending?: boolean;
   infernoPendingUntil?: number;
+  infernoStacks?: number;
 };
 
 type MatchChampionCardProps = {
@@ -35,10 +41,10 @@ type MatchChampionCardProps = {
 
 const THEME: Record<AvatarId, { ring: string; glow: string; readyGlow: string; chip: string }> = {
   flash: {
-    ring: "ring-amber-300/35",
-    glow: "shadow-[0_0_24px_rgba(250,204,21,0.18)]",
-    readyGlow: "shadow-[0_0_28px_rgba(250,204,21,0.32)]",
-    chip: "border-amber-300/25 bg-amber-500/10 text-amber-200",
+    ring: "ring-amber-300/38",
+    glow: "shadow-[0_0_24px_rgba(250,204,21,0.2)]",
+    readyGlow: "shadow-[0_0_30px_rgba(250,204,21,0.34)]",
+    chip: "border-amber-300/30 bg-amber-500/10 text-amber-100",
   },
   guardian: {
     ring: "ring-sky-300/35",
@@ -77,18 +83,31 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
 
   const isActiveRapid = (model.overclockUntil ?? 0) > now;
   const isActiveJam = (model.blackoutUntil ?? 0) > now;
+  const isActiveArchitect = (model.architectUntil ?? 0) > now;
+  const isActiveCorrupt = (model.shadowCorruptUntil ?? 0) > now;
   const fortressBlocks = model.fortressBlocksRemaining ?? 0;
-  const isActiveFortress = (model.fortressUntil ?? 0) > now && fortressBlocks > 0;
+  const isActiveFortress = (model.fortressUntil ?? 0) > now;
   const isArmedInferno = Boolean(model.infernoPending) && (model.infernoPendingUntil ?? 0) > now;
+  const infernoStacks = model.infernoStacks ?? 0;
 
   const activeLabel = isActiveRapid
     ? `ACTIVE - ${secondsLeft(model.overclockUntil ?? 0, now)}s`
-    : isActiveJam
-      ? `JAMMED - ${secondsLeft(model.blackoutUntil ?? 0, now)}s`
+    : isActiveCorrupt
+      ? `SYSTEM CORRUPT - ${secondsLeft(model.shadowCorruptUntil ?? 0, now)}s${
+          (model.shadowCorruptStacks ?? 0) > 0 ? ` - x${model.shadowCorruptStacks}` : ""
+        }`
+      : isActiveArchitect
+        ? `PERFECT SEQUENCE - ${secondsLeft(model.architectUntil ?? 0, now)}s${
+            (model.architectMarks ?? 0) > 0 ? ` - MARKS x${model.architectMarks}` : ""
+          }${
+            (model.architectSequenceStreak ?? 0) > 0 ? ` - ${model.architectSequenceStreak}/3` : ""
+          }`
+      : isActiveJam
+        ? `SIGNAL JAM - ${secondsLeft(model.blackoutUntil ?? 0, now)}s`
       : isActiveFortress
-        ? `FORTRESS - ${secondsLeft(model.fortressUntil ?? 0, now)}s - ${fortressBlocks} BLOCKS`
+        ? `AEGIS DOMAIN - ${secondsLeft(model.fortressUntil ?? 0, now)}s - STORED ${fortressBlocks}`
         : isArmedInferno
-          ? `ARMED - ${secondsLeft(model.infernoPendingUntil ?? 0, now)}s`
+          ? `BLAZE SURGE - ${secondsLeft(model.infernoPendingUntil ?? 0, now)}s - BURN x${infernoStacks}`
           : null;
 
   const ready = model.ready && !model.used && model.implemented;
@@ -209,7 +228,7 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
           </div>
         </div>
 
-        {model.avatarId === "shadow" && (isActiveJam || ready) ? (
+        {model.avatarId === "shadow" && (isActiveCorrupt || isActiveJam || ready) ? (
           <div
             className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] opacity-80"
             style={{
@@ -247,13 +266,15 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
             priority={false}
           />
           {/* Active FX overlay */}
-          {(isActiveRapid || isActiveFortress || isArmedInferno || isActiveJam) ? (
+          {(isActiveRapid || isActiveFortress || isArmedInferno || isActiveCorrupt || isActiveJam) ? (
             <div
               className="pointer-events-none absolute inset-0"
               style={{
                 background:
-                  isActiveJam
+                  isActiveCorrupt
                     ? "radial-gradient(circle at 50% 50%, rgba(167,139,250,0.55) 0%, transparent 60%)"
+                    : isActiveJam
+                      ? "radial-gradient(circle at 50% 50%, rgba(167,139,250,0.45) 0%, transparent 60%)"
                     : isActiveFortress
                       ? "radial-gradient(circle at 50% 50%, rgba(34,211,238,0.45) 0%, transparent 60%)"
                       : isArmedInferno
@@ -303,7 +324,7 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
       </div>
 
       {/* Glitch strip for Shadow */}
-      {model.avatarId === "shadow" && (isActiveJam || ready) ? (
+      {model.avatarId === "shadow" && (isActiveCorrupt || isActiveJam || ready) ? (
         <div
           className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] opacity-80"
           style={{

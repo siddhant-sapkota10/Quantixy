@@ -74,9 +74,20 @@ const HP_STREAK_3_BONUS = 2;
 const HP_STREAK_5_BONUS = 4;
 // Ultimate balance tuning (ms)
 const RAPID_FIRE_DURATION_MS = 6000;
-const FORTRESS_DURATION_MS = 8000;
-const JAM_DURATION_MS = 3000;
-const INFERNO_ARMED_DURATION_MS = 10000;
+const FORTRESS_DURATION_MS = 6000;
+const JAM_DURATION_MS = 1800;
+const INFERNO_BLAZE_DURATION_MS = 6000;
+const INFERNO_BURN_REFRESH_MS = 2200;
+const INFERNO_BURN_TICK_MS = 800;
+const SHADOW_CORRUPT_DURATION_MS = 5000;
+const SHADOW_CORRUPT_MAX_STACKS = 6;
+const SHADOW_CORRUPT_DAMAGE_PER_STACK = 2;
+const ARCHITECT_SEQUENCE_DURATION_MS = 6000;
+const ARCHITECT_MAX_MARKS = 6;
+const ARCHITECT_DAMAGE_PER_MARK = 3;
+const TITAN_OVERPOWER_DURATION_MS = 5000;
+const TITAN_BONUS_DAMAGE_PER_CORRECT = 4;
+const TITAN_BREAK_HIT_BONUS_DAMAGE = 10;
 const ROOM_CODE_LENGTH = 6;
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -338,6 +349,11 @@ function clearUltimateEffects(game) {
   clearUltimateTimeoutMap(game, "titanTimeout");
   clearUltimateTimeoutMap(game, "blackoutTimeout");
   clearUltimateTimeoutMap(game, "infernoTimeout");
+  clearUltimateTimeoutMap(game, "infernoBurnInterval");
+  clearUltimateTimeoutMap(game, "fortressTimeout");
+  clearUltimateTimeoutMap(game, "shadowCorruptTimeout");
+  clearUltimateTimeoutMap(game, "architectTimeout");
+  clearUltimateTimeoutMap(game, "titanOverpowerTimeout");
   game.titanUntil = buildTitanUntilMap(game.players);
   game.blackoutUntil = buildBlackoutUntilMap(game.players);
   game.overclockUntil = buildOverclockUntilMap(game.players);
@@ -345,8 +361,19 @@ function clearUltimateEffects(game) {
   game.flashBonusRemaining = buildFlashBonusRemainingMap(game.players);
   game.novaBonusRemaining = buildNovaBonusRemainingMap(game.players);
   game.fortressBlocksRemaining = buildFortressBlocksMap(game.players);
+  game.aegisAbsorbedDamage = buildAegisAbsorbedMap(game.players);
   game.infernoPending = buildInfernoPendingMap(game.players);
   game.infernoPendingUntil = buildInfernoPendingUntilMap(game.players);
+  game.infernoBurnUntil = buildInfernoBurnUntilMap(game.players);
+  game.infernoBurnStacks = buildInfernoBurnStacksMap(game.players);
+  game.shadowCorruptUntil = buildShadowCorruptUntilMap(game.players);
+  game.shadowCorruptStacks = buildShadowCorruptStacksMap(game.players);
+  game.architectUntil = buildArchitectUntilMap(game.players);
+  game.architectSequenceStreak = buildArchitectSequenceStreakMap(game.players);
+  game.architectMarks = buildArchitectMarksMap(game.players);
+  game.titanOverpowerUntil = buildTitanOverpowerUntilMap(game.players);
+  game.titanStreak = buildTitanStreakMap(game.players);
+  game.titanBreakArmed = buildTitanBreakArmedMap(game.players);
 }
 
 function buildScoreMap(players) {
@@ -408,6 +435,10 @@ function buildFortressBlocksMap(players) {
   return Object.fromEntries(players.map((player) => [player.socketId, 0]));
 }
 
+function buildAegisAbsorbedMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, 0]));
+}
+
 function buildInfernoPendingMap(players) {
   return Object.fromEntries(players.map((player) => [player.socketId, false]));
 }
@@ -416,7 +447,52 @@ function buildInfernoPendingUntilMap(players) {
   return Object.fromEntries(players.map((player) => [player.socketId, 0]));
 }
 
+function buildInfernoBurnUntilMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, 0]));
+}
+
+function buildInfernoBurnStacksMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, 0]));
+}
+
+function buildShadowCorruptUntilMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, 0]));
+}
+
+function buildShadowCorruptStacksMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, 0]));
+}
+
+function buildArchitectUntilMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, 0]));
+}
+
+function buildArchitectSequenceStreakMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, 0]));
+}
+
+function buildArchitectMarksMap(players) {
+  // Marks are stored on the *target* (the marked player).
+  return Object.fromEntries(players.map((player) => [player.socketId, 0]));
+}
+
+function buildTitanOverpowerUntilMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, 0]));
+}
+
+function buildTitanStreakMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, 0]));
+}
+
+function buildTitanBreakArmedMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, false]));
+}
+
 function buildInfernoTimeoutMap(players) {
+  return Object.fromEntries(players.map((player) => [player.socketId, null]));
+}
+
+function buildInfernoBurnIntervalMap(players) {
   return Object.fromEntries(players.map((player) => [player.socketId, null]));
 }
 
@@ -562,7 +638,10 @@ function normalizeAvatarId(value) {
 
   if (typeof value === "string") {
     const legacyValue = value.toLowerCase();
-    if (legacyValue === "titan" || legacyValue === "aegis" || legacyValue === "frost") {
+    if (legacyValue === "titan") {
+      return "titan";
+    }
+    if (legacyValue === "aegis" || legacyValue === "frost") {
       return "guardian";
     }
     if (legacyValue === "volt") {
@@ -583,7 +662,7 @@ function getUltimateTypeForPlayer(game, socketId) {
 
 function getUltimateDisplayNameForPlayer(game, socketId) {
   const player = game.players.find((entry) => entry.socketId === socketId);
-  return getAvatarUltimateConfig(player?.avatar)?.ultimateName ?? "Rapid Fire";
+  return getAvatarUltimateConfig(player?.avatar)?.ultimateName ?? "Overclock";
 }
 
 function getUltimateDescriptionForPlayer(game, socketId) {
@@ -592,11 +671,20 @@ function getUltimateDescriptionForPlayer(game, socketId) {
 }
 
 function getUltimateDurationMs(ultimateType) {
+  const avatar = AVATARS.find((entry) => entry.ultimateId === ultimateType);
+  if (typeof avatar?.ultimateMeta?.durationMs === "number") {
+    return avatar.ultimateMeta.durationMs;
+  }
+
   if (ultimateType === "rapid_fire") return RAPID_FIRE_DURATION_MS;
   if (ultimateType === "shield") return FORTRESS_DURATION_MS;
+  if (ultimateType === "system_corrupt") return SHADOW_CORRUPT_DURATION_MS;
+  if (ultimateType === "perfect_sequence") return ARCHITECT_SEQUENCE_DURATION_MS;
+  if (ultimateType === "overpower") return TITAN_OVERPOWER_DURATION_MS;
   if (ultimateType === "jam") return JAM_DURATION_MS;
-  const avatar = AVATARS.find((entry) => entry.ultimateId === ultimateType);
-  return avatar?.ultimateMeta?.durationMs ?? ULTIMATE_DEFAULT_DURATION_MS;
+  if (ultimateType === "double") return INFERNO_BLAZE_DURATION_MS;
+
+  return ULTIMATE_DEFAULT_DURATION_MS;
 }
 
 function getUltimateMeta(ultimateType) {
@@ -618,6 +706,10 @@ function buildPlayerUltimateState(game, socketId) {
   const opponentId = opponent?.socketId;
   const yourUltimateType = getUltimateTypeForPlayer(game, socketId);
   const opponentUltimateType = opponentId ? getUltimateTypeForPlayer(game, opponentId) : "rapid_fire";
+  const youAreArchitect = yourUltimateType === "perfect_sequence";
+  const opponentIsArchitect = opponentUltimateType === "perfect_sequence";
+  const youAreTitan = yourUltimateType === "overpower";
+  const opponentIsTitan = opponentUltimateType === "overpower";
 
   return {
     ultimateType: yourUltimateType,
@@ -637,19 +729,35 @@ function buildPlayerUltimateState(game, socketId) {
     opponentTitanUntil: opponentId ? game.titanUntil[opponentId] ?? 0 : 0,
     blackoutUntil: game.blackoutUntil[socketId] ?? 0,
     opponentBlackoutUntil: opponentId ? game.blackoutUntil[opponentId] ?? 0 : 0,
+    shadowCorruptUntil: game.shadowCorruptUntil?.[socketId] ?? 0,
+    opponentShadowCorruptUntil: opponentId ? game.shadowCorruptUntil?.[opponentId] ?? 0 : 0,
+    shadowCorruptStacks: game.shadowCorruptStacks?.[socketId] ?? 0,
+    opponentShadowCorruptStacks: opponentId ? game.shadowCorruptStacks?.[opponentId] ?? 0 : 0,
+    architectUntil: youAreArchitect ? game.architectUntil?.[socketId] ?? 0 : 0,
+    opponentArchitectUntil: opponentIsArchitect && opponentId ? game.architectUntil?.[opponentId] ?? 0 : 0,
+    architectMarks: youAreArchitect && opponentId ? game.architectMarks?.[opponentId] ?? 0 : 0,
+    opponentArchitectMarks: opponentIsArchitect ? game.architectMarks?.[socketId] ?? 0 : 0,
+    architectSequenceStreak: youAreArchitect ? game.architectSequenceStreak?.[socketId] ?? 0 : 0,
+    opponentArchitectSequenceStreak: opponentIsArchitect && opponentId ? game.architectSequenceStreak?.[opponentId] ?? 0 : 0,
+    titanOverpowerUntil: youAreTitan ? game.titanOverpowerUntil?.[socketId] ?? 0 : 0,
+    opponentTitanOverpowerUntil: opponentIsTitan && opponentId ? game.titanOverpowerUntil?.[opponentId] ?? 0 : 0,
+    titanStreak: youAreTitan ? game.titanStreak?.[socketId] ?? 0 : 0,
+    opponentTitanStreak: opponentIsTitan && opponentId ? game.titanStreak?.[opponentId] ?? 0 : 0,
+    titanBreakArmed: youAreTitan ? !!game.titanBreakArmed?.[socketId] : false,
+    opponentTitanBreakArmed: opponentIsTitan && opponentId ? !!game.titanBreakArmed?.[opponentId] : false,
     overclockUntil: game.overclockUntil[socketId] ?? 0,
     opponentOverclockUntil: opponentId ? game.overclockUntil[opponentId] ?? 0 : 0,
     fortressUntil: game.fortressUntil[socketId] ?? 0,
     opponentFortressUntil: opponentId ? game.fortressUntil[opponentId] ?? 0 : 0,
-    fortressBlocksRemaining: game.fortressBlocksRemaining[socketId] ?? 0,
-    opponentFortressBlocksRemaining: opponentId ? game.fortressBlocksRemaining[opponentId] ?? 0 : 0,
+    fortressBlocksRemaining: game.aegisAbsorbedDamage?.[socketId] ?? 0,
+    opponentFortressBlocksRemaining: opponentId ? game.aegisAbsorbedDamage?.[opponentId] ?? 0 : 0,
     flashBonusRemaining: game.flashBonusRemaining[socketId] ?? 0,
     opponentFlashBonusRemaining: opponentId ? game.flashBonusRemaining[opponentId] ?? 0 : 0,
-    novaBonusRemaining: game.novaBonusRemaining[socketId] ?? 0,
-    opponentNovaBonusRemaining: opponentId ? game.novaBonusRemaining[opponentId] ?? 0 : 0,
-    infernoPending: !!game.infernoPending[socketId],
+    novaBonusRemaining: game.infernoBurnStacks?.[socketId] ?? 0,
+    opponentNovaBonusRemaining: opponentId ? game.infernoBurnStacks?.[opponentId] ?? 0 : 0,
+    infernoPending: isActiveUntil(game.infernoPendingUntil?.[socketId] ?? 0),
     infernoPendingUntil: game.infernoPendingUntil?.[socketId] ?? 0,
-    opponentInfernoPending: opponentId ? !!game.infernoPending[opponentId] : false,
+    opponentInfernoPending: opponentId ? isActiveUntil(game.infernoPendingUntil?.[opponentId] ?? 0) : false,
     opponentInfernoPendingUntil: opponentId ? game.infernoPendingUntil?.[opponentId] ?? 0 : 0
   };
 }
@@ -723,19 +831,7 @@ function clearHintState(game, socketId) {
   game.hintUntil[socketId] = 0;
 }
 
-function isProtectedByFortress(game, socketId) {
-  return (
-    isActiveUntil(game.fortressUntil[socketId]) &&
-    (game.fortressBlocksRemaining[socketId] ?? 0) > 0
-  );
-}
-
 function consumeIncomingProtection(game, socketId) {
-  if (isProtectedByFortress(game, socketId)) {
-    game.fortressBlocksRemaining[socketId] = Math.max(0, (game.fortressBlocksRemaining[socketId] ?? 0) - 1);
-    return "guardian_shield";
-  }
-
   if (game.shieldActive[socketId]) {
     game.shieldActive[socketId] = false;
     return "shield";
@@ -767,6 +863,192 @@ function buildPlayerPowerState(game, socketId) {
     hintUntil: game.hintUntil[socketId] ?? 0,
     ...buildPlayerUltimateState(game, socketId)
   };
+}
+
+function clearInfernoBurnForPlayer(game, socketId) {
+  game.infernoBurnUntil[socketId] = 0;
+  game.infernoBurnStacks[socketId] = 0;
+  game.novaBonusRemaining[socketId] = 0;
+}
+
+function clearArchitectSequenceForPlayer(game, casterSocketId) {
+  game.architectSequenceStreak[casterSocketId] = 0;
+  const opponent = getOpponent(game, casterSocketId);
+  if (opponent) {
+    game.architectMarks[opponent.socketId] = 0;
+  }
+}
+
+function clearTitanOverpowerForPlayer(game, socketId) {
+  game.titanStreak[socketId] = 0;
+  game.titanBreakArmed[socketId] = false;
+}
+
+function computeInfernoBurnTickDamage(stacks) {
+  const safeStacks = Math.max(0, Number(stacks) || 0);
+  if (safeStacks <= 0) {
+    return 0;
+  }
+  return Math.min(4, Math.max(1, Math.ceil(safeStacks / 2)));
+}
+
+function resolveIncomingDamage(
+  game,
+  attackerSocketId,
+  targetSocketId,
+  incomingDamage,
+  blockedType = "damage",
+  options = {}
+) {
+  let damage = Math.max(0, Number(incomingDamage) || 0);
+  let knockedOutTarget = false;
+  let knockedOutAttacker = false;
+  const bypassDefense = options?.bypassDefense === true;
+  const bypassProtection = options?.bypassProtection === true;
+
+  if (damage <= 0) {
+    return { damageApplied: 0, knockedOutTarget, knockedOutAttacker };
+  }
+
+  if (!game.hp) {
+    game.hp = buildHpMap(game.players);
+  }
+
+  const aegisActive = !bypassDefense && isActiveUntil(game.fortressUntil[targetSocketId]);
+  if (aegisActive) {
+    const reducedDamage = Math.max(1, Math.floor(damage * 0.35));
+    const absorbedDamage = Math.max(0, damage - reducedDamage);
+    const reflectDamage = Math.min(2, Math.max(1, Math.floor(absorbedDamage / 6)));
+
+    game.aegisAbsorbedDamage[targetSocketId] =
+      (game.aegisAbsorbedDamage[targetSocketId] ?? 0) + absorbedDamage;
+    game.fortressBlocksRemaining[targetSocketId] = game.aegisAbsorbedDamage[targetSocketId];
+    damage = reducedDamage;
+
+    if (reflectDamage > 0) {
+      const nextAttackerHp = Math.max(0, (game.hp[attackerSocketId] ?? MAX_HP) - reflectDamage);
+      game.hp[attackerSocketId] = nextAttackerHp;
+      knockedOutAttacker = nextAttackerHp <= 0;
+
+      io.to(attackerSocketId).emit("shieldBlocked", {
+        by: "opponent",
+        target: "you",
+        blockedType: "aegis_reflect",
+        reflectDamage,
+        ...buildPlayerPowerState(game, attackerSocketId)
+      });
+
+      io.to(targetSocketId).emit("shieldBlocked", {
+        by: "you",
+        target: "opponent",
+        blockedType: "aegis_reflect",
+        reflectDamage,
+        ...buildPlayerPowerState(game, targetSocketId)
+      });
+    }
+  }
+
+  const blockedByProtection = bypassProtection ? null : consumeIncomingProtection(game, targetSocketId);
+  if (blockedByProtection) {
+    io.to(attackerSocketId).emit("shieldBlocked", {
+      by: "you",
+      target: "opponent",
+      blockedType,
+      ...buildPlayerPowerState(game, attackerSocketId)
+    });
+
+    io.to(targetSocketId).emit("shieldBlocked", {
+      by: "opponent",
+      target: "you",
+      blockedType,
+      ...buildPlayerPowerState(game, targetSocketId)
+    });
+
+    return { damageApplied: 0, knockedOutTarget, knockedOutAttacker };
+  }
+
+  const nextTargetHp = Math.max(0, (game.hp[targetSocketId] ?? MAX_HP) - damage);
+  game.hp[targetSocketId] = nextTargetHp;
+  knockedOutTarget = nextTargetHp <= 0;
+
+  return { damageApplied: damage, knockedOutTarget, knockedOutAttacker };
+}
+
+function ensureInfernoBurnLoop(roomId, casterSocketId) {
+  const game = activeGames.get(roomId);
+  if (!game || game.infernoBurnInterval[casterSocketId]) {
+    return;
+  }
+
+  game.infernoBurnInterval[casterSocketId] = setInterval(() => {
+    const activeGame = activeGames.get(roomId);
+    if (!activeGame || activeGame.phase !== "playing") {
+      return;
+    }
+
+    if (!isActiveUntil(activeGame.infernoPendingUntil[casterSocketId])) {
+      clearInterval(activeGame.infernoBurnInterval[casterSocketId]);
+      activeGame.infernoBurnInterval[casterSocketId] = null;
+      return;
+    }
+
+    const burnUntil = activeGame.infernoBurnUntil[casterSocketId] ?? 0;
+    const stacks = activeGame.infernoBurnStacks[casterSocketId] ?? 0;
+    if (!isActiveUntil(burnUntil) || stacks <= 0) {
+      return;
+    }
+
+    const opponent = getOpponent(activeGame, casterSocketId);
+    if (!opponent || activeGame.eliminated[casterSocketId] || activeGame.eliminated[opponent.socketId]) {
+      return;
+    }
+
+    const tickDamage = computeInfernoBurnTickDamage(stacks);
+    const result = resolveIncomingDamage(activeGame, casterSocketId, opponent.socketId, tickDamage, "burn");
+    if (result.damageApplied > 0) {
+      io.to(casterSocketId).emit("burnTick", {
+        by: "you",
+        target: "opponent",
+        damage: result.damageApplied,
+        burnStacks: stacks,
+        hp: {
+          you: activeGame.hp?.[casterSocketId] ?? MAX_HP,
+          opponent: activeGame.hp?.[opponent.socketId] ?? MAX_HP
+        },
+        ...buildPlayerPowerState(activeGame, casterSocketId),
+        ...buildPlayerUltimateState(activeGame, casterSocketId)
+      });
+      io.to(opponent.socketId).emit("burnTick", {
+        by: "opponent",
+        target: "you",
+        damage: result.damageApplied,
+        burnStacks: stacks,
+        hp: {
+          you: activeGame.hp?.[opponent.socketId] ?? MAX_HP,
+          opponent: activeGame.hp?.[casterSocketId] ?? MAX_HP
+        },
+        ...buildPlayerPowerState(activeGame, opponent.socketId),
+        ...buildPlayerUltimateState(activeGame, opponent.socketId)
+      });
+    }
+
+    if (result.knockedOutAttacker && opponent) {
+      void finishGame(roomId, {
+        forceWinnerSocketId: opponent.socketId,
+        endCondition: "ko",
+        reason: `${opponent.name ?? "Guardian"} holds the line and wins by reflection.`
+      });
+      return;
+    }
+
+    if (result.knockedOutTarget && opponent) {
+      void finishGame(roomId, {
+        forceWinnerSocketId: casterSocketId,
+        endCondition: "ko",
+        reason: `${activeGame.players.find((p) => p.socketId === casterSocketId)?.name ?? "Inferno"} burns through for the KO.`
+      });
+    }
+  }, INFERNO_BURN_TICK_MS);
 }
 
 function emitLiveLeaderboard(roomId) {
@@ -871,13 +1153,29 @@ function resetGameState(game) {
   game.overclockUntil = buildOverclockUntilMap(game.players);
   game.fortressUntil = buildFortressUntilMap(game.players);
   game.fortressBlocksRemaining = buildFortressBlocksMap(game.players);
+  game.aegisAbsorbedDamage = buildAegisAbsorbedMap(game.players);
   game.flashBonusRemaining = buildFlashBonusRemainingMap(game.players);
   game.novaBonusRemaining = buildNovaBonusRemainingMap(game.players);
   game.infernoPending = buildInfernoPendingMap(game.players);
   game.infernoPendingUntil = buildInfernoPendingUntilMap(game.players);
+  game.infernoBurnUntil = buildInfernoBurnUntilMap(game.players);
+  game.infernoBurnStacks = buildInfernoBurnStacksMap(game.players);
+  game.shadowCorruptUntil = buildShadowCorruptUntilMap(game.players);
+  game.shadowCorruptStacks = buildShadowCorruptStacksMap(game.players);
+  game.architectUntil = buildArchitectUntilMap(game.players);
+  game.architectSequenceStreak = buildArchitectSequenceStreakMap(game.players);
+  game.architectMarks = buildArchitectMarksMap(game.players);
+  game.titanOverpowerUntil = buildTitanOverpowerUntilMap(game.players);
+  game.titanStreak = buildTitanStreakMap(game.players);
+  game.titanBreakArmed = buildTitanBreakArmedMap(game.players);
   game.titanTimeout = buildUltimateEffectTimeoutMap(game.players);
   game.blackoutTimeout = buildUltimateEffectTimeoutMap(game.players);
+  game.fortressTimeout = buildUltimateEffectTimeoutMap(game.players);
   game.infernoTimeout = buildInfernoTimeoutMap(game.players);
+  game.infernoBurnInterval = buildInfernoBurnIntervalMap(game.players);
+  game.shadowCorruptTimeout = buildUltimateEffectTimeoutMap(game.players);
+  game.architectTimeout = buildUltimateEffectTimeoutMap(game.players);
+  game.titanOverpowerTimeout = buildUltimateEffectTimeoutMap(game.players);
   game.powerUpInventory = buildPowerUpInventoryMap(game.players);
   game.powerUpUsedList = buildPowerUpUsedListMap(game.players);
   game.freezeUntil = buildFreezeMap(game.players);
@@ -967,6 +1265,13 @@ function startMatchTimer(roomId) {
     for (const player of activeGame.players) {
       if (!activeGame.eliminated[player.socketId]) {
         increaseUltimateCharge(activeGame, player.socketId, ULTIMATE_TIME_CHARGE_PER_SECOND);
+      }
+
+      if (
+        !isActiveUntil(activeGame.overclockUntil[player.socketId]) &&
+        (activeGame.flashBonusRemaining[player.socketId] ?? 0) > 0
+      ) {
+        activeGame.flashBonusRemaining[player.socketId] = 0;
       }
 
       io.to(player.socketId).emit("timerUpdate", {
@@ -1208,19 +1513,43 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     typeof questionState.questionSentAt === "number" &&
     Date.now() - questionState.questionSentAt <= FAST_ANSWER_MS;
   let awardedPoints = pointsAwarded;
-
-  if (game.infernoPending[playerSocketId]) {
-    const infernoMeta = getUltimateMeta("double");
-    const infernoMin = typeof infernoMeta.minimumPoints === "number" ? infernoMeta.minimumPoints : 2;
-    awardedPoints = Math.max(awardedPoints, infernoMin);
-    game.infernoPending[playerSocketId] = false;
-    game.infernoPendingUntil[playerSocketId] = 0;
-    clearTimeout(game.infernoTimeout[playerSocketId]);
-    game.infernoTimeout[playerSocketId] = null;
-  }
+  let overclockCombo = 0;
+  let overclockBonusDamage = 0;
+  let perfectStrikeDamage = 0;
+  let perfectStrikeMarksConsumed = 0;
+  let titanBonusDamage = 0;
+  let titanBreakDamage = 0;
+  let titanBreakTriggered = false;
 
   if (isActiveUntil(game.overclockUntil[playerSocketId])) {
-    awardedPoints += 1;
+    overclockCombo = (game.flashBonusRemaining[playerSocketId] ?? 0) + 1;
+    game.flashBonusRemaining[playerSocketId] = overclockCombo;
+    overclockBonusDamage = overclockCombo;
+  } else if ((game.flashBonusRemaining[playerSocketId] ?? 0) > 0) {
+    game.flashBonusRemaining[playerSocketId] = 0;
+  }
+
+  if (isActiveUntil(game.infernoPendingUntil[playerSocketId])) {
+    const nextStacks = Math.min(8, (game.infernoBurnStacks[playerSocketId] ?? 0) + 1);
+    game.infernoPending[playerSocketId] = true;
+    game.infernoBurnStacks[playerSocketId] = nextStacks;
+    game.novaBonusRemaining[playerSocketId] = nextStacks;
+    game.infernoBurnUntil[playerSocketId] = Date.now() + INFERNO_BURN_REFRESH_MS;
+    ensureInfernoBurnLoop(roomId, playerSocketId);
+  }
+
+  // Titan: Overpower (simple premium heavy-hitter).
+  // - While active: every correct answer gains heavy bonus damage.
+  // - After 2 consecutive correct answers: arm Break Hit on next successful hit.
+  // - Break Hit bypasses defensive mitigation/protection (clean armor-penetration behavior).
+  const titanActive = isActiveUntil(game.titanOverpowerUntil?.[playerSocketId] ?? 0);
+  if (titanActive) {
+    titanBonusDamage = TITAN_BONUS_DAMAGE_PER_CORRECT;
+    const nextStreak = Math.min(3, (game.titanStreak?.[playerSocketId] ?? 0) + 1);
+    game.titanStreak[playerSocketId] = nextStreak;
+    if (nextStreak >= 2) {
+      game.titanBreakArmed[playerSocketId] = true;
+    }
   }
 
   game.scores[playerSocketId] = (game.scores[playerSocketId] ?? 0) + awardedPoints;
@@ -1230,34 +1559,141 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
 
   // Apply HP damage to opponent (server authoritative KO condition).
   const opponent = getOpponent(game, playerSocketId);
-  const damage = opponent ? calcDamage(awardedPoints, fastAnswer, game.streaks[playerSocketId] ?? 0) : 0;
+  const baseDamage = opponent ? calcDamage(awardedPoints, fastAnswer, game.streaks[playerSocketId] ?? 0) : 0;
+  let damage = opponent ? baseDamage + overclockBonusDamage : 0;
   let knockedOutOpponent = false;
+  let knockedOutAttacker = false;
   if (opponent) {
     if (!game.hp) {
       game.hp = buildHpMap(game.players);
     }
-    // Guardian fortress shield can block incoming damage hits.
-    const blockedByProtection = damage > 0 ? consumeIncomingProtection(game, opponent.socketId) : null;
-    const damageBlocked = Boolean(blockedByProtection);
 
-    if (damageBlocked) {
-      io.to(playerSocketId).emit("shieldBlocked", {
+    // Apply Titan bonus (simple, additive).
+    damage += titanBonusDamage;
+
+    const result = resolveIncomingDamage(game, playerSocketId, opponent.socketId, damage, "damage");
+    knockedOutAttacker = result.knockedOutAttacker;
+    knockedOutOpponent = result.knockedOutTarget;
+  }
+
+  // Architect: Perfect Sequence (premium, skill-based burst).
+  // Marks are applied to the opponent; strike triggers only on a 3-correct sequence during the active window.
+  if (opponent && isActiveUntil(game.architectUntil?.[playerSocketId] ?? 0)) {
+    const nextMarks = Math.min(ARCHITECT_MAX_MARKS, (game.architectMarks?.[opponent.socketId] ?? 0) + 1);
+    game.architectMarks[opponent.socketId] = nextMarks;
+    const nextStreak = Math.min(3, (game.architectSequenceStreak?.[playerSocketId] ?? 0) + 1);
+    game.architectSequenceStreak[playerSocketId] = nextStreak;
+
+    if (nextStreak >= 3) {
+      perfectStrikeMarksConsumed = Math.max(0, game.architectMarks?.[opponent.socketId] ?? 0);
+      perfectStrikeDamage = Math.max(0, perfectStrikeMarksConsumed * ARCHITECT_DAMAGE_PER_MARK);
+      // Consume marks + reset streak (ultimate can continue if time remains).
+      game.architectMarks[opponent.socketId] = 0;
+      game.architectSequenceStreak[playerSocketId] = 0;
+
+      if (perfectStrikeDamage > 0) {
+        const strikeResult = resolveIncomingDamage(
+          game,
+          playerSocketId,
+          opponent.socketId,
+          perfectStrikeDamage,
+          "perfect_strike"
+        );
+
+        // Notify both clients for the premium payoff moment.
+        emitUltimateApplied(
+          game,
+          roomId,
+          playerSocketId,
+          opponent.socketId,
+          {
+            by: "you",
+            target: "opponent",
+            type: "perfect_sequence",
+            effect: "perfect_strike",
+            damage: strikeResult.damageApplied,
+            marksConsumed: perfectStrikeMarksConsumed,
+            hp: {
+              you: game.hp?.[playerSocketId] ?? MAX_HP,
+              opponent: game.hp?.[opponent.socketId] ?? MAX_HP
+            }
+          },
+          {
+            by: "opponent",
+            target: "you",
+            type: "perfect_sequence",
+            effect: "perfect_strike",
+            damage: strikeResult.damageApplied,
+            marksConsumed: perfectStrikeMarksConsumed,
+            hp: {
+              you: game.hp?.[opponent.socketId] ?? MAX_HP,
+              opponent: game.hp?.[playerSocketId] ?? MAX_HP
+            }
+          }
+        );
+
+        if (strikeResult.knockedOutAttacker) {
+          knockedOutAttacker = true;
+        }
+        if (strikeResult.knockedOutTarget) {
+          knockedOutOpponent = true;
+        }
+      }
+    }
+  }
+
+  // Titan: Break Hit on a successful hit while armed.
+  if (opponent && titanActive && game.titanBreakArmed?.[playerSocketId]) {
+    // Consume the armed state immediately so it can't double-trigger.
+    game.titanBreakArmed[playerSocketId] = false;
+    game.titanStreak[playerSocketId] = 0;
+
+    titanBreakTriggered = true;
+    titanBreakDamage = Math.max(0, TITAN_BREAK_HIT_BONUS_DAMAGE);
+
+    const strikeResult = resolveIncomingDamage(
+      game,
+      playerSocketId,
+      opponent.socketId,
+      titanBreakDamage,
+      "break_hit",
+      { bypassDefense: true, bypassProtection: true }
+    );
+
+    emitUltimateApplied(
+      game,
+      roomId,
+      playerSocketId,
+      opponent.socketId,
+      {
         by: "you",
         target: "opponent",
-        blockedType: "damage",
-        ...buildPlayerPowerState(game, playerSocketId)
-      });
-
-      io.to(opponent.socketId).emit("shieldBlocked", {
+        type: "overpower",
+        effect: "break_hit",
+        damage: strikeResult.damageApplied,
+        hp: {
+          you: game.hp?.[playerSocketId] ?? MAX_HP,
+          opponent: game.hp?.[opponent.socketId] ?? MAX_HP
+        }
+      },
+      {
         by: "opponent",
         target: "you",
-        blockedType: "damage",
-        ...buildPlayerPowerState(game, opponent.socketId)
-      });
-    } else {
-      const nextOpponentHp = Math.max(0, (game.hp[opponent.socketId] ?? MAX_HP) - damage);
-      game.hp[opponent.socketId] = nextOpponentHp;
-      knockedOutOpponent = nextOpponentHp <= 0;
+        type: "overpower",
+        effect: "break_hit",
+        damage: strikeResult.damageApplied,
+        hp: {
+          you: game.hp?.[opponent.socketId] ?? MAX_HP,
+          opponent: game.hp?.[playerSocketId] ?? MAX_HP
+        }
+      }
+    );
+
+    if (strikeResult.knockedOutAttacker) {
+      knockedOutAttacker = true;
+    }
+    if (strikeResult.knockedOutTarget) {
+      knockedOutOpponent = true;
     }
   }
 
@@ -1289,11 +1725,14 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     fastAnswer: scorerSocketId === playerOneSocketId ? fastAnswer : false,
     opponentFastAnswer: scorerSocketId === playerTwoSocketId ? fastAnswer : false,
     pointsAwarded: scorerSocketId === playerOneSocketId ? awardedPoints : 0,
+    overclockCombo: scorerSocketId === playerOneSocketId ? overclockCombo : 0,
+    overclockBonusDamage: scorerSocketId === playerOneSocketId ? overclockBonusDamage : 0,
     strikes: game.strikes[playerOneSocketId] ?? 0,
     opponentStrikes: game.strikes[playerTwoSocketId] ?? 0,
     youEliminated: !!game.eliminated[playerOneSocketId],
     opponentEliminated: !!game.eliminated[playerTwoSocketId],
-    ...buildPlayerPowerState(game, playerOneSocketId)
+    ...buildPlayerPowerState(game, playerOneSocketId),
+    ...buildPlayerUltimateState(game, playerOneSocketId)
   });
 
   io.to(playerTwoSocketId).emit("pointScored", {
@@ -1310,16 +1749,28 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     fastAnswer: scorerSocketId === playerTwoSocketId ? fastAnswer : false,
     opponentFastAnswer: scorerSocketId === playerOneSocketId ? fastAnswer : false,
     pointsAwarded: scorerSocketId === playerTwoSocketId ? awardedPoints : 0,
+    overclockCombo: scorerSocketId === playerTwoSocketId ? overclockCombo : 0,
+    overclockBonusDamage: scorerSocketId === playerTwoSocketId ? overclockBonusDamage : 0,
     strikes: game.strikes[playerTwoSocketId] ?? 0,
     opponentStrikes: game.strikes[playerOneSocketId] ?? 0,
     youEliminated: !!game.eliminated[playerTwoSocketId],
     opponentEliminated: !!game.eliminated[playerOneSocketId],
-    ...buildPlayerPowerState(game, playerTwoSocketId)
+    ...buildPlayerPowerState(game, playerTwoSocketId),
+    ...buildPlayerUltimateState(game, playerTwoSocketId)
   });
 
   // Broadcast the current completion state (youAnswered / opponentAnswered).
   emitQuestionState(roomId);
   emitLiveLeaderboard(roomId);
+
+  if (knockedOutAttacker && opponent) {
+    void finishGame(roomId, {
+      forceWinnerSocketId: opponent.socketId,
+      endCondition: "ko",
+      reason: `${opponent.name ?? "Guardian"} holds the line and wins by reflection.`
+    });
+    return;
+  }
 
   if (knockedOutOpponent && opponent) {
     void finishGame(roomId, {
@@ -1370,6 +1821,32 @@ function handleIncorrectAnswer(roomId, playerSocketId) {
     return;
   }
 
+  if (isActiveUntil(game.overclockUntil[playerSocketId])) {
+    game.flashBonusRemaining[playerSocketId] = 0;
+  }
+
+  if (isActiveUntil(game.infernoPendingUntil[playerSocketId])) {
+    clearInfernoBurnForPlayer(game, playerSocketId);
+  }
+
+  if (isActiveUntil(game.shadowCorruptUntil?.[playerSocketId] ?? 0)) {
+    const nextStacks = Math.min(
+      SHADOW_CORRUPT_MAX_STACKS,
+      Math.max(0, (game.shadowCorruptStacks?.[playerSocketId] ?? 0) + 1)
+    );
+    game.shadowCorruptStacks[playerSocketId] = nextStacks;
+  }
+
+  // Architect: wrong answer during Perfect Sequence resets streak + clears marks.
+  if (isActiveUntil(game.architectUntil?.[playerSocketId] ?? 0)) {
+    clearArchitectSequenceForPlayer(game, playerSocketId);
+  }
+
+  // Titan: wrong answer during Overpower resets the chain and Break Hit progress.
+  if (isActiveUntil(game.titanOverpowerUntil?.[playerSocketId] ?? 0)) {
+    clearTitanOverpowerForPlayer(game, playerSocketId);
+  }
+
   game.strikes[playerSocketId] = (game.strikes[playerSocketId] ?? 0) + 1;
   game.streaks[playerSocketId] = 0;
 
@@ -1388,13 +1865,15 @@ function handleIncorrectAnswer(roomId, playerSocketId) {
 
   io.to(playerSocketId).emit("incorrectAnswer", {
     strikes: game.strikes[playerSocketId] ?? 0,
-    eliminated: isEliminated
+    eliminated: isEliminated,
+    ...buildPlayerUltimateState(game, playerSocketId)
   });
 
   if (opponent) {
     io.to(opponent.socketId).emit("opponentStrike", {
       opponentStrikes: game.strikes[playerSocketId] ?? 0,
-      opponentEliminated: isEliminated
+      opponentEliminated: isEliminated,
+      ...buildPlayerUltimateState(game, opponent.socketId)
     });
   }
 
@@ -1607,13 +2086,29 @@ function createActiveGame(players, topic, difficulty, customRoomCode = null) {
     overclockUntil: buildOverclockUntilMap(players),
     fortressUntil: buildFortressUntilMap(players),
     fortressBlocksRemaining: buildFortressBlocksMap(players),
+    aegisAbsorbedDamage: buildAegisAbsorbedMap(players),
     flashBonusRemaining: buildFlashBonusRemainingMap(players),
     novaBonusRemaining: buildNovaBonusRemainingMap(players),
     infernoPending: buildInfernoPendingMap(players),
     infernoPendingUntil: buildInfernoPendingUntilMap(players),
+    infernoBurnUntil: buildInfernoBurnUntilMap(players),
+    infernoBurnStacks: buildInfernoBurnStacksMap(players),
+    shadowCorruptUntil: buildShadowCorruptUntilMap(players),
+    shadowCorruptStacks: buildShadowCorruptStacksMap(players),
+    architectUntil: buildArchitectUntilMap(players),
+    architectSequenceStreak: buildArchitectSequenceStreakMap(players),
+    architectMarks: buildArchitectMarksMap(players),
+    titanOverpowerUntil: buildTitanOverpowerUntilMap(players),
+    titanStreak: buildTitanStreakMap(players),
+    titanBreakArmed: buildTitanBreakArmedMap(players),
     titanTimeout: buildUltimateEffectTimeoutMap(players),
     blackoutTimeout: buildUltimateEffectTimeoutMap(players),
+    fortressTimeout: buildUltimateEffectTimeoutMap(players),
     infernoTimeout: buildInfernoTimeoutMap(players),
+    infernoBurnInterval: buildInfernoBurnIntervalMap(players),
+    shadowCorruptTimeout: buildUltimateEffectTimeoutMap(players),
+    architectTimeout: buildUltimateEffectTimeoutMap(players),
+    titanOverpowerTimeout: buildUltimateEffectTimeoutMap(players),
     powerUpInventory: buildPowerUpInventoryMap(players),
     powerUpUsedList: buildPowerUpUsedListMap(players),
     freezeUntil: buildFreezeMap(players),
@@ -2145,7 +2640,6 @@ function useAvatarUltimate(roomId, playerSocketId) {
 
   const ultimateType = getUltimateTypeForPlayer(game, playerSocketId);
   const now = Date.now();
-  const ultimateMeta = getUltimateMeta(ultimateType);
 
   game.ultimateUsed[playerSocketId] = true;
   game.ultimateReady[playerSocketId] = false;
@@ -2154,6 +2648,7 @@ function useAvatarUltimate(roomId, playerSocketId) {
   if (ultimateType === "rapid_fire") {
     const durationMs = getUltimateDurationMs(ultimateType);
     game.overclockUntil[playerSocketId] = now + durationMs;
+    game.flashBonusRemaining[playerSocketId] = 0;
     emitUltimateApplied(
       game,
       roomId,
@@ -2163,21 +2658,21 @@ function useAvatarUltimate(roomId, playerSocketId) {
         by: "you",
         target: "you",
         type: ultimateType,
-        effect: "rapid_fire_active",
+        effect: "overclock_active",
         durationMs
       },
       {
         by: "opponent",
         target: "opponent",
         type: ultimateType,
-        effect: "rapid_fire_active",
+        effect: "overclock_active",
         durationMs
       }
     );
     return;
   }
 
-  if (ultimateType === "jam") {
+  if (ultimateType === "system_corrupt") {
     const durationMs = getUltimateDurationMs(ultimateType);
 
     const blockedByProtection = consumeIncomingProtection(game, opponent.socketId);
@@ -2193,21 +2688,112 @@ function useAvatarUltimate(roomId, playerSocketId) {
       return;
     }
 
-    clearTimeout(game.blackoutTimeout[opponent.socketId]);
-    game.blackoutUntil[opponent.socketId] = now + durationMs;
-    game.blackoutTimeout[opponent.socketId] = setTimeout(() => {
+    clearTimeout(game.shadowCorruptTimeout[opponent.socketId]);
+    game.shadowCorruptStacks[opponent.socketId] = 0;
+    game.shadowCorruptUntil[opponent.socketId] = now + durationMs;
+    game.shadowCorruptTimeout[opponent.socketId] = setTimeout(() => {
       const activeGame = activeGames.get(roomId);
       if (!activeGame) {
         return;
       }
-      activeGame.blackoutUntil[opponent.socketId] = 0;
-      activeGame.blackoutTimeout[opponent.socketId] = null;
+
+      const activeOpponent = getOpponent(activeGame, playerSocketId);
+      const targetSocketId = activeOpponent?.socketId ?? opponent.socketId;
+      const stacks = Math.max(0, activeGame.shadowCorruptStacks?.[targetSocketId] ?? 0);
+      const detonationDamage = Math.max(0, stacks * SHADOW_CORRUPT_DAMAGE_PER_STACK);
+
+      activeGame.shadowCorruptUntil[targetSocketId] = 0;
+      activeGame.shadowCorruptStacks[targetSocketId] = 0;
+      activeGame.shadowCorruptTimeout[targetSocketId] = null;
+
+      let result = { damageApplied: 0, knockedOutTarget: false, knockedOutAttacker: false };
+      if (activeOpponent && detonationDamage > 0 && !activeGame.eliminated[targetSocketId]) {
+        result = resolveIncomingDamage(activeGame, playerSocketId, targetSocketId, detonationDamage, "corruption");
+      }
+
       emitUltimateEnded(
         activeGame,
         playerSocketId,
-        opponent.socketId,
-        { by: "you", target: "opponent", type: "jam", effect: "jam_ended" },
-        { by: "opponent", target: "you", type: "jam", effect: "jam_ended" }
+        targetSocketId,
+        {
+          by: "you",
+          target: "opponent",
+          type: "system_corrupt",
+          effect: "system_corrupt_ended",
+          damage: result.damageApplied,
+          corruptionStacks: stacks,
+          hp: {
+            you: activeGame.hp?.[playerSocketId] ?? MAX_HP,
+            opponent: activeGame.hp?.[targetSocketId] ?? MAX_HP
+          }
+        },
+        {
+          by: "opponent",
+          target: "you",
+          type: "system_corrupt",
+          effect: "system_corrupt_ended",
+          damage: result.damageApplied,
+          corruptionStacks: stacks,
+          hp: {
+            you: activeGame.hp?.[targetSocketId] ?? MAX_HP,
+            opponent: activeGame.hp?.[playerSocketId] ?? MAX_HP
+          }
+        }
+      );
+
+      if (result.knockedOutAttacker && activeOpponent) {
+        void finishGame(roomId, {
+          forceWinnerSocketId: targetSocketId,
+          endCondition: "ko",
+          reason: `${activeOpponent.name ?? "Opponent"} survives the corruption and wins by reflection.`
+        });
+        return;
+      }
+
+      if (result.knockedOutTarget && activeOpponent) {
+        void finishGame(roomId, {
+          forceWinnerSocketId: playerSocketId,
+          endCondition: "ko",
+          reason: `${activeGame.players.find((p) => p.socketId === playerSocketId)?.name ?? "Shadow"} detonates corruption for the KO.`
+        });
+      }
+    }, durationMs);
+
+    emitUltimateApplied(
+      game,
+      roomId,
+      playerSocketId,
+      opponent.socketId,
+      { by: "you", target: "opponent", type: ultimateType, effect: "system_corrupt_active", durationMs },
+      { by: "opponent", target: "you", type: ultimateType, effect: "system_corrupt_active", durationMs }
+    );
+    return;
+  }
+
+  if (ultimateType === "perfect_sequence") {
+    const durationMs = getUltimateDurationMs(ultimateType);
+    game.architectUntil[playerSocketId] = now + durationMs;
+    game.architectSequenceStreak[playerSocketId] = 0;
+    game.architectMarks[opponent.socketId] = 0;
+
+    clearTimeout(game.architectTimeout[playerSocketId]);
+    game.architectTimeout[playerSocketId] = setTimeout(() => {
+      const activeGame = activeGames.get(roomId);
+      if (!activeGame) return;
+      const activeOpponent = getOpponent(activeGame, playerSocketId);
+      // Clear sequence state even if opponent left / got eliminated.
+      activeGame.architectUntil[playerSocketId] = 0;
+      activeGame.architectSequenceStreak[playerSocketId] = 0;
+      if (activeOpponent) {
+        activeGame.architectMarks[activeOpponent.socketId] = 0;
+      }
+      activeGame.architectTimeout[playerSocketId] = null;
+      emitUltimateEnded(
+        activeGame,
+        playerSocketId,
+        activeOpponent?.socketId ?? opponent.socketId,
+        { by: "you", target: "you", type: "perfect_sequence", effect: "perfect_sequence_ended" },
+        { by: "opponent", target: "opponent", type: "perfect_sequence", effect: "perfect_sequence_ended" }
       );
     }, durationMs);
 
@@ -2216,54 +2802,165 @@ function useAvatarUltimate(roomId, playerSocketId) {
       roomId,
       playerSocketId,
       opponent.socketId,
-      { by: "you", target: "opponent", type: ultimateType, effect: "jam_active", durationMs },
-      { by: "opponent", target: "you", type: ultimateType, effect: "jam_active", durationMs }
+      { by: "you", target: "you", type: ultimateType, effect: "perfect_sequence_active", durationMs },
+      { by: "opponent", target: "opponent", type: ultimateType, effect: "perfect_sequence_active", durationMs }
+    );
+    return;
+  }
+
+  if (ultimateType === "overpower") {
+    const durationMs = getUltimateDurationMs(ultimateType);
+    game.titanOverpowerUntil[playerSocketId] = now + durationMs;
+    clearTitanOverpowerForPlayer(game, playerSocketId);
+
+    clearTimeout(game.titanOverpowerTimeout[playerSocketId]);
+    game.titanOverpowerTimeout[playerSocketId] = setTimeout(() => {
+      const activeGame = activeGames.get(roomId);
+      if (!activeGame) return;
+      activeGame.titanOverpowerUntil[playerSocketId] = 0;
+      clearTitanOverpowerForPlayer(activeGame, playerSocketId);
+      activeGame.titanOverpowerTimeout[playerSocketId] = null;
+
+      const activeOpponent = getOpponent(activeGame, playerSocketId);
+      emitUltimateEnded(
+        activeGame,
+        playerSocketId,
+        activeOpponent?.socketId ?? opponent.socketId,
+        { by: "you", target: "you", type: "overpower", effect: "overpower_ended" },
+        { by: "opponent", target: "opponent", type: "overpower", effect: "overpower_ended" }
+      );
+    }, durationMs);
+
+    emitUltimateApplied(
+      game,
+      roomId,
+      playerSocketId,
+      opponent.socketId,
+      { by: "you", target: "you", type: ultimateType, effect: "overpower_active", durationMs },
+      { by: "opponent", target: "opponent", type: ultimateType, effect: "overpower_active", durationMs }
     );
     return;
   }
 
   if (ultimateType === "double") {
+    const durationMs = getUltimateDurationMs(ultimateType);
     game.infernoPending[playerSocketId] = true;
-    game.infernoPendingUntil[playerSocketId] = now + INFERNO_ARMED_DURATION_MS;
+    game.infernoPendingUntil[playerSocketId] = now + durationMs;
+    clearInfernoBurnForPlayer(game, playerSocketId);
     clearTimeout(game.infernoTimeout[playerSocketId]);
+    if (game.infernoBurnInterval[playerSocketId]) {
+      clearInterval(game.infernoBurnInterval[playerSocketId]);
+      game.infernoBurnInterval[playerSocketId] = null;
+    }
     game.infernoTimeout[playerSocketId] = setTimeout(() => {
       const activeGame = activeGames.get(roomId);
       if (!activeGame) return;
       if (!activeGame.infernoPending[playerSocketId]) return;
       activeGame.infernoPending[playerSocketId] = false;
       activeGame.infernoPendingUntil[playerSocketId] = 0;
+      clearInfernoBurnForPlayer(activeGame, playerSocketId);
       activeGame.infernoTimeout[playerSocketId] = null;
+      if (activeGame.infernoBurnInterval[playerSocketId]) {
+        clearInterval(activeGame.infernoBurnInterval[playerSocketId]);
+        activeGame.infernoBurnInterval[playerSocketId] = null;
+      }
       emitUltimateEnded(
         activeGame,
         playerSocketId,
         opponent.socketId,
-        { by: "you", target: "you", type: "double", effect: "inferno_armed_expired" },
-        { by: "opponent", target: "opponent", type: "double", effect: "inferno_armed_expired" }
+        { by: "you", target: "you", type: "double", effect: "blaze_surge_ended" },
+        { by: "opponent", target: "opponent", type: "double", effect: "blaze_surge_ended" }
       );
-    }, INFERNO_ARMED_DURATION_MS);
+    }, durationMs);
     emitUltimateApplied(
       game,
       roomId,
       playerSocketId,
       opponent.socketId,
-      { by: "you", target: "you", type: ultimateType, effect: "next_correct_plus_two" },
-      { by: "opponent", target: "opponent", type: ultimateType, effect: "next_correct_plus_two" }
+      { by: "you", target: "you", type: ultimateType, effect: "blaze_surge_active", durationMs },
+      { by: "opponent", target: "opponent", type: ultimateType, effect: "blaze_surge_active", durationMs }
     );
     return;
   }
 
   if (ultimateType === "shield") {
     const durationMs = getUltimateDurationMs(ultimateType);
-    const blocks = ultimateMeta.blocks ?? 1;
     game.fortressUntil[playerSocketId] = now + durationMs;
-    game.fortressBlocksRemaining[playerSocketId] = blocks;
+    game.aegisAbsorbedDamage[playerSocketId] = 0;
+    game.fortressBlocksRemaining[playerSocketId] = 0;
+    clearTimeout(game.fortressTimeout[playerSocketId]);
+    game.fortressTimeout[playerSocketId] = setTimeout(() => {
+      const activeGame = activeGames.get(roomId);
+      if (!activeGame) {
+        return;
+      }
+
+      const activeOpponent = getOpponent(activeGame, playerSocketId);
+      const absorbedDamage = Math.max(0, activeGame.aegisAbsorbedDamage[playerSocketId] ?? 0);
+      const shockwaveDamage = absorbedDamage > 0 ? Math.min(5, 1 + Math.floor(absorbedDamage / 8)) : 0;
+
+      activeGame.fortressUntil[playerSocketId] = 0;
+      activeGame.fortressBlocksRemaining[playerSocketId] = 0;
+      activeGame.aegisAbsorbedDamage[playerSocketId] = 0;
+      activeGame.fortressTimeout[playerSocketId] = null;
+
+      let knockedOutOpponent = false;
+      if (
+        activeOpponent &&
+        !activeGame.eliminated[activeOpponent.socketId] &&
+        shockwaveDamage > 0
+      ) {
+        const blockedByProtection = consumeIncomingProtection(activeGame, activeOpponent.socketId);
+        if (blockedByProtection) {
+          io.to(playerSocketId).emit("shieldBlocked", {
+            by: "you",
+            target: "opponent",
+            blockedType: "aegis_shockwave",
+            ...buildPlayerPowerState(activeGame, playerSocketId)
+          });
+          io.to(activeOpponent.socketId).emit("shieldBlocked", {
+            by: "opponent",
+            target: "you",
+            blockedType: "aegis_shockwave",
+            ...buildPlayerPowerState(activeGame, activeOpponent.socketId)
+          });
+        } else {
+          const nextHp = Math.max(0, (activeGame.hp?.[activeOpponent.socketId] ?? MAX_HP) - shockwaveDamage);
+          activeGame.hp[activeOpponent.socketId] = nextHp;
+          knockedOutOpponent = nextHp <= 0;
+        }
+      }
+
+      emitUltimateEnded(
+        activeGame,
+        playerSocketId,
+        activeOpponent?.socketId ?? playerSocketId,
+        { by: "you", target: "you", type: "shield", effect: "aegis_domain_ended", shockwaveDamage },
+        {
+          by: "opponent",
+          target: "opponent",
+          type: "shield",
+          effect: "aegis_domain_ended",
+          shockwaveDamage
+        }
+      );
+
+      if (knockedOutOpponent && activeOpponent) {
+        void finishGame(roomId, {
+          forceWinnerSocketId: playerSocketId,
+          endCondition: "ko",
+          reason: `${activeGame.players.find((p) => p.socketId === playerSocketId)?.name ?? "Guardian"} detonates Aegis Domain for the KO.`
+        });
+      }
+    }, durationMs);
+
     emitUltimateApplied(
       game,
       roomId,
       playerSocketId,
       opponent.socketId,
-      { by: "you", target: "you", type: ultimateType, effect: "guardian_shield_active", durationMs },
-      { by: "opponent", target: "opponent", type: ultimateType, effect: "guardian_shield_active", durationMs }
+      { by: "you", target: "you", type: ultimateType, effect: "aegis_domain_active", durationMs },
+      { by: "opponent", target: "opponent", type: ultimateType, effect: "aegis_domain_active", durationMs }
     );
     return;
   }

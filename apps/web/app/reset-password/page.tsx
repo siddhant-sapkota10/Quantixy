@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/button";
 import { PageShell } from "@/components/page-shell";
+import { PageContent } from "@/components/page-content";
 import { getReadableAuthError, updatePassword } from "@/lib/auth";
 import { getSupabaseClient } from "@/lib/supabase";
 
@@ -79,7 +80,7 @@ export default function ResetPasswordPage() {
 
   return (
     <PageShell className="flex items-center justify-center">
-      <section className="neon-panel-strong w-full max-w-lg rounded-[2rem] p-8 md:p-10">
+      <PageContent size="md" className="max-w-lg">
         <div className="space-y-3">
           <p className="text-sm uppercase tracking-[0.2em] text-textSecondary">Account Recovery</p>
           <h1 className="text-3xl font-black tracking-tight text-white">Reset Password</h1>
@@ -143,7 +144,7 @@ export default function ResetPasswordPage() {
             Back to Home
           </Link>
         </div>
-      </section>
+      </PageContent>
     </PageShell>
   );
 }
