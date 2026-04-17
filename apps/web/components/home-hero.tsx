@@ -40,6 +40,78 @@ function getAvatarCardSrc(id: AvatarId) {
   return `/assets/avatarCards/${id}.png`;
 }
 
+function DisplayNameOnboardingModal({
+  open,
+  busy,
+  error,
+  value,
+  onChange,
+  onSave,
+  onLogout,
+}: {
+  open: boolean;
+  busy: boolean;
+  error: string | null;
+  value: string;
+  onChange: (next: string) => void;
+  onSave: () => void;
+  onLogout: () => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm sm:px-6">
+      <div className="w-full max-w-lg rounded-[2rem] border border-white/10 bg-slate-950/80 p-5 shadow-glow backdrop-blur sm:p-6 md:p-8">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm uppercase tracking-[0.2em] text-slate-400">Welcome</p>
+            <h2 className="mt-2 text-2xl font-bold text-white">Choose your display name</h2>
+            <p className="mt-1 text-sm text-slate-300">
+              This is the name shown in matches, your profile, and the leaderboard.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onLogout}
+            className="shrink-0 rounded-xl px-3 py-2.5 text-sm text-rose-200 underline-offset-4 transition-all duration-150 ease-out hover:text-rose-100 hover:underline active:scale-[0.975] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300/60"
+          >
+            Log out
+          </button>
+        </div>
+
+        <div className="mt-6 space-y-3">
+          <label className="block space-y-2">
+            <span className="text-sm font-medium uppercase tracking-[0.2em] text-slate-400">
+              Display Name
+            </span>
+            <input
+              type="text"
+              value={value}
+              maxLength={16}
+              onChange={(event) => onChange(sanitizeDisplayName(event.target.value))}
+              placeholder="Pick a display name"
+              className="w-full neon-input rounded-2xl px-4 py-3"
+              autoFocus
+            />
+          </label>
+
+          <Button
+            className="w-full"
+            onClick={onSave}
+            disabled={busy || !value.trim()}
+            loading={busy}
+            loadingText="Saving..."
+          >
+            Continue
+          </Button>
+
+          {error ? <p className="text-sm text-rose-300">{error}</p> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AuthModal({
   open,
   mode,
@@ -105,7 +177,7 @@ function AuthModal({
       setAuthMessage(null);
       setDebugErrorDetail(null);
       await prepareForAccountAuth();
-      const { error } = await signInWithGoogle("/profile?onboarding=display_name");
+      const { error } = await signInWithGoogle("/?onboarding=display_name");
 
       if (error) {
         throw error;
@@ -181,7 +253,7 @@ function AuthModal({
         setPendingVerificationEmail(null);
         setAuthMessage("Account created. You're signed in and ready to play.");
         onClose();
-        router.push("/profile?onboarding=display_name");
+        router.push("/?onboarding=display_name");
         return;
       }
 
@@ -210,7 +282,7 @@ function AuthModal({
 
       setAuthMessage("Logged in successfully.");
       onClose();
-      router.push("/profile?onboarding=display_name");
+      router.push("/?onboarding=display_name");
     } catch (error) {
       setDebugErrorDetail(error instanceof Error ? error.message : null);
       setAuthError(
@@ -545,6 +617,10 @@ export function HomeHero() {
   const [routeBusy, setRouteBusy] = useState<"play" | "ai" | "profile" | "leaderboard" | null>(null);
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [guestError, setGuestError] = useState<string | null>(null);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [onboardingBusy, setOnboardingBusy] = useState(false);
+  const [onboardingError, setOnboardingError] = useState<string | null>(null);
+  const [onboardingName, setOnboardingName] = useState("");
   const [accountIdentity, setAccountIdentity] = useState<{
     displayName: string;
     avatarId: string | null;
@@ -581,6 +657,7 @@ export function HomeHero() {
       if (!user) {
         if (mounted) {
           setAccountIdentity(null);
+          setOnboardingOpen(false);
         }
         return;
       }
@@ -620,6 +697,23 @@ export function HomeHero() {
             avatarId: row.avatar_id ?? null,
             highestRating,
           });
+
+          const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+          const forced = params?.get("onboarding") === "display_name";
+          const missingName = !row.display_name || !String(row.display_name).trim();
+          if (!isAnonymousUser(user) && (forced || missingName)) {
+            setOnboardingName(sanitizeDisplayName(row.display_name ?? row.username ?? ""));
+            setOnboardingOpen(true);
+          } else {
+            setOnboardingOpen(false);
+          }
+        }
+
+        if (mounted && !row && !isAnonymousUser(user)) {
+          // Auth user exists but players row not created yet — force onboarding to create it.
+          setAccountIdentity(null);
+          setOnboardingName(sanitizeDisplayName(getUserDisplayName(user) || ""));
+          setOnboardingOpen(true);
         }
       } catch (error) {
         console.error("[home] identity fetch error", error);
@@ -632,6 +726,55 @@ export function HomeHero() {
       mounted = false;
     };
   }, [user]);
+
+  const handleOnboardingSave = async () => {
+    if (!user || isAnonymousUser(user)) return;
+    const clean = sanitizeDisplayName(onboardingName);
+    const validationError = validateDisplayName(clean);
+    if (validationError) {
+      setOnboardingError(validationError);
+      return;
+    }
+
+    try {
+      setOnboardingBusy(true);
+      setOnboardingError(null);
+      const supabase = getSupabaseClient();
+
+      const { data: existing } = await supabase
+        .from("players")
+        .select("id")
+        .eq("auth_user_id", user.id)
+        .maybeSingle();
+
+      if (!existing) {
+        await createPlayerProfileForUser(user, clean);
+      } else {
+        const { error } = await supabase
+          .from("players")
+          .update({ display_name: clean, username: clean } as never)
+          .eq("auth_user_id", user.id);
+        if (error) throw error;
+      }
+
+      // Remove onboarding param so it doesn't re-open.
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("onboarding");
+        window.history.replaceState({}, "", url.toString());
+      }
+
+      setOnboardingOpen(false);
+      // Refresh identity by forcing a quick re-run: simplest is a hard reload of the identity state.
+      setAccountIdentity((current) =>
+        current ? { ...current, displayName: clean } : { displayName: clean, avatarId: null }
+      );
+    } catch (error) {
+      setOnboardingError(error instanceof Error ? getReadableAuthError(error.message) : "Unable to save name.");
+    } finally {
+      setOnboardingBusy(false);
+    }
+  };
 
   const openAuthModal = (mode: AuthMode) => {
     setAuthMode(mode);
@@ -693,6 +836,18 @@ export function HomeHero() {
 
   return (
     <>
+      <DisplayNameOnboardingModal
+        open={onboardingOpen}
+        busy={onboardingBusy}
+        error={onboardingError}
+        value={onboardingName}
+        onChange={(next) => {
+          setOnboardingName(next);
+          setOnboardingError(null);
+        }}
+        onSave={handleOnboardingSave}
+        onLogout={() => void handleLogout()}
+      />
       <PageContent size="md" className="max-w-2xl">
         <motion.section
           initial={{ opacity: 0, y: 18 }}

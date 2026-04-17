@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/button";
 import { ProfileCharacterSelector } from "@/components/profile-character-selector";
 import { DEFAULT_AVATAR_ID, getAvatar, normalizeAvatarId, type AvatarId } from "@/lib/avatars";
-import { getReadableAuthError, sanitizeDisplayName, validateDisplayName } from "@/lib/auth";
+import { ensurePlayerProfileForUser, getReadableAuthError, sanitizeDisplayName, validateDisplayName } from "@/lib/auth";
 import { getSupabaseClient } from "@/lib/supabase";
 import { PurchaseSuccessModal } from "@/components/PurchaseSuccessModal";
 import { getPremiumItem, type PremiumItem, type PremiumItemType } from "@/lib/premium-items";
@@ -343,6 +343,11 @@ export function ProfileClient() {
         }
 
         setAuthUserId(user.id);
+        try {
+          await ensurePlayerProfileForUser(user);
+        } catch (profileEnsureError) {
+          console.warn("[profile] ensurePlayerProfileForUser failed", profileEnsureError);
+        }
         console.log("[profile] loading profile for user", { authUserId: user.id });
         const fallbackData = await loadProfileFromSupabase(user.id);
         setData(fallbackData);
