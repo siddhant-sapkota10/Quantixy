@@ -82,16 +82,19 @@ export function useSupabaseAuth() {
 export async function signInWithGoogle(nextPath = "/") {
   const supabase = getSupabaseClient();
   const safeNext = nextPath.startsWith("/") ? nextPath : "/";
-  const redirectTo = getURL(`/auth/callback?next=${encodeURIComponent(safeNext)}`);
+  const redirectTo = getURL("/auth/callback");
 
   if (process.env.NODE_ENV !== "production") {
-    console.debug("[auth] signInWithGoogle:redirectTo", redirectTo);
+    console.debug("[auth] signInWithGoogle:redirectTo", redirectTo, { next: safeNext });
   }
 
   return supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo
+      redirectTo,
+      queryParams: {
+        next: safeNext,
+      },
     }
   });
 }

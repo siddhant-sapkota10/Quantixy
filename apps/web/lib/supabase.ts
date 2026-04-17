@@ -22,7 +22,15 @@ export function getSupabaseClient() {
 
   if (!client) {
     console.log("[supabase] connecting to:", supabaseUrl);
-    client = createClient(supabaseUrl, supabaseAnonKey);
+    client = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        // Ensure OAuth returns a code we can exchange on /auth/callback.
+        flowType: "pkce",
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    });
   }
 
   return client;
