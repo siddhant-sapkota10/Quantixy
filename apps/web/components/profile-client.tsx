@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/button";
 import { ProfileCharacterSelector } from "@/components/profile-character-selector";
 import { DEFAULT_AVATAR_ID, getAvatar, normalizeAvatarId, type AvatarId } from "@/lib/avatars";
@@ -287,7 +286,6 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
 
 export function ProfileClient() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [data, setData] = useState<ProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -445,8 +443,10 @@ export function ProfileClient() {
 
   // Post-purchase UX: confirm session, refresh ownership instantly, then show premium unlock modal.
   useEffect(() => {
-    const purchase = searchParams?.get("purchase");
-    const sessionId = searchParams?.get("session_id");
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const purchase = params.get("purchase");
+    const sessionId = params.get("session_id");
     if (!purchase || purchase !== "success" || !sessionId) return;
     if (!authUserId) return;
 
@@ -508,7 +508,7 @@ export function ProfileClient() {
     return () => {
       cancelled = true;
     };
-  }, [authUserId, router, searchParams]);
+  }, [authUserId, router]);
 
   const bestTopicLabel = useMemo(() => {
     if (!data?.summary.highestRatedTopic) {
@@ -903,7 +903,13 @@ export function ProfileClient() {
             previewId={previewAvatarId}
             savingId={savingAvatarId}
             disabled={loading || Boolean(savingAvatarId)}
-            ownedAvatarIds={[...(data?.ownedAvatars ?? []), "flash", "shadow", "guardian", "inferno"]}
+            ownedAvatarIds={[
+              ...(data?.ownedAvatars ?? []).map((id) => normalizeAvatarId(id)),
+              "flash",
+              "shadow",
+              "guardian",
+              "inferno",
+            ]}
             onBuyPremiumAvatar={(avatarId) => void handleBuyAvatar(avatarId)}
             onPreviewChange={setPreviewAvatarId}
             onSelect={(avatarId) => void handleAvatarSelect(avatarId)}

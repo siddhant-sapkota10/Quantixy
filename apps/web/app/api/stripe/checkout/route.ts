@@ -77,19 +77,24 @@ export async function POST(request: Request) {
     }
 
     const stripe = getStripe();
+    const metadata: Record<string, string> = {
+      user_id: data.user.id,
+      item_type: itemType,
+      item_id: itemId,
+    };
+
+    // Back-compat (older webhook logic / dashboards)
+    if (isEmotePack) {
+      metadata.pack_id = itemId;
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       line_items: [{ price: priceId, quantity: 1 }],
       allow_promotion_codes: true,
       success_url: getURL(`/profile?purchase=success&session_id={CHECKOUT_SESSION_ID}`),
       cancel_url: getURL("/profile?purchase=cancel"),
-      metadata: {
-        user_id: data.user.id,
-        item_type: itemType,
-        item_id: itemId,
-        // Back-compat (older webhook logic / dashboards)
-        pack_id: isEmotePack ? itemId : undefined,
-      },
+      metadata,
     });
 
     return NextResponse.json({ url: session.url, id: session.id });

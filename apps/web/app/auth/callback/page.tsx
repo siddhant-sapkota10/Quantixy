@@ -1,20 +1,24 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabase";
 import { ensurePlayerProfileForUser } from "@/lib/auth";
 
 export default function AuthCallbackPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   useEffect(() => {
     let cancelled = false;
 
     async function run() {
-      const code = searchParams.get("code");
-      const nextParam = searchParams.get("next") ?? "/";
+      if (typeof window === "undefined") {
+        return;
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get("code");
+      const nextParam = params.get("next") ?? "/";
       const next = nextParam.startsWith("/") ? nextParam : "/";
 
       if (!code) {
@@ -49,7 +53,7 @@ export default function AuthCallbackPage() {
     return () => {
       cancelled = true;
     };
-  }, [router, searchParams]);
+  }, [router]);
 
   return null;
 }

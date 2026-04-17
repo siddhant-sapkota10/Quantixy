@@ -46,6 +46,18 @@ const THEME: Record<AvatarId, { ring: string; glow: string; readyGlow: string; c
     readyGlow: "shadow-[0_0_30px_rgba(250,204,21,0.34)]",
     chip: "border-amber-300/30 bg-amber-500/10 text-amber-100",
   },
+  architect: {
+    ring: "ring-amber-300/40",
+    glow: "shadow-[0_0_26px_rgba(251,191,36,0.20)]",
+    readyGlow: "shadow-[0_0_32px_rgba(251,191,36,0.36)]",
+    chip: "border-amber-300/30 bg-amber-500/10 text-amber-100",
+  },
+  titan: {
+    ring: "ring-amber-300/45",
+    glow: "shadow-[0_0_26px_rgba(245,158,11,0.22)]",
+    readyGlow: "shadow-[0_0_34px_rgba(245,158,11,0.40)]",
+    chip: "border-amber-300/35 bg-amber-500/10 text-amber-100",
+  },
   guardian: {
     ring: "ring-sky-300/35",
     glow: "shadow-[0_0_24px_rgba(56,189,248,0.18)]",

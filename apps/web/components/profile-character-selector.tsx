@@ -221,7 +221,9 @@ export function ProfileCharacterSelector({
                       <Button
                         onClick={() => {
                           if (!showPremiumCta) return;
-                          onBuyPremiumAvatar?.(previewAvatar.id);
+                          if (previewAvatar.id === "architect" || previewAvatar.id === "titan") {
+                            onBuyPremiumAvatar?.(previewAvatar.id);
+                          }
                         }}
                         disabled={!showPremiumCta}
                       >

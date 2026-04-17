@@ -48,7 +48,7 @@ export async function POST(request: Request) {
       }
 
       const userId = String(session.metadata?.user_id ?? "");
-      const itemType = String(session.metadata?.item_type ?? (session.metadata?.pack_id ? "emote_pack" : "") ?? "");
+      const itemType = String(session.metadata?.item_type ?? (session.metadata?.pack_id ? "emote_pack" : ""));
       const itemId = String(session.metadata?.item_id ?? session.metadata?.pack_id ?? session.metadata?.pack ?? "");
       if (!userId || !itemType || !itemId) {
         return NextResponse.json({ error: "Missing metadata" }, { status: 400 });
