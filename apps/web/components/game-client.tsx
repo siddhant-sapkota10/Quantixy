@@ -2611,6 +2611,7 @@ export function GameClient({
   const isSystemCorruptActive = ultimate.shadowCorruptUntil > Date.now();
   const isTitanOverpowerActive = ultimate.titanOverpowerUntil > Date.now();
   const isRapidFireActive = ultimate.overclockUntil > Date.now();
+  const isInfernoActive = ultimate.infernoPendingUntil > Date.now();
   const isOpponentRapidFireActive = ultimate.opponentOverclockUntil > Date.now();
   const isGuardianShieldActive = ultimate.fortressUntil > Date.now();
   const isOpponentGuardianShieldActive =
@@ -2668,30 +2669,32 @@ export function GameClient({
       ? { text: "⚫ Blackout — Submits Blocked", color: "text-violet-200",  large: false }
       : isSystemCorruptActive
       ? {
-          text: `🟣 System Corrupt — Corruption x${Math.max(0, ultimate.shadowCorruptStacks)}`,
+          text: "🟣 Opponent Corrupted",
           color: "text-violet-200",
           large: false
         }
       : isTitanOverpowerActive
       ? {
-          text: `🪨 Overpower — Chain ${Math.max(0, ultimate.titanStreak)}/2${ultimate.titanBreakArmed ? " · BREAK ARMED" : ""}`,
+          text: "💥 Overpower Active",
           color: "text-amber-200",
           large: false
         }
       : isArchitectActive
       ? {
-          text: `🟡 Perfect Sequence — Marks x${Math.max(0, ultimate.architectMarks)} · ${Math.max(0, ultimate.architectSequenceStreak)}/3`,
+          text: "👑 Sequence Active",
           color: "text-amber-200",
           large: false
         }
       : isRapidFireActive
       ? {
-          text: `⚡ Overclock Active${ultimate.flashBonusRemaining > 0 ? ` · Combo x${ultimate.flashBonusRemaining}` : ""}`,
+          text: "⚡ Overclock Active",
           color: "text-amber-200",
           large: false
         }
+      : isInfernoActive
+      ? { text: "🔥 Burn Applied", color: "text-rose-300", large: false }
       : isGuardianShieldActive
-      ? { text: `🛡️ Aegis Domain — Stored ${ultimate.fortressBlocksRemaining} energy`, color: "text-teal-200", large: false }
+      ? { text: "🛡️ Shield Active", color: "text-teal-200", large: false }
       : youEliminated
       ? { text: "Eliminated ✕",                    color: "text-rose-300",    large: false }
       : feedback.youAnsweredCurrent
@@ -2856,7 +2859,7 @@ export function GameClient({
       const progress = active ? Math.max(0, Math.min(1, (until - now) / total)) : 0;
       const combo = side === "you" ? ultimate.flashBonusRemaining : ultimate.opponentFlashBonusRemaining;
       return {
-        label: active ? "Overclock Active" : "Overclock",
+        label: active ? "⚡ Overclock Active" : "Overclock",
         sublabel: active
           ? combo > 0
             ? `Combo x${combo} · +${combo} bonus damage`
@@ -2874,7 +2877,7 @@ export function GameClient({
       const total = vfx.durationMs ?? 5000;
       const progress = active ? Math.max(0, Math.min(1, (until - now) / total)) : 0;
       return {
-        label: active ? "System Corrupt Active" : "System Corrupt",
+        label: active ? "🟣 Opponent Corrupted" : "System Corrupt",
         sublabel: active ? `Corruption stacks x${Math.max(0, stacks)}` : "Stand by",
         progress: active ? progress : null,
         accent: "bg-violet-400"
@@ -2889,8 +2892,8 @@ export function GameClient({
       const total = vfx.durationMs ?? 6000;
       const progress = active ? Math.max(0, Math.min(1, (until - now) / total)) : 0;
       return {
-        label: active ? "Perfect Sequence Active" : "Perfect Sequence",
-        sublabel: active ? `Marks x${Math.max(0, marks)} · Sequence ${Math.max(0, streak)}/3` : "Stand by",
+        label: active ? "👑 Sequence Active" : "Perfect Sequence",
+        sublabel: active ? `Marks x${Math.max(0, marks)} · Sequence ${Math.max(0, streak)}/2` : "Stand by",
         progress: active ? progress : null,
         accent: "bg-amber-300"
       };
@@ -2904,7 +2907,7 @@ export function GameClient({
       const total = vfx.durationMs ?? 5000;
       const progress = active ? Math.max(0, Math.min(1, (until - now) / total)) : 0;
       return {
-        label: active ? "Overpower Active" : "Overpower",
+        label: active ? "💥 Overpower Active" : "Overpower",
         sublabel: active ? `Chain ${Math.max(0, streak)}/2${armed ? " · BREAK HIT ARMED" : ""}` : "Stand by",
         progress: active ? progress : null,
         accent: "bg-amber-300"
@@ -2918,7 +2921,7 @@ export function GameClient({
       const total = vfx.durationMs ?? 10000;
       const progress = active ? Math.max(0, Math.min(1, (until - now) / total)) : 0;
       return {
-        label: active ? "Aegis Domain Active" : "Aegis Domain",
+        label: active ? "🛡️ Shield Active" : "Aegis Domain",
         sublabel: active ? `Damage reduced · Stored ${stored}` : "Stand by",
         progress: active ? progress : null,
         accent: "bg-cyan-400"
@@ -2931,7 +2934,7 @@ export function GameClient({
     const total = vfx.durationMs ?? 6000;
     const progress = active ? Math.max(0, Math.min(1, (until - now) / total)) : 0;
     return {
-      label: active ? "Blaze Surge Active" : "Blaze Surge",
+      label: active ? "🔥 Burn Applied" : "Blaze Surge",
       sublabel: active ? `Burn stacks x${Math.max(0, stacks)}` : "Stand by",
       progress: active ? progress : null,
       accent: "bg-rose-400"
@@ -2955,12 +2958,12 @@ export function GameClient({
             aria-hidden="true"
             className="pointer-events-none absolute inset-0 z-20 overflow-hidden rounded-[2rem]"
             initial={{ opacity: 0 }}
-            animate={{ opacity: [0.05, 0.14, 0.08, 0.13, 0.05], x: [0, 1, -1, 1, 0] }}
+            animate={{ opacity: [0.03, 0.09, 0.05, 0.08, 0.03], x: [0, 0.6, -0.6, 0.6, 0] }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.9, repeat: Infinity, ease: "easeInOut" }}
             style={{
               background:
-                "repeating-linear-gradient(180deg, rgba(2,6,23,0.06) 0px, rgba(2,6,23,0.06) 7px, rgba(167,139,250,0.10) 7px, rgba(167,139,250,0.10) 9px)",
+                "repeating-linear-gradient(180deg, rgba(2,6,23,0.05) 0px, rgba(2,6,23,0.05) 7px, rgba(167,139,250,0.06) 7px, rgba(167,139,250,0.06) 9px)",
               mixBlendMode: "screen"
             }}
           />

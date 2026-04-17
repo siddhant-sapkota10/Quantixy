@@ -86,12 +86,24 @@ const INFERNO_BURN_TICK_MS = 800;
 const SHADOW_CORRUPT_DURATION_MS = 5000;
 const SHADOW_CORRUPT_MAX_STACKS = 6;
 const SHADOW_CORRUPT_DAMAGE_PER_STACK = 2;
+const FLASH_MAX_OVERCLOCK_COMBO = 5;
+const FLASH_OVERCLOCK_FAST_BONUS_DAMAGE = 1;
+const GUARDIAN_DAMAGE_TAKEN_MULTIPLIER = 0.4; // 60% reduction
+const GUARDIAN_SHOCKWAVE_MAX_DAMAGE = 4;
+const GUARDIAN_SHOCKWAVE_SCALE_DIVISOR = 10;
 const ARCHITECT_SEQUENCE_DURATION_MS = 6000;
-const ARCHITECT_MAX_MARKS = 6;
-const ARCHITECT_DAMAGE_PER_MARK = 3;
+const ARCHITECT_MAX_MARKS = 10;
+const ARCHITECT_MARKS_PER_CORRECT = 2;
+const ARCHITECT_SEQUENCE_TRIGGER = 2;
+const ARCHITECT_DAMAGE_PER_MARK = 4;
+const ARCHITECT_PRECISION_CUT_DAMAGE = 3;
 const TITAN_OVERPOWER_DURATION_MS = 5000;
-const TITAN_BONUS_DAMAGE_PER_CORRECT = 4;
-const TITAN_BREAK_HIT_BONUS_DAMAGE = 10;
+const TITAN_BONUS_DAMAGE_PER_CORRECT = 6;
+const TITAN_BREAK_HIT_CHAIN = 2;
+const TITAN_BREAK_HIT_BONUS_DAMAGE = 16;
+const TITAN_LIFESTEAL_PER_CORRECT = 3;
+const INFERNO_MAX_BURN_STACKS = 6;
+const INFERNO_MAX_TICK_DAMAGE = 3;
 const ROOM_CODE_LENGTH = 6;
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -875,11 +887,14 @@ function clearInfernoBurnForPlayer(game, socketId) {
   game.novaBonusRemaining[socketId] = 0;
 }
 
-function clearArchitectSequenceForPlayer(game, casterSocketId) {
+function clearArchitectSequenceForPlayer(game, casterSocketId, options = {}) {
+  const preserveMarks = options?.preserveMarks === true;
   game.architectSequenceStreak[casterSocketId] = 0;
-  const opponent = getOpponent(game, casterSocketId);
-  if (opponent) {
-    game.architectMarks[opponent.socketId] = 0;
+  if (!preserveMarks) {
+    const opponent = getOpponent(game, casterSocketId);
+    if (opponent) {
+      game.architectMarks[opponent.socketId] = 0;
+    }
   }
 }
 
@@ -888,12 +903,49 @@ function clearTitanOverpowerForPlayer(game, socketId) {
   game.titanBreakArmed[socketId] = false;
 }
 
+function applyFailureUltimateConsequences(game, playerSocketId, reason = "wrong") {
+  if (!game || !playerSocketId) {
+    return;
+  }
+
+  if (isActiveUntil(game.overclockUntil[playerSocketId])) {
+    // Flash identity: combo pressure stumbles on mistakes, but doesn't fully reset.
+    const currentCombo = Math.max(0, game.flashBonusRemaining[playerSocketId] ?? 0);
+    game.flashBonusRemaining[playerSocketId] = Math.floor(currentCombo * 0.5);
+  }
+
+  if (isActiveUntil(game.infernoPendingUntil[playerSocketId])) {
+    // Inferno identity: burn engine stops if the caster slips.
+    clearInfernoBurnForPlayer(game, playerSocketId);
+  }
+
+  if (isActiveUntil(game.shadowCorruptUntil?.[playerSocketId] ?? 0)) {
+    // Shadow identity: any opponent mistake (wrong or timeout) feeds corruption.
+    const stackGain = 1;
+    const nextStacks = Math.min(
+      SHADOW_CORRUPT_MAX_STACKS,
+      Math.max(0, (game.shadowCorruptStacks?.[playerSocketId] ?? 0) + stackGain)
+    );
+    game.shadowCorruptStacks[playerSocketId] = nextStacks;
+  }
+
+  // Architect premium tuning: mistakes reset sequence progress, marks stay banked.
+  if (isActiveUntil(game.architectUntil?.[playerSocketId] ?? 0)) {
+    clearArchitectSequenceForPlayer(game, playerSocketId, { preserveMarks: true });
+  }
+
+  // Titan premium tuning: mistakes reset chain progress.
+  if (isActiveUntil(game.titanOverpowerUntil?.[playerSocketId] ?? 0)) {
+    clearTitanOverpowerForPlayer(game, playerSocketId);
+  }
+}
+
 function computeInfernoBurnTickDamage(stacks) {
   const safeStacks = Math.max(0, Number(stacks) || 0);
   if (safeStacks <= 0) {
     return 0;
   }
-  return Math.min(4, Math.max(1, Math.ceil(safeStacks / 2)));
+  return Math.min(INFERNO_MAX_TICK_DAMAGE, Math.max(1, Math.ceil(safeStacks / 2)));
 }
 
 function resolveIncomingDamage(
@@ -920,7 +972,7 @@ function resolveIncomingDamage(
 
   const aegisActive = !bypassDefense && isActiveUntil(game.fortressUntil[targetSocketId]);
   if (aegisActive) {
-    const reducedDamage = Math.max(1, Math.floor(damage * 0.35));
+    const reducedDamage = Math.max(1, Math.floor(damage * GUARDIAN_DAMAGE_TAKEN_MULTIPLIER));
     const absorbedDamage = Math.max(0, damage - reducedDamage);
     const reflectDamage = Math.min(2, Math.max(1, Math.floor(absorbedDamage / 6)));
 
@@ -1259,6 +1311,12 @@ function applyMistakePenalty(roomId, playerSocketId, reason, damage) {
   const playerState = game.playerQuestionState[playerSocketId];
   if (!playerState || playerState.answered || game.eliminated[playerSocketId]) return;
 
+  // Timeout path bypasses handleIncorrectAnswer, so we must apply
+  // avatar-specific mistake consequences here as well.
+  if (reason !== "wrong") {
+    applyFailureUltimateConsequences(game, playerSocketId, reason);
+  }
+
   playerState.answered = true;
   clearPlayerQuestionTimer(game, playerSocketId);
   game.streaks[playerSocketId] = 0;
@@ -1593,22 +1651,27 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
   let awardedPoints = pointsAwarded;
   let overclockCombo = 0;
   let overclockBonusDamage = 0;
+  let architectPrecisionCutDamage = 0;
   let perfectStrikeDamage = 0;
   let perfectStrikeMarksConsumed = 0;
   let titanBonusDamage = 0;
+  let titanLifestealApplied = 0;
   let titanBreakDamage = 0;
   let titanBreakTriggered = false;
 
   if (isActiveUntil(game.overclockUntil[playerSocketId])) {
-    overclockCombo = (game.flashBonusRemaining[playerSocketId] ?? 0) + 1;
+    overclockCombo = Math.min(FLASH_MAX_OVERCLOCK_COMBO, (game.flashBonusRemaining[playerSocketId] ?? 0) + 1);
     game.flashBonusRemaining[playerSocketId] = overclockCombo;
     overclockBonusDamage = overclockCombo;
+    if (fastAnswer) {
+      overclockBonusDamage += FLASH_OVERCLOCK_FAST_BONUS_DAMAGE;
+    }
   } else if ((game.flashBonusRemaining[playerSocketId] ?? 0) > 0) {
     game.flashBonusRemaining[playerSocketId] = 0;
   }
 
   if (isActiveUntil(game.infernoPendingUntil[playerSocketId])) {
-    const nextStacks = Math.min(8, (game.infernoBurnStacks[playerSocketId] ?? 0) + 1);
+    const nextStacks = Math.min(INFERNO_MAX_BURN_STACKS, (game.infernoBurnStacks[playerSocketId] ?? 0) + 1);
     game.infernoPending[playerSocketId] = true;
     game.infernoBurnStacks[playerSocketId] = nextStacks;
     game.novaBonusRemaining[playerSocketId] = nextStacks;
@@ -1625,7 +1688,7 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     titanBonusDamage = TITAN_BONUS_DAMAGE_PER_CORRECT;
     const nextStreak = Math.min(3, (game.titanStreak?.[playerSocketId] ?? 0) + 1);
     game.titanStreak[playerSocketId] = nextStreak;
-    if (nextStreak >= 2) {
+    if (nextStreak >= TITAN_BREAK_HIT_CHAIN) {
       game.titanBreakArmed[playerSocketId] = true;
     }
   }
@@ -1649,20 +1712,86 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     // Apply Titan bonus (simple, additive).
     damage += titanBonusDamage;
 
-    const result = resolveIncomingDamage(game, playerSocketId, opponent.socketId, damage, "damage");
+    const result = resolveIncomingDamage(
+      game,
+      playerSocketId,
+      opponent.socketId,
+      damage,
+      "damage",
+      titanActive ? { bypassDefense: true, bypassProtection: true } : {}
+    );
     knockedOutAttacker = result.knockedOutAttacker;
     knockedOutOpponent = result.knockedOutTarget;
+
+    if (titanActive && result.damageApplied > 0) {
+      const currentHp = game.hp?.[playerSocketId] ?? MAX_HP;
+      const nextHp = Math.min(MAX_HP, currentHp + TITAN_LIFESTEAL_PER_CORRECT);
+      titanLifestealApplied = Math.max(0, nextHp - currentHp);
+      game.hp[playerSocketId] = nextHp;
+    }
   }
 
   // Architect: Perfect Sequence (premium, skill-based burst).
-  // Marks are applied to the opponent; strike triggers only on a 3-correct sequence during the active window.
+  // Premium tuning:
+  // - Correct answers add extra marks quickly and apply an unblockable precision cut.
+  // - Sequence triggers in 2 hits (instead of 3) for faster high-payoff bursts.
+  // - Marks persist through mistakes while active; only sequence progress resets.
   if (opponent && isActiveUntil(game.architectUntil?.[playerSocketId] ?? 0)) {
-    const nextMarks = Math.min(ARCHITECT_MAX_MARKS, (game.architectMarks?.[opponent.socketId] ?? 0) + 1);
+    const nextMarks = Math.min(
+      ARCHITECT_MAX_MARKS,
+      (game.architectMarks?.[opponent.socketId] ?? 0) + ARCHITECT_MARKS_PER_CORRECT
+    );
     game.architectMarks[opponent.socketId] = nextMarks;
-    const nextStreak = Math.min(3, (game.architectSequenceStreak?.[playerSocketId] ?? 0) + 1);
+    const nextStreak = Math.min(ARCHITECT_SEQUENCE_TRIGGER, (game.architectSequenceStreak?.[playerSocketId] ?? 0) + 1);
     game.architectSequenceStreak[playerSocketId] = nextStreak;
 
-    if (nextStreak >= 3) {
+    architectPrecisionCutDamage = ARCHITECT_PRECISION_CUT_DAMAGE;
+    if (architectPrecisionCutDamage > 0) {
+      const precisionResult = resolveIncomingDamage(
+        game,
+        playerSocketId,
+        opponent.socketId,
+        architectPrecisionCutDamage,
+        "precision_cut"
+      );
+      emitUltimateApplied(
+        game,
+        roomId,
+        playerSocketId,
+        opponent.socketId,
+        {
+          by: "you",
+          target: "opponent",
+          type: "perfect_sequence",
+          effect: "precision_cut",
+          damage: precisionResult.damageApplied,
+          hp: {
+            you: game.hp?.[playerSocketId] ?? MAX_HP,
+            opponent: game.hp?.[opponent.socketId] ?? MAX_HP
+          }
+        },
+        {
+          by: "opponent",
+          target: "you",
+          type: "perfect_sequence",
+          effect: "precision_cut",
+          damage: precisionResult.damageApplied,
+          hp: {
+            you: game.hp?.[opponent.socketId] ?? MAX_HP,
+            opponent: game.hp?.[playerSocketId] ?? MAX_HP
+          }
+        }
+      );
+
+      if (precisionResult.knockedOutAttacker) {
+        knockedOutAttacker = true;
+      }
+      if (precisionResult.knockedOutTarget) {
+        knockedOutOpponent = true;
+      }
+    }
+
+    if (nextStreak >= ARCHITECT_SEQUENCE_TRIGGER) {
       perfectStrikeMarksConsumed = Math.max(0, game.architectMarks?.[opponent.socketId] ?? 0);
       perfectStrikeDamage = Math.max(0, perfectStrikeMarksConsumed * ARCHITECT_DAMAGE_PER_MARK);
       // Consume marks + reset streak (ultimate can continue if time remains).
@@ -1675,7 +1804,8 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
           playerSocketId,
           opponent.socketId,
           perfectStrikeDamage,
-          "perfect_strike"
+          "perfect_strike",
+          { bypassDefense: true, bypassProtection: true }
         );
 
         // Notify both clients for the premium payoff moment.
@@ -1805,6 +1935,10 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     pointsAwarded: scorerSocketId === playerOneSocketId ? awardedPoints : 0,
     overclockCombo: scorerSocketId === playerOneSocketId ? overclockCombo : 0,
     overclockBonusDamage: scorerSocketId === playerOneSocketId ? overclockBonusDamage : 0,
+    architectPrecisionCutDamage: scorerSocketId === playerOneSocketId ? architectPrecisionCutDamage : 0,
+    perfectStrikeDamage: scorerSocketId === playerOneSocketId ? perfectStrikeDamage : 0,
+    titanLifestealApplied: scorerSocketId === playerOneSocketId ? titanLifestealApplied : 0,
+    titanBreakTriggered: scorerSocketId === playerOneSocketId ? titanBreakTriggered : false,
     strikes: game.strikes[playerOneSocketId] ?? 0,
     opponentStrikes: game.strikes[playerTwoSocketId] ?? 0,
     youEliminated: !!game.eliminated[playerOneSocketId],
@@ -1829,6 +1963,10 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     pointsAwarded: scorerSocketId === playerTwoSocketId ? awardedPoints : 0,
     overclockCombo: scorerSocketId === playerTwoSocketId ? overclockCombo : 0,
     overclockBonusDamage: scorerSocketId === playerTwoSocketId ? overclockBonusDamage : 0,
+    architectPrecisionCutDamage: scorerSocketId === playerTwoSocketId ? architectPrecisionCutDamage : 0,
+    perfectStrikeDamage: scorerSocketId === playerTwoSocketId ? perfectStrikeDamage : 0,
+    titanLifestealApplied: scorerSocketId === playerTwoSocketId ? titanLifestealApplied : 0,
+    titanBreakTriggered: scorerSocketId === playerTwoSocketId ? titanBreakTriggered : false,
     strikes: game.strikes[playerTwoSocketId] ?? 0,
     opponentStrikes: game.strikes[playerOneSocketId] ?? 0,
     youEliminated: !!game.eliminated[playerTwoSocketId],
@@ -1899,31 +2037,7 @@ function handleIncorrectAnswer(roomId, playerSocketId) {
     return;
   }
 
-  if (isActiveUntil(game.overclockUntil[playerSocketId])) {
-    game.flashBonusRemaining[playerSocketId] = 0;
-  }
-
-  if (isActiveUntil(game.infernoPendingUntil[playerSocketId])) {
-    clearInfernoBurnForPlayer(game, playerSocketId);
-  }
-
-  if (isActiveUntil(game.shadowCorruptUntil?.[playerSocketId] ?? 0)) {
-    const nextStacks = Math.min(
-      SHADOW_CORRUPT_MAX_STACKS,
-      Math.max(0, (game.shadowCorruptStacks?.[playerSocketId] ?? 0) + 1)
-    );
-    game.shadowCorruptStacks[playerSocketId] = nextStacks;
-  }
-
-  // Architect: wrong answer during Perfect Sequence resets streak + clears marks.
-  if (isActiveUntil(game.architectUntil?.[playerSocketId] ?? 0)) {
-    clearArchitectSequenceForPlayer(game, playerSocketId);
-  }
-
-  // Titan: wrong answer during Overpower resets the chain and Break Hit progress.
-  if (isActiveUntil(game.titanOverpowerUntil?.[playerSocketId] ?? 0)) {
-    clearTitanOverpowerForPlayer(game, playerSocketId);
-  }
+  applyFailureUltimateConsequences(game, playerSocketId, "wrong");
 
   applyMistakePenalty(roomId, playerSocketId, "wrong", HP_WRONG_ANSWER_PENALTY);
 }
@@ -2937,7 +3051,9 @@ function useAvatarUltimate(roomId, playerSocketId) {
 
       const activeOpponent = getOpponent(activeGame, playerSocketId);
       const absorbedDamage = Math.max(0, activeGame.aegisAbsorbedDamage[playerSocketId] ?? 0);
-      const shockwaveDamage = absorbedDamage > 0 ? Math.min(5, 1 + Math.floor(absorbedDamage / 8)) : 0;
+      const shockwaveDamage = absorbedDamage > 0
+        ? Math.min(GUARDIAN_SHOCKWAVE_MAX_DAMAGE, 1 + Math.floor(absorbedDamage / GUARDIAN_SHOCKWAVE_SCALE_DIVISOR))
+        : 0;
 
       activeGame.fortressUntil[playerSocketId] = 0;
       activeGame.fortressBlocksRemaining[playerSocketId] = 0;
