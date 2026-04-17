@@ -104,87 +104,96 @@ export function WorkingScratchpad() {
     </svg>
   );
 
+  if (!open) {
+    return (
+      <div className="flex items-center justify-start">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="rounded-xl border border-indigo-300/28 bg-slate-900/55 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-200 shadow-[0_10px_30px_rgba(2,6,23,0.35)] backdrop-blur transition-all duration-200 ease-premium hover:border-cyan-300/55"
+        >
+          Show Workpad
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="neon-panel-soft rounded-2xl p-2 sm:p-2.5">
       <div className="mb-2 flex items-center justify-between gap-2">
         <button
           type="button"
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => setOpen(false)}
           className="rounded-lg border border-indigo-300/35 bg-slate-900/78 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-200 transition-all duration-200 ease-premium hover:border-cyan-300/60 sm:px-3 sm:text-[11px]"
         >
-          {open ? "Hide Workpad" : "Show Workpad"}
+          Hide Workpad
         </button>
 
-        {open ? (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setTool((current) => (current === "eraser" ? "pen" : "eraser"));
-              }}
-              className="inline-flex items-center gap-1 rounded-md border border-indigo-300/35 bg-slate-900/78 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-200 transition-all duration-200 ease-premium hover:border-cyan-300/60"
-            >
-              {tool === "eraser" ? <EraserIcon /> : <PenIcon tipColor={color} />}
-              {tool === "eraser" ? "Eraser" : "Pen"}
-            </button>
-            <button
-              type="button"
-              onClick={clearCanvas}
-              className="rounded-md border border-indigo-300/35 bg-slate-900/78 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-200 transition-all duration-200 ease-premium hover:border-cyan-300/60"
-            >
-              Clear
-            </button>
-          </div>
-        ) : null}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setTool((current) => (current === "eraser" ? "pen" : "eraser"));
+            }}
+            className="inline-flex items-center gap-1 rounded-md border border-indigo-300/35 bg-slate-900/78 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-200 transition-all duration-200 ease-premium hover:border-cyan-300/60"
+          >
+            {tool === "eraser" ? <EraserIcon /> : <PenIcon tipColor={color} />}
+            {tool === "eraser" ? "Eraser" : "Pen"}
+          </button>
+          <button
+            type="button"
+            onClick={clearCanvas}
+            className="rounded-md border border-indigo-300/35 bg-slate-900/78 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-200 transition-all duration-200 ease-premium hover:border-cyan-300/60"
+          >
+            Clear
+          </button>
+        </div>
       </div>
 
-      {open ? (
-        <>
-          <div className="mb-2 flex items-center gap-2">
-            {COLORS.map((swatch) => (
-              <button
-                key={swatch}
-                type="button"
-                onClick={() => {
-                  setColor(swatch);
-                  setTool("pen");
-                }}
-                aria-label={`color-${swatch}`}
-                className="h-5 w-5 rounded-full border border-slate-600"
-                style={{ backgroundColor: swatch }}
-              />
-            ))}
-            <div className="ml-2 flex items-center gap-1">
-              {SIZES.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setSize(s)}
-                  className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                    size === s ? "bg-cyan-400/25 text-cyan-100" : "bg-slate-800 text-slate-300"
-                  }`}
-                >
-                  {s}px
-                </button>
-              ))}
-            </div>
-          </div>
-          <div
-            ref={wrapRef}
-            className="h-40 overflow-hidden rounded-xl border border-indigo-300/28 bg-[radial-gradient(circle_at_center,rgba(22,34,69,0.88)_0%,rgba(3,8,24,1)_100%)]"
-          >
-            <canvas
-              ref={canvasRef}
-              className="h-full w-full touch-none"
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={stopDraw}
-              onPointerCancel={stopDraw}
-              onPointerLeave={stopDraw}
-            />
-          </div>
-        </>
-      ) : null}
+      <div className="mb-2 flex items-center gap-2">
+        {COLORS.map((swatch) => (
+          <button
+            key={swatch}
+            type="button"
+            onClick={() => {
+              setColor(swatch);
+              setTool("pen");
+            }}
+            aria-label={`color-${swatch}`}
+            className="h-5 w-5 rounded-full border border-slate-600"
+            style={{ backgroundColor: swatch }}
+          />
+        ))}
+        <div className="ml-2 flex items-center gap-1">
+          {SIZES.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setSize(s)}
+              className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                size === s ? "bg-cyan-400/25 text-cyan-100" : "bg-slate-800 text-slate-300"
+              }`}
+            >
+              {s}px
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div
+        ref={wrapRef}
+        className="h-40 overflow-hidden rounded-xl border border-indigo-300/28 bg-[radial-gradient(circle_at_center,rgba(22,34,69,0.88)_0%,rgba(3,8,24,1)_100%)]"
+      >
+        <canvas
+          ref={canvasRef}
+          className="h-full w-full touch-none"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={stopDraw}
+          onPointerCancel={stopDraw}
+          onPointerLeave={stopDraw}
+        />
+      </div>
     </div>
   );
 }

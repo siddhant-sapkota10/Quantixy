@@ -15,6 +15,7 @@ type UltimateAbilityButtonProps = {
   onActivate: () => void;
   activationBurstKey?: number;
   size?: "compact" | "regular";
+  className?: string;
 };
 
 export function UltimateAbilityButton({
@@ -28,7 +29,8 @@ export function UltimateAbilityButton({
   disabled = false,
   onActivate,
   activationBurstKey = 0,
-  size = "regular"
+  size = "regular",
+  className
 }: UltimateAbilityButtonProps) {
   const normalizedType = normalizeUltimateType(type);
   const config = ULTIMATE_VFX[normalizedType];
@@ -67,7 +69,7 @@ export function UltimateAbilityButton({
         canActivate
           ? "border-white/25 focus-visible:ring-white/45"
           : "border-indigo-300/25 opacity-85 saturate-[0.9]"
-      } ${isCompact ? "px-3 py-2.5" : "px-3.5 py-3"}`}
+      } ${isCompact ? "h-11 px-3 py-0" : "px-3.5 py-3"} ${className ?? ""}`}
       style={{
         background: canActivate ? config.presentation.buttonGradient : "linear-gradient(145deg, rgba(12,20,43,0.95), rgba(10,16,36,0.92))",
         boxShadow: canActivate
@@ -132,7 +134,7 @@ export function UltimateAbilityButton({
         ) : null}
       </div>
 
-      <div className="relative flex items-start gap-2.5">
+      <div className={`relative flex ${isCompact ? "items-center" : "items-start"} gap-2.5`}>
         <div
           className={`flex shrink-0 items-center justify-center rounded-xl border ${
             isCompact ? "h-8 w-8" : "h-9 w-9"
@@ -155,22 +157,25 @@ export function UltimateAbilityButton({
             </span>
           </div>
 
-          <p className={`mt-0.5 text-slate-100/92 ${isCompact ? "text-[10px]" : "text-[11px]"}`}>{subLabel}</p>
-
-          <div className={`mt-1.5 h-1.5 overflow-hidden rounded-full ${canActivate ? "bg-slate-950/38" : "bg-slate-800/75"}`}>
-            <motion.div
-              className="h-full rounded-full"
-              initial={false}
-              animate={{ width: `${used ? 100 : pct}%` }}
-              transition={{ duration: 0.24, ease: "easeOut" }}
-              style={{
-                background: canActivate
-                  ? "linear-gradient(90deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.55) 100%)"
-                  : `linear-gradient(90deg, ${config.presentation.primary}88 0%, ${config.presentation.secondary}77 100%)`,
-                boxShadow: canActivate ? `0 0 14px ${config.presentation.primary}aa` : "none"
-              }}
-            />
-          </div>
+          {isCompact ? null : (
+            <>
+              <p className="mt-0.5 text-[11px] text-slate-100/92">{subLabel}</p>
+              <div className={`mt-1.5 h-1.5 overflow-hidden rounded-full ${canActivate ? "bg-slate-950/38" : "bg-slate-800/75"}`}>
+                <motion.div
+                  className="h-full rounded-full"
+                  initial={false}
+                  animate={{ width: `${used ? 100 : pct}%` }}
+                  transition={{ duration: 0.24, ease: "easeOut" }}
+                  style={{
+                    background: canActivate
+                      ? "linear-gradient(90deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.55) 100%)"
+                      : `linear-gradient(90deg, ${config.presentation.primary}88 0%, ${config.presentation.secondary}77 100%)`,
+                    boxShadow: canActivate ? `0 0 14px ${config.presentation.primary}aa` : "none"
+                  }}
+                />
+              </div>
+            </>
+          )}
         </div>
       </div>
     </motion.button>

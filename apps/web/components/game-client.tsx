@@ -1129,7 +1129,12 @@ export function GameClient({
       // Don't force-close the emote picker during countdown; it prevents
       // users from seeing/clicking emote buttons before "GO".
       if (payload.value === "GO") {
-        setEmoteBarOpen(true);
+        // Mobile: don't auto-expand emotes (steals vertical space).
+        if (typeof window !== "undefined" && window.innerWidth >= 640) {
+          setEmoteBarOpen(true);
+        } else {
+          setEmoteBarOpen(false);
+        }
       }
       setRematchRequested(false);
       setOpponentRematchRequested(false);
@@ -1167,8 +1172,12 @@ export function GameClient({
         hintUntil: 0
       }));
       setShieldBlockedUntil(0);
-      // Make the emote UI obvious as soon as gameplay begins.
-      setEmoteBarOpen(true);
+      // Mobile: don't auto-expand emotes (steals vertical space).
+      if (typeof window !== "undefined" && window.innerWidth >= 640) {
+        setEmoteBarOpen(true);
+      } else {
+        setEmoteBarOpen(false);
+      }
       setRematchRequested(false);
       setOpponentRematchRequested(false);
       setRematchProgress({ requestedPlayers: 0, requiredPlayers: 2 });
@@ -1181,6 +1190,13 @@ export function GameClient({
         opponentTypingTimerRef.current = null;
       }
       lastTypingEmitRef.current = 0;
+      // Mobile UX: immediately focus the answer box so typing "just works".
+      // Delay by a tick so the input is enabled + mounted before focusing.
+      setTimeout(() => {
+        if (!youEliminated && !feedbackRef.current.youAnsweredCurrent) {
+          focusAnswerInput({ select: true });
+        }
+      }, 0);
     };
 
     const handleTimerUpdate = (payload: {
@@ -2962,8 +2978,8 @@ export function GameClient({
 
         <div className="flex h-[100dvh] flex-col overflow-hidden">
           {/* Top HUD */}
-          <div className="shrink-0 border-b border-white/10 bg-slate-950/90 px-3 pb-2.5 pt-3 backdrop-blur sm:px-5">
-            <div className="relative rounded-[1.55rem] border border-white/10 bg-slate-950/72 p-2.5 shadow-[0_18px_44px_rgba(2,6,23,0.5)] sm:p-3">
+          <div className="shrink-0 border-b border-white/10 bg-slate-950/90 px-3 pb-2 pt-2.5 backdrop-blur sm:px-5 sm:pb-2.5 sm:pt-3">
+            <div className="relative rounded-[1.55rem] border border-white/10 bg-slate-950/72 p-2 shadow-[0_18px_44px_rgba(2,6,23,0.5)] sm:p-3">
               <div
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-0 rounded-[1.55rem] opacity-70"
@@ -3005,15 +3021,15 @@ export function GameClient({
                   }}
                 />
 
-                <div className="flex min-h-[3.75rem] items-center justify-center md:min-h-full">
-                  <div className="w-full rounded-2xl border border-slate-800 bg-slate-950/88 px-3 py-2 text-center">
+                <div className="flex min-h-[3.1rem] items-center justify-center md:min-h-full">
+                  <div className="w-full rounded-2xl border border-slate-800 bg-slate-950/88 px-2.5 py-1.5 text-center sm:px-3 sm:py-2">
                     <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-textSecondary">Duel</p>
                     <div className="mt-1 flex items-baseline justify-center gap-2">
-                      <span className="text-2xl font-black tabular-nums text-sky-200 sm:text-3xl">{scores.you}</span>
+                      <span className="text-xl font-black tabular-nums text-sky-200 sm:text-3xl">{scores.you}</span>
                       <span className="text-[10px] font-black uppercase tracking-[0.34em] text-textSecondary sm:text-xs">VS</span>
-                      <span className="text-2xl font-black tabular-nums text-rose-200 sm:text-3xl">{scores.opponent}</span>
+                      <span className="text-xl font-black tabular-nums text-rose-200 sm:text-3xl">{scores.opponent}</span>
                     </div>
-                    <div className="mt-1.5 inline-flex rounded-full border border-slate-800 bg-slate-900/85 px-3 py-1 text-[10px] font-black tracking-[0.24em] text-sky-200 sm:text-xs">
+                    <div className="mt-1 inline-flex rounded-full border border-slate-800 bg-slate-900/85 px-3 py-1 text-[10px] font-black tracking-[0.24em] text-sky-200 sm:mt-1.5 sm:text-xs">
                       {timerLabel}
                     </div>
                   </div>
@@ -3050,9 +3066,9 @@ export function GameClient({
           </div>
 
           {/* Middle: Question zone */}
-          <div className="flex min-h-0 flex-1 flex-col items-stretch justify-center px-3 py-4 sm:px-5">
-            <motion.div animate={animState.questionShakeControls} className="mx-auto w-full max-w-3xl">
-              <div className="relative rounded-[1.5rem] border border-slate-800 bg-slate-900/70 p-4 text-center sm:p-6">
+          <div className="flex min-h-0 flex-1 flex-col items-stretch justify-start px-3 py-3 sm:px-5 sm:py-4 md:justify-center md:py-10">
+            <motion.div animate={animState.questionShakeControls} className="mx-auto w-full max-w-3xl md:max-w-4xl lg:max-w-5xl">
+              <div className="relative rounded-[1.5rem] border border-slate-800 bg-slate-900/70 p-3 text-center sm:p-6 md:p-8">
                 <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-textSecondary">
                   Question
                 </p>
@@ -3061,7 +3077,7 @@ export function GameClient({
                     question={currentQuestionData}
                     fallbackPrompt={currentQuestion}
                     compact
-                    promptClassName="text-xl font-black tracking-tight text-white sm:text-4xl md:text-5xl"
+                    promptClassName="text-xl font-black tracking-tight text-white sm:text-4xl md:text-5xl lg:text-6xl"
                   />
                 </div>
 
@@ -3087,7 +3103,7 @@ export function GameClient({
           {/* Bottom: Sticky action bar */}
           <div className="shrink-0 border-t border-white/10 bg-slate-950/90 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 backdrop-blur sm:px-5">
             <div className="mx-auto w-full max-w-3xl">
-              <div className="mb-2 flex items-center justify-center">
+              <div className="mb-2 flex items-center justify-start sm:justify-center">
                 <EmoteBar
                   emotes={availableEmotes}
                   open={emoteBarOpen && emotesEnabled}
@@ -3100,51 +3116,125 @@ export function GameClient({
               </div>
               <form className="flex w-full flex-col gap-2" onSubmit={handleSubmit}>
                 <WorkingScratchpad />
-                <input
-                  ref={answerInputRef}
-                  type="text"
-                  value={answer}
-                  onChange={(event) => handleAnswerChange(event.target.value)}
-                  placeholder={
-                    isJamActive
-                      ? "Signal jam active - prep your answer..."
-                      : youEliminated
-                        ? "Eliminated"
-                        : feedback.youAnsweredCurrent
-                          ? "Waiting..."
-                          : currentQuestionData?.inputMode === "text"
-                            ? "Type text or symbol answer..."
-                            : "Type answer..."
-                  }
-                  disabled={youEliminated || feedback.youAnsweredCurrent}
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  enterKeyHint="go"
-                  className="neon-input h-12 w-full rounded-2xl px-4 disabled:cursor-not-allowed disabled:opacity-60"
-                />
-
-                <div className="grid grid-cols-2 gap-2">
+                <div className="flex items-stretch gap-2">
+                  <input
+                    ref={answerInputRef}
+                    type="text"
+                    autoFocus
+                    value={answer}
+                    onChange={(event) => handleAnswerChange(event.target.value)}
+                    placeholder={
+                      isJamActive
+                        ? "Signal jam active - prep your answer..."
+                        : youEliminated
+                          ? "Eliminated"
+                          : feedback.youAnsweredCurrent
+                            ? "Waiting..."
+                            : currentQuestionData?.inputMode === "text"
+                              ? "Type text or symbol answer..."
+                              : "Type answer..."
+                    }
+                    disabled={youEliminated || feedback.youAnsweredCurrent}
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    enterKeyHint="go"
+                    className="neon-input h-12 min-w-0 flex-1 rounded-2xl px-4 disabled:cursor-not-allowed disabled:opacity-60"
+                  />
                   <Button
-                    className="h-11 w-full"
+                    className="h-12 w-[7.5rem] shrink-0"
                     type="submit"
                     disabled={!answer.trim() || isJamActive || youEliminated || feedback.youAnsweredCurrent}
                   >
                     Submit
                   </Button>
-                  <UltimateAbilityButton
-                    type={ultimate.type}
-                    ultimateName={ultimate.name}
-                    charge={ultimate.charge}
-                    ready={ultimate.ready}
-                    used={ultimate.used}
-                    implemented={ultimate.implemented}
-                    activating={ultimateActivating}
-                    disabled={!canUseUltimate}
-                    onActivate={handleActivateUltimate}
-                    activationBurstKey={youUltimateActivationKey}
-                    size="compact"
-                  />
+                </div>
+
+                {/* Abilities row: keep things orderly (no empty placeholder box). */}
+                <div className={`grid gap-2 ${POWERUPS_ENABLED ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-2"}`}>
+                  {POWERUPS_ENABLED ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (feedback.youPowerUpAvailable) {
+                          handleUsePowerUp(feedback.youPowerUpAvailable);
+                        }
+                      }}
+                      disabled={
+                        !feedback.youPowerUpAvailable ||
+                        feedback.youPowerUpUsed ||
+                        youEliminated ||
+                        feedback.youAnsweredCurrent
+                      }
+                      className={`h-11 w-full rounded-2xl border px-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
+                        feedback.youPowerUpAvailable && !feedback.youPowerUpUsed
+                          ? "border-sky-300/35 bg-sky-500/10 text-sky-100 hover:border-sky-300/55 active:scale-[0.99]"
+                          : feedback.youPowerUpUsed
+                            ? "border-slate-800 bg-slate-950/50 text-slate-500"
+                            : "border-slate-800 bg-slate-950/40 text-slate-500"
+                      }`}
+                      aria-label="Power-up"
+                    >
+                      {feedback.youPowerUpAvailable ? (
+                        (() => {
+                          const meta = getPowerUpMeta(feedback.youPowerUpAvailable);
+                          return (
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="truncate text-[11px] font-black uppercase tracking-[0.18em]">
+                                  {meta?.icon ?? "✨"} {meta?.name ?? "Power-Up"}
+                                </p>
+                                <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                                  {feedback.youPowerUpUsed ? "Used" : "Ready"}
+                                </p>
+                              </div>
+                              <span className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-300">
+                                Tap
+                              </span>
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[11px] font-black uppercase tracking-[0.18em]">✨ Power-Up</p>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">None</p>
+                        </div>
+                      )}
+                    </button>
+                  ) : null}
+
+                  {/* Mobile: compact, consistent height. Desktop+: bigger + clearer charging/ready. */}
+                  <div className="sm:hidden">
+                    <UltimateAbilityButton
+                      type={ultimate.type}
+                      ultimateName={ultimate.name}
+                      charge={ultimate.charge}
+                      ready={ultimate.ready}
+                      used={ultimate.used}
+                      implemented={ultimate.implemented}
+                      activating={ultimateActivating}
+                      disabled={!canUseUltimate}
+                      onActivate={handleActivateUltimate}
+                      activationBurstKey={youUltimateActivationKey}
+                      size="compact"
+                      className="h-11"
+                    />
+                  </div>
+                  <div className="hidden sm:block">
+                    <UltimateAbilityButton
+                      type={ultimate.type}
+                      ultimateName={ultimate.name}
+                      charge={ultimate.charge}
+                      ready={ultimate.ready}
+                      used={ultimate.used}
+                      implemented={ultimate.implemented}
+                      activating={ultimateActivating}
+                      disabled={!canUseUltimate}
+                      onActivate={handleActivateUltimate}
+                      activationBurstKey={youUltimateActivationKey}
+                      size="regular"
+                    />
+                  </div>
                 </div>
               </form>
             </div>
