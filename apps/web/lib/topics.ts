@@ -17,11 +17,20 @@ export const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 
 export type Difficulty = (typeof DIFFICULTIES)[number];
 
-export const formatTopicLabel = (topic: Topic) =>
-  topic
-    .split("-")
-    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-    .join(" ");
+const TOPIC_LABELS: Record<Topic, string> = {
+  arithmetic: "Lightning Arithmetic",
+  algebra: "Quick Algebra",
+  geometry: "Visual Geometry",
+  fractions: "Fractions and Percents",
+  ratios: "Ratio Tactics",
+  exponents: "Powers and Roots",
+  statistics: "Patterns and Probability",
+  trigonometry: "Angle Battles",
+  functions: "Coordinates and Graphs",
+  calculus: "Advanced Sprint",
+};
+
+export const formatTopicLabel = (topic: Topic) => TOPIC_LABELS[topic] ?? topic;
 
 export const isTopic = (value?: string): value is Topic =>
   value !== undefined && (TOPICS as readonly string[]).includes(value);

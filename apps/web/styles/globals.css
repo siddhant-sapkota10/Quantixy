@@ -4,6 +4,20 @@
 
 :root {
   color-scheme: dark;
+  --q-bg: #0a0f1c;
+  --q-bg-soft: #101734;
+  --q-panel: rgba(12, 19, 41, 0.76);
+  --q-panel-strong: rgba(12, 19, 41, 0.9);
+  --q-text: #f5f9ff;
+  --q-text-soft: #8fa4c5;
+  --q-blue: #00d4ff;
+  --q-purple: #8a2eff;
+  --q-gradient: linear-gradient(120deg, #00d4ff 0%, #8a2eff 100%);
+  --q-border: rgba(126, 156, 255, 0.24);
+  --q-border-strong: rgba(145, 170, 255, 0.4);
+  --q-glow-sm: 0 0 0 1px rgba(85, 121, 255, 0.22), 0 10px 28px rgba(3, 8, 22, 0.56);
+  --q-glow-md: 0 0 0 1px rgba(95, 130, 255, 0.34), 0 20px 60px rgba(4, 8, 20, 0.76), 0 0 28px rgba(0, 212, 255, 0.2);
+  --q-glow-lg: 0 0 0 1px rgba(112, 145, 255, 0.44), 0 28px 90px rgba(3, 7, 18, 0.84), 0 0 42px rgba(138, 46, 255, 0.23);
 }
 
 * {
@@ -19,9 +33,24 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   background:
-    radial-gradient(circle at top, rgba(56, 189, 248, 0.08), transparent 28%),
-    #0f172a;
-  color: #e2e8f0;
+    radial-gradient(circle at 20% -10%, rgba(0, 212, 255, 0.16), transparent 33%),
+    radial-gradient(circle at 80% -10%, rgba(138, 46, 255, 0.14), transparent 30%),
+    linear-gradient(180deg, #0b1228 0%, #070b18 100%);
+  color: var(--q-text);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(105, 130, 198, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(105, 130, 198, 0.08) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(circle at center, black 18%, rgba(0, 0, 0, 0.62) 72%, transparent 100%);
+  opacity: 0.35;
+  z-index: -1;
 }
 
 a {
@@ -33,4 +62,60 @@ input,
 select,
 button {
   font: inherit;
+}
+
+::selection {
+  background: rgba(0, 212, 255, 0.35);
+  color: #ffffff;
+}
+
+@layer components {
+  .neon-panel {
+    border: 1px solid var(--q-border);
+    background: linear-gradient(160deg, rgba(16, 27, 58, 0.9), var(--q-panel));
+    box-shadow: var(--q-glow-md);
+    backdrop-filter: blur(12px);
+  }
+
+  .neon-panel-strong {
+    border: 1px solid var(--q-border-strong);
+    background: linear-gradient(160deg, rgba(16, 27, 58, 0.96), var(--q-panel-strong));
+    box-shadow: var(--q-glow-lg);
+    backdrop-filter: blur(14px);
+  }
+
+  .neon-panel-soft {
+    border: 1px solid rgba(118, 146, 220, 0.22);
+    background: linear-gradient(165deg, rgba(13, 20, 42, 0.84), rgba(9, 15, 32, 0.78));
+    box-shadow: var(--q-glow-sm);
+    backdrop-filter: blur(10px);
+  }
+
+  .neon-input {
+    border: 1px solid rgba(125, 153, 236, 0.4);
+    background: rgba(8, 13, 30, 0.84);
+    color: var(--q-text);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), 0 10px 24px rgba(2, 5, 16, 0.48);
+    transition: border-color 180ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1), background-color 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .neon-input::placeholder {
+    color: rgba(153, 174, 214, 0.68);
+  }
+
+  .neon-input:focus {
+    border-color: rgba(0, 212, 255, 0.86);
+    box-shadow:
+      0 0 0 2px rgba(0, 212, 255, 0.26),
+      0 0 24px rgba(0, 212, 255, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    outline: none;
+  }
+
+  .neon-badge {
+    border: 1px solid rgba(137, 165, 255, 0.36);
+    background: linear-gradient(140deg, rgba(0, 212, 255, 0.14), rgba(138, 46, 255, 0.16));
+    color: #d9ecff;
+    box-shadow: 0 6px 20px rgba(13, 16, 40, 0.55);
+  }
 }

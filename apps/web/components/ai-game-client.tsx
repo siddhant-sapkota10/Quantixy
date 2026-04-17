@@ -15,6 +15,14 @@ import { CountdownDisplay } from "@/components/animations/CountdownDisplay";
 import { GameOverOverlay } from "@/components/animations/GameOverOverlay";
 import { generateQuestion, getAiProfile } from "@/lib/ai-game-engine";
 import { getSupabaseClient } from "@/lib/supabase";
+import { QuestionContent } from "@/components/question-content";
+import type { DuelQuestion } from "@/lib/question-model";
+import { WorkingScratchpad } from "@/components/working-scratchpad";
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const {
+  isCorrectAnswer: isSharedCorrectAnswer,
+  getMatchDurationSeconds: getSharedMatchDurationSeconds
+} = require("../../../packages/shared/question-engine");
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,7 +53,6 @@ const initialFeedback: FeedbackState = {
 // ---------------------------------------------------------------------------
 const BOT_AVATAR = "🤖";
 const BOT_NAME = "MathBot";
-const GAME_DURATION_S = 60;
 const FINAL_PHASE_SECONDS = 10;
 const CLUTCH_SECONDS = 3;
 const CLOSE_SCORE_DELTA = 2;
@@ -63,6 +70,7 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
   const router = useRouter();
   const topic = getSafeTopic(initialTopic);
   const difficulty = getSafeDifficulty(initialDifficulty);
+  const matchDurationSeconds = Number(getSharedMatchDurationSeconds(topic, difficulty) ?? 60);
   const topicLabel = formatTopicLabel(topic);
   const difficultyLabel = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
 
@@ -75,9 +83,10 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
   const [scores, setScores] = useState<ScoreState>(initialScores);
   const [strikes, setStrikes] = useState<StrikeState>(initialStrikes);
   const [eliminated, setEliminated] = useState({ you: false, opponent: false });
-  const [secondsLeft, setSecondsLeft] = useState(GAME_DURATION_S);
+  const [secondsLeft, setSecondsLeft] = useState(matchDurationSeconds);
   const [feedback, setFeedback] = useState<FeedbackState>(initialFeedback);
   const [currentQuestion, setCurrentQuestion] = useState("");
+  const [currentQuestionData, setCurrentQuestionData] = useState<DuelQuestion | null>(null);
   const [answer, setAnswer] = useState("");
   const [countdownValue, setCountdownValue] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
@@ -98,12 +107,13 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
   const eliminatedRef = useRef({ you: false, opponent: false });
   const feedbackRef = useRef<FeedbackState>(initialFeedback);
   const currentAnswerRef = useRef(""); // correct answer for the current question
+  const currentQuestionDataRef = useRef<DuelQuestion | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const aiTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownStepTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownLaunchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isRunningRef = useRef(false);
-  const secondsRef = useRef(GAME_DURATION_S);
+  const secondsRef = useRef(matchDurationSeconds);
   const finalPhaseTriggeredRef = useRef(false);
   const finalSecondTickRef = useRef<number | null>(null);
   // Incremented on every cleanup — any in-flight countdown from a prior run checks this
@@ -210,70 +220,75 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
   }, [clearTimers]);
 
   // ---------------------------------------------------------------------------
-  // Generate next question + schedule AI attempts
+  // Independent question progression:
+  // - Your correct answer advances ONLY your question.
+  // - AI scores advance ONLY AI internally (no player prompt change).
   // ---------------------------------------------------------------------------
-  const scheduleNextQuestion = useCallback(() => {
+  const spawnPlayerQuestion = useCallback(() => {
     if (statusRef.current !== "playing") return;
-    if (eliminatedRef.current.you || eliminatedRef.current.opponent) return;
+    if (eliminatedRef.current.you) return;
 
-    const { question, answer: correctAnswer } = generateQuestion(topic, difficulty);
+    const { question, answer: correctAnswer, questionData } = generateQuestion(topic, difficulty);
     currentAnswerRef.current = correctAnswer;
+    currentQuestionDataRef.current = questionData;
     setCurrentQuestion(question);
+    setCurrentQuestionData(questionData);
     setAnswer("");
+  }, [difficulty, topic]);
 
-    const scheduleAiAttempt = () => {
+  const scheduleAiAttempt = useCallback(() => {
+    if (statusRef.current !== "playing") return;
+    if (eliminatedRef.current.opponent) return;
+
+    const profile = getAiProfile(difficulty);
+    const delay = profile.minMs + Math.random() * (profile.maxMs - profile.minMs);
+
+    if (aiTimeoutRef.current) clearTimeout(aiTimeoutRef.current);
+
+    aiTimeoutRef.current = setTimeout(() => {
       if (statusRef.current !== "playing") return;
       if (eliminatedRef.current.opponent) return;
 
-      const profile = getAiProfile(difficulty);
-      const delay = profile.minMs + Math.random() * (profile.maxMs - profile.minMs);
+      // AI gets its own independent generated question (not rendered to player).
+      generateQuestion(topic, difficulty);
       const willScore = Math.random() < profile.accuracy;
 
-      if (aiTimeoutRef.current) clearTimeout(aiTimeoutRef.current);
+      if (willScore) {
+        triggerScoreGlow("opponent");
+        triggerEndgameScoreImpact("opponent");
+        const prev = feedbackRef.current;
+        const newStreak = prev.opponentStreak + 1;
 
-      aiTimeoutRef.current = setTimeout(() => {
-        if (statusRef.current !== "playing") return;
-        if (eliminatedRef.current.opponent) return;
+        setScores((s) => ({ ...s, opponent: s.opponent + 1 }));
+        setFeedback((f) => ({
+          ...f,
+          opponentStreak: newStreak,
+          opponentPulseKey: f.opponentPulseKey + 1,
+        }));
 
-        if (willScore) {
-          triggerScoreGlow("opponent");
-          triggerEndgameScoreImpact("opponent");
-          const prev = feedbackRef.current;
-          const newStreak = prev.opponentStreak + 1;
-
-          setScores((s) => ({ ...s, opponent: s.opponent + 1 }));
-          setFeedback((f) => ({
-            ...f,
-            opponentStreak: newStreak,
-            opponentPulseKey: f.opponentPulseKey + 1,
-          }));
-
-          if (newStreak >= 3 && newStreak > prev.opponentStreak) {
-            soundManager.play("streak");
-          } else {
-            soundManager.play("correct");
-          }
-
-          scheduleNextQuestion();
-          return;
+        if (newStreak >= 3 && newStreak > prev.opponentStreak) {
+          soundManager.play("streak");
+        } else {
+          soundManager.play("correct");
         }
 
-        setFeedback((f) => ({ ...f, opponentStreak: 0 }));
-        setStrikes((previous) => {
-          const next = { ...previous, opponent: previous.opponent + 1 };
-          if (next.opponent >= 3) {
-            setEliminated((current) => ({ ...current, opponent: true }));
-          } else {
-            scheduleAiAttempt();
-          }
-          return next;
-        });
-      }, delay);
-    };
+        scheduleAiAttempt();
+        return;
+      }
 
-    scheduleAiAttempt();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topic, difficulty]);
+      setFeedback((f) => ({ ...f, opponentStreak: 0 }));
+      setStrikes((previous) => {
+        const next = { ...previous, opponent: previous.opponent + 1 };
+        if (next.opponent >= 3) {
+          setEliminated((current) => ({ ...current, opponent: true }));
+        } else {
+          scheduleAiAttempt();
+        }
+        return next;
+      });
+    }, delay);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [difficulty, topic, triggerEndgameScoreImpact, triggerScoreGlow]);
 
   // ---------------------------------------------------------------------------
   // Start countdown then game
@@ -295,6 +310,8 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
     setFeedback(initialFeedback);
     feedbackRef.current = initialFeedback;
     setCurrentQuestion("");
+    setCurrentQuestionData(null);
+    currentQuestionDataRef.current = null;
     setAnswer("");
     setGameResult(null);
     setIsFinalPhase(false);
@@ -302,8 +319,8 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
     setClutchMoment({ key: 0, side: null });
     finalPhaseTriggeredRef.current = false;
     finalSecondTickRef.current = null;
-    secondsRef.current = GAME_DURATION_S;
-    setSecondsLeft(GAME_DURATION_S);
+    secondsRef.current = matchDurationSeconds;
+    setSecondsLeft(matchDurationSeconds);
     clearTimers();
 
     const steps: Array<{ value: string; sound: "tick" | "go" }> = [
@@ -346,13 +363,14 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
             }
           }, 1000);
 
-          scheduleNextQuestion();
+          spawnPlayerQuestion();
+          scheduleAiAttempt();
         }, 700);
       }
     };
 
     countdownStepTimeoutRef.current = setTimeout(tick, 400);
-  }, [clearTimers, finishGame, scheduleNextQuestion]);
+  }, [clearTimers, finishGame, matchDurationSeconds, scheduleAiAttempt, spawnPlayerQuestion]);
 
   // Kick off on first render (and on rematch via gameKey)
   useEffect(() => {
@@ -405,12 +423,11 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
     const trimmed = answer.trim();
     if (!trimmed || status !== "playing" || eliminatedRef.current.you) return;
 
-    const correct = trimmed.toLowerCase() === currentAnswerRef.current.toLowerCase();
+    const correct = currentQuestionDataRef.current
+      ? Boolean(isSharedCorrectAnswer(trimmed, currentQuestionDataRef.current))
+      : trimmed.toLowerCase() === currentAnswerRef.current.toLowerCase();
 
     if (correct) {
-      // Cancel AI timeout — player answered first
-      if (aiTimeoutRef.current) { clearTimeout(aiTimeoutRef.current); aiTimeoutRef.current = null; }
-
       triggerScoreGlow("you");
       triggerEndgameScoreImpact("you");
       const prev = feedbackRef.current;
@@ -429,7 +446,7 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
         soundManager.play("correct");
       }
 
-      scheduleNextQuestion();
+      spawnPlayerQuestion();
     } else {
       soundManager.play("wrong");
       if (feedbackRef.current.youStreak >= 2) triggerStreakBroken();
@@ -481,7 +498,7 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
   // Render
   // ---------------------------------------------------------------------------
   return (
-    <section className="relative w-full max-w-4xl rounded-[2rem] border border-white/10 bg-slate-950/70 p-4 shadow-glow backdrop-blur sm:p-6 md:p-10">
+    <section className="neon-panel-strong relative w-full max-w-4xl rounded-[2rem] p-4 sm:p-6 md:p-10">
       <GameOverOverlay result={isFinished ? (gameResult?.result ?? null) : null} />
       <motion.div
         aria-hidden="true"
@@ -551,18 +568,18 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
       <div className="relative z-10 flex flex-col gap-5 sm:gap-6 md:gap-8">
         {/* Header */}
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.25em] text-sky-300">
+          <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.25em] text-cyan-200">
             <span>Topic: {topicLabel}</span>
             <span>Difficulty: {difficultyLabel}</span>
             <span className={showFinalPhase ? "text-rose-300" : undefined}>Time: {timerLabel}</span>
-            <span className="rounded-full border border-violet-400/30 bg-violet-500/10 px-2 py-0.5 text-violet-300">
+            <span className="rounded-full border border-purple-300/40 bg-purple-500/12 px-2 py-0.5 text-purple-200">
               vs AI
             </span>
           </div>
           <h1 className="text-2xl font-black tracking-tight text-white sm:text-3xl md:text-4xl lg:text-5xl">
             {isCountdown ? "Match Starting" : isPlaying ? "In Game" : "Game Over"}
           </h1>
-          <p className="text-sm text-slate-300 sm:text-base">
+          <p className="text-sm text-textSecondary sm:text-base">
             {isCountdown
               ? "Get ready. The round starts in a moment."
               : isPlaying
@@ -572,7 +589,7 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
         </div>
 
         {/* Player panels */}
-        <div className="grid gap-3 rounded-3xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4 md:grid-cols-[1fr_auto_1fr] md:items-end md:gap-4 md:p-6">
+        <div className="neon-panel-soft grid gap-3 rounded-3xl p-3 sm:p-4 md:grid-cols-[1fr_auto_1fr] md:items-end md:gap-4 md:p-6">
           {/* You */}
           <div className="relative flex flex-col gap-2 sm:gap-3">
             <PlayerPanel
@@ -606,7 +623,7 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
             <FloatingLabel items={youFloatingItems} />
           </div>
 
-          <div className="flex items-center justify-center self-center text-xs font-semibold uppercase tracking-[0.35em] text-slate-500 sm:text-sm">
+          <div className="flex items-center justify-center self-center text-xs font-semibold uppercase tracking-[0.35em] text-textSecondary sm:text-sm">
             vs
           </div>
 
@@ -647,13 +664,13 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
         {/* Question card / countdown / game-over panel */}
         {!isFinished ? (
           <>
-            <div className="relative rounded-[1.75rem] border border-slate-800 bg-slate-900/80 p-4 text-center sm:p-6">
+            <div className="neon-panel relative rounded-[1.75rem] p-4 text-center sm:p-6">
               {isPlaying && (
                 <motion.div
                   className={`absolute right-3 top-3 rounded-full border px-2 py-1 text-sm font-black tracking-[0.15em] sm:right-5 sm:top-5 sm:px-4 sm:py-2 sm:text-lg sm:tracking-[0.2em] ${
                     showFinalPhase
                       ? "border-rose-400/70 bg-rose-950/70 text-rose-100 shadow-[0_0_18px_rgba(248,113,113,0.35)]"
-                      : "border-slate-700 bg-slate-950/80 text-sky-200"
+                        : "border-indigo-300/30 bg-slate-950/82 text-cyan-100"
                   }`}
                   animate={
                     showFinalPhase
@@ -673,39 +690,51 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
                 </motion.div>
               )}
 
-              <p className={`text-sm uppercase tracking-[0.3em] text-slate-500 ${isPlaying ? "pr-14 sm:pr-0" : ""}`}>
+              <p className={`text-sm uppercase tracking-[0.3em] text-textSecondary ${isPlaying ? "pr-14 sm:pr-0" : ""}`}>
                 {isCountdown ? "Countdown" : "Current Question"}
               </p>
 
               {isCountdown ? (
                 <CountdownDisplay value={countdownValue} />
               ) : (
-                <p className="mt-3 text-xl font-black tracking-tight text-white sm:mt-4 sm:text-3xl md:text-5xl">
-                  {currentQuestion}
-                </p>
+                <div className="mt-3 sm:mt-4">
+                  <QuestionContent
+                    question={currentQuestionData}
+                    fallbackPrompt={currentQuestion}
+                    compact
+                    promptClassName="text-xl font-black tracking-tight text-white sm:text-3xl md:text-5xl"
+                  />
+                </div>
               )}
             </div>
 
             {isPlaying && (
               <form className="space-y-3" onSubmit={handleSubmit}>
+                <WorkingScratchpad />
                 <label className="block space-y-2">
-                  <span className="text-sm font-medium uppercase tracking-[0.2em] text-slate-400">
+                  <span className="text-sm font-medium uppercase tracking-[0.2em] text-textSecondary">
                     Your Answer
                   </span>
                   <input
                     type="text"
                     value={answer}
                     onChange={(e) => setAnswer(e.target.value)}
-                    placeholder={youEliminated ? "Eliminated" : "Type your answer and press Enter"}
+                    placeholder={
+                      youEliminated
+                        ? "Eliminated"
+                        : currentQuestionData?.inputMode === "text"
+                          ? "Type text or symbol answer"
+                          : "Type your answer and press Enter"
+                    }
                     autoComplete="off"
                     disabled={youEliminated}
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-900/80 px-4 py-4 text-slate-100 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/35 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="neon-input w-full rounded-2xl px-4 py-4 disabled:cursor-not-allowed disabled:opacity-60"
                   />
                 </label>
                 <Button className="w-full" type="submit" disabled={!answer.trim() || youEliminated}>
                   Submit Answer
                 </Button>
-                <p className="text-center text-xs uppercase tracking-[0.2em] text-slate-400">
+                <p className="text-center text-xs uppercase tracking-[0.2em] text-textSecondary">
                   Strikes: {strikes.you}/3
                 </p>
                 {youEliminated ? (

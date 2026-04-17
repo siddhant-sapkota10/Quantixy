@@ -276,7 +276,7 @@ function AuthModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm sm:px-6">
-      <div className="w-full max-w-lg rounded-[2rem] border border-white/10 bg-slate-950/95 p-5 shadow-glow max-h-[90dvh] overflow-y-auto sm:p-6 md:p-8">
+      <div className="w-full max-w-lg rounded-[2rem] neon-panel-strong p-5 max-h-[90dvh] overflow-y-auto sm:p-6 md:p-8">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm uppercase tracking-[0.2em] text-slate-400">Authentication</p>
@@ -382,7 +382,7 @@ function AuthModal({
                     setAuthError(null);
                   }}
                   placeholder="Choose a display name"
-                  className="w-full rounded-2xl border border-slate-700 bg-slate-900/80 px-4 py-3 text-slate-100 shadow-glow outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/35"
+                  className="w-full neon-input rounded-2xl px-4 py-3"
                 />
               </>
             ) : null}
@@ -398,7 +398,7 @@ function AuthModal({
                 setAuthError(null);
               }}
               placeholder="you@example.com"
-              className="w-full rounded-2xl border border-slate-700 bg-slate-900/80 px-4 py-3 text-slate-100 shadow-glow outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/35"
+              className="w-full neon-input rounded-2xl px-4 py-3"
             />
             {!forgotOpen ? (
               <>
@@ -413,7 +413,7 @@ function AuthModal({
                     setAuthError(null);
                   }}
                   placeholder={authMode === "signup" ? "Create a password" : "Enter your password"}
-                  className="w-full rounded-2xl border border-slate-700 bg-slate-900/80 px-4 py-3 text-slate-100 shadow-glow outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/35"
+                  className="w-full neon-input rounded-2xl px-4 py-3"
                 />
               </>
             ) : null}
@@ -662,7 +662,7 @@ export function HomeHero() {
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, ease: "easeOut" }}
-        className="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-slate-950/70 p-5 shadow-glow backdrop-blur sm:p-8 md:p-12"
+        className="w-full max-w-2xl rounded-[2rem] neon-panel-strong p-5 sm:p-8 md:p-12"
       >
         <div className="space-y-3 text-center sm:space-y-4">
           <span className="inline-flex rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-sky-200">
@@ -976,3 +976,4 @@ export function HomeHero() {
     </>
   );
 }
+

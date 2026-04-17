@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import { useMemo } from "react";
-import { getAvatar, normalizeAvatarId, type AvatarId } from "@/lib/avatars";
-import { normalizeUltimateType, ULTIMATE_VFX, type UltimateType } from "@/lib/ultimate-vfx";
+import { getAvatar, type AvatarId } from "@/lib/avatars";
+import { ULTIMATE_VFX, type UltimateType } from "@/lib/ultimate-vfx";
 
 type Side = "you" | "opponent";
 
@@ -24,6 +24,13 @@ export type MatchChampionCardModel = {
   fortressBlocksRemaining?: number;
   infernoPending?: boolean;
   infernoPendingUntil?: number;
+};
+
+type MatchChampionCardProps = {
+  model: MatchChampionCardModel;
+  variant?: "compact" | "battle";
+  hp?: number;
+  maxHp?: number;
 };
 
 const THEME: Record<AvatarId, { ring: string; glow: string; readyGlow: string; chip: string }> = {
@@ -57,16 +64,12 @@ function portraitSrc(avatarId: AvatarId) {
   return `/assets/avatarCards/${avatarId}.png`;
 }
 
-function clamp01(n: number) {
-  return Math.max(0, Math.min(1, n));
-}
-
 function secondsLeft(until: number, now: number) {
   if (!until || until <= now) return 0;
   return Math.max(0, Math.ceil((until - now) / 100) / 10); // 0.1s precision
 }
 
-export function MatchChampionCard({ model }: { model: MatchChampionCardModel }) {
+export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 }: MatchChampionCardProps) {
   const now = Date.now();
   const avatar = useMemo(() => getAvatar(model.avatarId), [model.avatarId]);
   const theme = THEME[model.avatarId];
@@ -79,13 +82,13 @@ export function MatchChampionCard({ model }: { model: MatchChampionCardModel }) 
   const isArmedInferno = Boolean(model.infernoPending) && (model.infernoPendingUntil ?? 0) > now;
 
   const activeLabel = isActiveRapid
-    ? `ACTIVE · ${secondsLeft(model.overclockUntil ?? 0, now)}s`
+    ? `ACTIVE - ${secondsLeft(model.overclockUntil ?? 0, now)}s`
     : isActiveJam
-      ? `JAMMED · ${secondsLeft(model.blackoutUntil ?? 0, now)}s`
+      ? `JAMMED - ${secondsLeft(model.blackoutUntil ?? 0, now)}s`
       : isActiveFortress
-        ? `FORTRESS · ${secondsLeft(model.fortressUntil ?? 0, now)}s · ${fortressBlocks} BLOCKS`
+        ? `FORTRESS - ${secondsLeft(model.fortressUntil ?? 0, now)}s - ${fortressBlocks} BLOCKS`
         : isArmedInferno
-          ? `ARMED · ${secondsLeft(model.infernoPendingUntil ?? 0, now)}s`
+          ? `ARMED - ${secondsLeft(model.infernoPendingUntil ?? 0, now)}s`
           : null;
 
   const ready = model.ready && !model.used && model.implemented;
@@ -94,6 +97,130 @@ export function MatchChampionCard({ model }: { model: MatchChampionCardModel }) 
 
   const chargePct = Math.max(0, Math.min(100, model.charge));
   const showReadyPulse = ready;
+  const hpMax = Math.max(1, maxHp ?? 100);
+  const hpSafe = typeof hp === "number" ? Math.max(0, Math.min(hpMax, hp)) : null;
+  const hpPct = hpSafe === null ? null : Math.max(0, Math.min(100, (hpSafe / hpMax) * 100));
+  const hpColor =
+    hpPct === null
+      ? "bg-slate-500/60"
+      : hpPct > 60
+        ? "bg-emerald-400"
+        : hpPct > 30
+          ? "bg-amber-400"
+          : "bg-rose-500";
+  const isOpponent = model.side === "opponent";
+
+  if (variant === "battle") {
+    return (
+      <div
+        className={`relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/78 p-3 sm:p-3.5 ${
+          theme.glow
+        } ${showReadyPulse ? theme.readyGlow : ""}`}
+      >
+        <div
+          className="pointer-events-none absolute inset-0 opacity-85"
+          style={{
+            background: isOpponent
+              ? "linear-gradient(110deg, rgba(251,113,133,0.12) 0%, rgba(15,23,42,0.2) 40%, rgba(251,113,133,0.04) 100%)"
+              : "linear-gradient(250deg, rgba(56,189,248,0.12) 0%, rgba(15,23,42,0.2) 40%, rgba(56,189,248,0.04) 100%)",
+          }}
+        />
+        <div className="pointer-events-none absolute inset-0 opacity-50" style={{ background: vfx.tint }} />
+
+        {showReadyPulse ? (
+          <div className={`pointer-events-none absolute inset-[-5px] rounded-[1.6rem] ring-1 ${theme.ring}`} />
+        ) : null}
+
+        <div
+          className={`relative grid items-stretch gap-3 ${
+            isOpponent
+              ? "grid-cols-[5.75rem_minmax(0,1fr)] sm:grid-cols-[6.75rem_minmax(0,1fr)]"
+              : "grid-cols-[minmax(0,1fr)_5.75rem] sm:grid-cols-[minmax(0,1fr)_6.75rem]"
+          }`}
+        >
+          <div className={`min-w-0 ${isOpponent ? "order-2 text-right" : "order-1 text-left"}`}>
+            <p className="truncate text-[0.95rem] font-black uppercase tracking-[0.06em] text-white sm:text-[1.02rem]">
+              {avatar.name}
+            </p>
+            <p className="mt-0.5 truncate text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+              {model.playerName}
+            </p>
+
+            <div className={`mt-2 flex items-center gap-2 ${isOpponent ? "justify-end" : "justify-start"}`}>
+              <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ${theme.chip}`}>
+                {ultChip}
+              </span>
+              {activeLabel ? (
+                <span className="truncate text-[9px] font-bold uppercase tracking-[0.18em] text-slate-300">
+                  {activeLabel}
+                </span>
+              ) : null}
+            </div>
+
+            <p className="mt-2 truncate text-[11px] text-slate-200">
+              <span className="font-semibold uppercase tracking-[0.16em] text-slate-400">Ultimate</span>{" "}
+              <span className="font-semibold">{model.ultimateName}</span>
+            </p>
+
+            <div className="mt-2.5">
+              <div className={`mb-1 flex items-center justify-between text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500`}>
+                <span>Charge</span>
+                <span className="tabular-nums text-slate-300">{Math.round(model.charge)}%</span>
+              </div>
+              <div className="h-2.5 overflow-hidden rounded-full bg-slate-800/90">
+                <div
+                  className="h-full rounded-full transition-all duration-200"
+                  style={{
+                    width: `${chargePct}%`,
+                    background: ready ? vfx.accent : "rgba(148,163,184,0.58)",
+                    boxShadow: ready ? `0 0 12px ${vfx.glow}` : "none",
+                  }}
+                />
+              </div>
+            </div>
+
+            {hpPct !== null ? (
+              <div className="mt-2.5">
+                <div className="mb-1 flex items-center justify-between text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                  <span>HP</span>
+                  <span className="tabular-nums text-slate-200">{Math.round(hpSafe ?? 0)}</span>
+                </div>
+                <div className="h-2.5 overflow-hidden rounded-full bg-slate-800/90">
+                  <div className={`h-full rounded-full transition-all duration-300 ${hpColor}`} style={{ width: `${hpPct}%` }} />
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className={`${isOpponent ? "order-1" : "order-2"} flex items-center justify-center`}>
+            <div className={`relative w-full max-w-[6.75rem] overflow-hidden rounded-[1.1rem] border border-white/15 bg-slate-900/80 shadow-[0_16px_36px_rgba(2,6,23,0.55)] ring-1 ${theme.ring}`}>
+              <div className="absolute inset-0 bg-gradient-to-b from-white/6 via-transparent to-slate-950/45" />
+              <div className="relative aspect-[3/4]">
+                <Image
+                  src={portraitSrc(model.avatarId)}
+                  alt={`${avatar.name} portrait`}
+                  fill
+                  className="object-cover object-top"
+                  sizes="(max-width: 640px) 96px, 120px"
+                  priority={false}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {model.avatarId === "shadow" && (isActiveJam || ready) ? (
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] opacity-80"
+            style={{
+              background:
+                "linear-gradient(90deg, transparent 0%, rgba(167,139,250,0.9) 35%, rgba(56,189,248,0.35) 55%, transparent 100%)",
+            }}
+          />
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -188,4 +315,3 @@ export function MatchChampionCard({ model }: { model: MatchChampionCardModel }) 
     </div>
   );
 }
-
