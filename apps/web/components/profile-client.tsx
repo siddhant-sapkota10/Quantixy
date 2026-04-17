@@ -326,16 +326,17 @@ export function ProfileClient() {
 
         const supabase = getSupabaseClient();
         const {
-          data: { user },
-          error: userError
-        } = await supabase.auth.getUser();
+          data: { session },
+          error: sessionError
+        } = await supabase.auth.getSession();
 
-        if (userError) {
-          console.warn("[profile] auth.getUser failed, redirecting home", userError);
+        if (sessionError) {
+          console.warn("[profile] auth.getSession failed, redirecting home", sessionError);
           router.push("/");
           return;
         }
 
+        const user = session?.user ?? null;
         if (!user) {
           router.push("/");
           return;
@@ -348,14 +349,14 @@ export function ProfileClient() {
         setDisplayNameInput(fallbackData.displayName ?? fallbackData.username ?? "");
 
         const {
-          data: { session }
+          data: { session: authSession }
         } = await supabase.auth.getSession();
         const socketUrl = process.env.NEXT_PUBLIC_SERVER_URL;
 
-        if (!socketUrl || !session?.access_token) {
+        if (!socketUrl || !authSession?.access_token) {
           console.warn("[profile] skipping backend profile enrichment", {
             hasSocketUrl: Boolean(socketUrl),
-            hasAccessToken: Boolean(session?.access_token)
+            hasAccessToken: Boolean(authSession?.access_token)
           });
           setWarning("Profile loaded, but recent opponent details are unavailable right now.");
           return;
@@ -373,7 +374,7 @@ export function ProfileClient() {
           response = await fetch(profileUrl, {
             method: "GET",
             headers: {
-              Authorization: `Bearer ${session.access_token}`
+              Authorization: `Bearer ${authSession.access_token}`
             },
             signal: controller.signal,
             cache: "no-store"
