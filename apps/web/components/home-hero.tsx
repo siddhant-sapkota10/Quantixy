@@ -53,6 +53,7 @@ function AuthModal({
   initialDisplayName: string;
   onClose: () => void;
 }) {
+  const router = useRouter();
   const { user, loading } = useSupabaseAuth();
   const [authMode, setAuthMode] = useState<AuthMode>(mode);
   const [email, setEmail] = useState("");
@@ -104,7 +105,7 @@ function AuthModal({
       setAuthMessage(null);
       setDebugErrorDetail(null);
       await prepareForAccountAuth();
-      const { error } = await signInWithGoogle();
+      const { error } = await signInWithGoogle("/profile?onboarding=display_name");
 
       if (error) {
         throw error;
@@ -179,6 +180,8 @@ function AuthModal({
 
         setPendingVerificationEmail(null);
         setAuthMessage("Account created. You're signed in and ready to play.");
+        onClose();
+        router.push("/profile?onboarding=display_name");
         return;
       }
 
@@ -206,6 +209,8 @@ function AuthModal({
       }
 
       setAuthMessage("Logged in successfully.");
+      onClose();
+      router.push("/profile?onboarding=display_name");
     } catch (error) {
       setDebugErrorDetail(error instanceof Error ? error.message : null);
       setAuthError(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/button";
 import { ProfileCharacterSelector } from "@/components/profile-character-selector";
@@ -294,6 +294,7 @@ export function ProfileClient() {
   const [displayNameInput, setDisplayNameInput] = useState("");
   const [savingDisplayName, setSavingDisplayName] = useState(false);
   const [displayNameError, setDisplayNameError] = useState<string | null>(null);
+  const displayNameInputRef = useRef<HTMLInputElement | null>(null);
   const [savingAvatarId, setSavingAvatarId] = useState<AvatarId | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [previewAvatarId, setPreviewAvatarId] = useState<AvatarId>(DEFAULT_AVATAR_ID);
@@ -440,6 +441,23 @@ export function ProfileClient() {
       controller.abort();
     };
   }, [router]);
+
+  useEffect(() => {
+    if (!authUserId || loading || !data) return;
+    if (typeof window === "undefined") return;
+
+    const params = new URLSearchParams(window.location.search);
+    const onboarding = params.get("onboarding");
+    if (onboarding !== "display_name") return;
+
+    // Nudge user to pick a name immediately after OAuth/email signup/login.
+    setWarning("Pick a display name to finish setting up your account.");
+
+    window.setTimeout(() => {
+      displayNameInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      displayNameInputRef.current?.focus();
+    }, 50);
+  }, [authUserId, data, loading]);
 
   // Post-purchase UX: confirm session, refresh ownership instantly, then show premium unlock modal.
   useEffect(() => {
@@ -876,6 +894,7 @@ export function ProfileClient() {
                 type="text"
                 value={displayNameInput}
                 maxLength={16}
+                ref={displayNameInputRef}
                 onChange={(event) => {
                   setDisplayNameInput(sanitizeDisplayName(event.target.value));
                   setDisplayNameError(null);

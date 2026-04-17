@@ -93,7 +93,17 @@ export function ProfileCharacterSelector({
   const showPremiumCta = isPremiumLocked && (previewAvatar.id === "architect" || previewAvatar.id === "titan");
 
   return (
-    <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-4 sm:p-6">
+    <div
+      className="rounded-3xl border border-slate-800 bg-slate-900/70 p-4 sm:p-6"
+      onMouseLeave={() => {
+        onPreviewChange(selectedId);
+      }}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          onPreviewChange(selectedId);
+        }
+      }}
+    >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-2">
           <span className="inline-flex rounded-full border border-white/10 bg-slate-950/40 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-300">
@@ -257,18 +267,6 @@ export function ProfileCharacterSelector({
         {/* Compact selector */}
         <div
           className="rounded-[1.8rem] border border-slate-800 bg-slate-950/40 p-3 sm:p-4"
-          onMouseLeave={() => {
-            // Don't auto-reset while previewing a locked premium avatar;
-            // users need to move from the list to the Buy CTA.
-            if (isPremiumLocked) return;
-            onPreviewChange(selectedId);
-          }}
-          onBlur={(event) => {
-            if (isPremiumLocked) return;
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-              onPreviewChange(selectedId);
-            }
-          }}
         >
           <p className="px-2 pb-2 text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">
             Select Character
