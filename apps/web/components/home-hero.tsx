@@ -177,7 +177,8 @@ function AuthModal({
       setAuthMessage(null);
       setDebugErrorDetail(null);
       await prepareForAccountAuth();
-      const { error } = await signInWithGoogle("/?onboarding=display_name");
+      // Only force display-name onboarding if it's actually missing.
+      const { error } = await signInWithGoogle("/");
 
       if (error) {
         throw error;
@@ -253,7 +254,7 @@ function AuthModal({
         setPendingVerificationEmail(null);
         setAuthMessage("Account created. You're signed in and ready to play.");
         onClose();
-        router.push("/?onboarding=display_name");
+        router.push("/");
         return;
       }
 
@@ -282,7 +283,7 @@ function AuthModal({
 
       setAuthMessage("Logged in successfully.");
       onClose();
-      router.push("/?onboarding=display_name");
+      router.push("/");
     } catch (error) {
       setDebugErrorDetail(error instanceof Error ? error.message : null);
       setAuthError(

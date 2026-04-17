@@ -39,6 +39,22 @@ export default function AuthCallbackPage() {
             } catch (profileError) {
               console.error("[auth] ensurePlayerProfileForUser:error", profileError);
             }
+
+            // If the player profile has no display_name yet, force onboarding.
+            try {
+              const { data: row } = await supabase
+                .from("players")
+                .select("display_name")
+                .eq("auth_user_id", data.user.id)
+                .maybeSingle();
+              const displayName = (row as { display_name: string | null } | null)?.display_name ?? null;
+              if (!displayName || !String(displayName).trim()) {
+                router.replace("/?onboarding=display_name");
+                return;
+              }
+            } catch {
+              // Non-fatal: fall through to next redirect.
+            }
           }
         }
       } finally {

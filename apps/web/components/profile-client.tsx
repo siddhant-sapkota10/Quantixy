@@ -12,11 +12,9 @@ import { getPremiumItem, type PremiumItem, type PremiumItemType } from "@/lib/pr
 import { formatTopicLabel, type Topic } from "@/lib/topics";
 import { PageContent } from "@/components/page-content";
 import {
-  STREAK_EFFECTS,
   EMOTE_PACKS,
   normalizeStreakEffectId,
   normalizeEmotePackId,
-  type StreakEffectId,
   type EmotePackId,
 } from "@/lib/cosmetics";
 import { getRankFromRating, getNextRankInfo } from "@/lib/ranks";
@@ -298,8 +296,6 @@ export function ProfileClient() {
   const [savingAvatarId, setSavingAvatarId] = useState<AvatarId | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [previewAvatarId, setPreviewAvatarId] = useState<AvatarId>(DEFAULT_AVATAR_ID);
-  const [savingStreakEffect, setSavingStreakEffect] = useState<StreakEffectId | null>(null);
-  const [streakEffectError, setStreakEffectError] = useState<string | null>(null);
   const [savingEmotePack, setSavingEmotePack] = useState<EmotePackId | null>(null);
   const [emotePackError, setEmotePackError] = useState<string | null>(null);
   const [buyingPack, setBuyingPack] = useState<EmotePackId | null>(null);
@@ -658,38 +654,11 @@ export function ProfileClient() {
     }
   };
 
-  const selectedStreakEffect = normalizeStreakEffectId(data?.streakEffect);
   const selectedEmotePack = normalizeEmotePackId(data?.emotePack);
   const ownedEmotePacks = new Set((data?.ownedEmotePacks ?? ["starter"]).map(String));
   const isPackOwned = (packId: EmotePackId) => packId === "starter" || ownedEmotePacks.has(packId);
   const ownedAvatars = new Set((data?.ownedAvatars ?? []).map(String));
   const isAvatarOwned = (avatarId: "architect" | "titan") => ownedAvatars.has(avatarId);
-
-  const handleStreakEffectSelect = async (effectId: StreakEffectId) => {
-    if (!authUserId || !data || savingStreakEffect || data.streakEffect === effectId) return;
-
-    const previousEffect = data.streakEffect;
-    setStreakEffectError(null);
-    setSavingStreakEffect(effectId);
-    setData((current) => (current ? { ...current, streakEffect: effectId } : current));
-
-    try {
-      const supabase = getSupabaseClient();
-      const { error: updateError } = await supabase
-        .from("players")
-        .update({ streak_effect: effectId } as never)
-        .eq("auth_user_id", authUserId);
-
-      if (updateError) throw new Error("Unable to update streak effect.");
-    } catch (updateError) {
-      setData((current) => (current ? { ...current, streakEffect: previousEffect } : current));
-      setStreakEffectError(
-        updateError instanceof Error ? updateError.message : "Unable to update streak effect."
-      );
-    } finally {
-      setSavingStreakEffect(null);
-    }
-  };
 
   const handleEmotePackSelect = async (packId: EmotePackId) => {
     if (!authUserId || !data || savingEmotePack || data.emotePack === packId) return;
@@ -950,56 +919,10 @@ export function ProfileClient() {
                 Cosmetics
               </span>
             </div>
-            <h2 className="text-2xl font-bold text-white">Identity</h2>
+            <h2 className="text-2xl font-bold text-white">Cosmetics</h2>
             <p className="text-sm text-slate-400">
-              Personalise how you look and feel in matches. Some cosmetics are locked (simulated unlocks for now).
+              Personalise how you look and feel in matches. Equip what you own, and buy premium packs when you want.
             </p>
-          </div>
-
-          {/* Streak Effect */}
-          <div className="mt-6">
-            <p className="text-sm uppercase tracking-[0.25em] text-slate-400">Streak Effect</p>
-            <p className="mt-1 text-xs text-slate-500">
-              Visual style shown when you're on a streak mid-match.
-            </p>
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              {STREAK_EFFECTS.map((effect) => {
-                const isSelected = selectedStreakEffect === effect.id;
-                const isSaving = savingStreakEffect === effect.id;
-                const icon = effect.id === "none" ? "—" : effect.id === "fire" ? "🔥" : "⚡";
-                return (
-                  <button
-                    key={effect.id}
-                    type="button"
-                    onClick={() => void handleStreakEffectSelect(effect.id as StreakEffectId)}
-                    disabled={loading || Boolean(savingStreakEffect) || isSelected}
-                    className={`relative flex flex-col items-start rounded-2xl border px-4 py-4 text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
-                      isSelected
-                        ? "border-sky-400/60 bg-sky-500/10 shadow-[0_0_12px_rgba(56,189,248,0.10)]"
-                        : "border-slate-700 bg-slate-950/60 hover:border-slate-600 hover:bg-slate-900 active:scale-[0.98]"
-                    } ${isSaving ? "opacity-60" : ""}`}
-                  >
-                    <span className={`text-xl ${effect.id === "none" ? "text-slate-500" : ""}`}>
-                      {icon}
-                    </span>
-                    <p className={`mt-2 text-sm font-semibold ${isSelected ? "text-white" : "text-slate-300"}`}>
-                      {effect.name}
-                    </p>
-                    <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
-                      {effect.description}
-                    </p>
-                    {isSelected && (
-                      <span className="absolute right-3 top-3 text-[10px] font-bold uppercase tracking-[0.2em] text-sky-300">
-                        Equipped
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-            {streakEffectError ? (
-              <p className="mt-3 text-sm text-rose-300">{streakEffectError}</p>
-            ) : null}
           </div>
 
           {/* Emote Pack */}
@@ -1069,7 +992,7 @@ export function ProfileClient() {
           </div>
 
           {/* Emote Packs (preview + buy + equip live here) */}
-          <div className="mt-8 rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+          <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.28em] text-slate-400">Emote Packs</p>
