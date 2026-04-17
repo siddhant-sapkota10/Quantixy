@@ -617,6 +617,7 @@ export function HomeHero() {
   const [routeBusy, setRouteBusy] = useState<"play" | "ai" | "profile" | "leaderboard" | null>(null);
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [guestError, setGuestError] = useState<string | null>(null);
+  const [identityNonce, setIdentityNonce] = useState(0);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingBusy, setOnboardingBusy] = useState(false);
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
@@ -725,7 +726,7 @@ export function HomeHero() {
     return () => {
       mounted = false;
     };
-  }, [user]);
+  }, [user, identityNonce]);
 
   const handleOnboardingSave = async () => {
     if (!user || isAnonymousUser(user)) return;
@@ -765,10 +766,8 @@ export function HomeHero() {
       }
 
       setOnboardingOpen(false);
-      // Refresh identity by forcing a quick re-run: simplest is a hard reload of the identity state.
-      setAccountIdentity((current) =>
-        current ? { ...current, displayName: clean } : { displayName: clean, avatarId: null }
-      );
+      // Re-fetch identity + rating so the home UI updates immediately.
+      setIdentityNonce((value) => value + 1);
     } catch (error) {
       setOnboardingError(error instanceof Error ? getReadableAuthError(error.message) : "Unable to save name.");
     } finally {
