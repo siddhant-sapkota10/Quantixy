@@ -286,14 +286,14 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
   const showLoadout = !(mode === "pvp" && matchMode === "join-room");
 
   return (
-    <section className="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-slate-950/70 p-4 shadow-glow backdrop-blur sm:p-7 md:p-10">
+    <section className="neon-panel-strong w-full max-w-2xl rounded-[2rem] p-4 sm:p-7 md:p-10">
       {/* ── Header ── */}
       <div className="space-y-3 text-center sm:space-y-4">
         <span
           className={`inline-flex rounded-full border px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] ${
             mode === "ai"
-              ? "border-violet-400/30 bg-violet-500/10 text-violet-200"
-              : "border-sky-400/30 bg-sky-400/10 text-sky-200"
+              ? "border-purple-300/35 bg-purple-500/12 text-purple-100"
+              : "border-cyan-300/35 bg-cyan-400/12 text-cyan-100"
           }`}
         >
           {mode === "ai" ? "vs AI" : "Match Setup"}
@@ -301,7 +301,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
         <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl md:text-5xl">
           Choose Your Battle
         </h1>
-        <p className="text-base text-slate-300 sm:text-lg">
+        <p className="text-base text-textSecondary sm:text-lg">
           {mode === "ai"
             ? "Pick a topic and face off against MathBot."
             : "Pick quick matchmaking or set up a private room with a friend."}
@@ -313,7 +313,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
         {mode === "pvp" ? (
           <div className="space-y-2.5">
             <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-500">Mode</p>
-            <div className="grid grid-cols-3 gap-1.5 rounded-2xl border border-slate-800 bg-slate-950/70 p-1">
+            <div className="neon-panel-soft grid grid-cols-3 gap-1.5 rounded-2xl p-1">
               {(["quick", "create-room", "join-room"] as const).map((m) => (
                 <button
                   key={m}
@@ -322,15 +322,15 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
                   disabled={startPending}
                   className={`rounded-xl px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] transition-all duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 sm:text-xs ${
                     matchMode === m
-                      ? "bg-sky-500/20 text-sky-200"
-                      : "text-slate-400 hover:bg-slate-900/70 hover:text-slate-200"
+                      ? "bg-[linear-gradient(120deg,rgba(0,212,255,0.2),rgba(138,46,255,0.2))] text-cyan-100 shadow-[0_0_18px_rgba(0,212,255,0.2)]"
+                      : "text-slate-400 hover:bg-indigo-500/12 hover:text-slate-200"
                   } ${startPending ? "cursor-not-allowed opacity-55" : "active:scale-[0.975]"}`}
                 >
                   {m === "quick" ? "Quick Match" : m === "create-room" ? "Create Room" : "Join Room"}
                 </button>
               ))}
             </div>
-            <p className="text-center text-xs text-slate-500">
+            <p className="text-center text-xs text-textSecondary">
               {matchMode === "quick"
                 ? "Fast queue — matched with a random opponent."
                 : matchMode === "create-room"
@@ -349,9 +349,9 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
               value={normalizedRoomCode}
               onChange={(event) => setRoomCode(event.target.value)}
               placeholder="ABC123"
-              className="w-full rounded-2xl border border-slate-700 bg-slate-900/80 px-4 py-3.5 text-center text-lg font-bold uppercase tracking-[0.35em] text-slate-100 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/35"
+              className="neon-input w-full rounded-2xl px-4 py-3.5 text-center text-lg font-bold uppercase tracking-[0.35em]"
             />
-            <div className="flex items-center justify-between text-xs text-slate-500">
+            <div className="flex items-center justify-between text-xs text-textSecondary">
               <span>Uppercase letters and numbers only.</span>
               <span>{normalizedRoomCode.length}/6</span>
             </div>
@@ -364,7 +364,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
         {/* ── Topic grid ── */}
         {showLoadout ? (
           <div className="space-y-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-500">Topic</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-textSecondary">Topic</p>
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
               {TOPICS.map((topic) => {
                 const cfg = TOPIC_CONFIG[topic];
@@ -382,7 +382,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
                     className={`relative flex flex-col items-center gap-2 rounded-2xl border p-3 text-center transition-colors duration-150 sm:p-3.5 ${
                       isSelected
                         ? `${cfg.border} ${cfg.bg} ${cfg.text}`
-                        : "border-slate-700/60 bg-slate-900/50 text-slate-500 hover:border-slate-600 hover:text-slate-300"
+                        : "border-indigo-400/22 bg-slate-900/55 text-slate-400 hover:border-indigo-300/45 hover:text-slate-200"
                     } ${startPending ? "cursor-not-allowed opacity-55" : "cursor-pointer"}`}
                   >
                     {cfg.icon}
@@ -406,7 +406,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
         {/* ── Difficulty cards ── */}
         {showLoadout ? (
           <div className="space-y-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-500">Difficulty</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-textSecondary">Difficulty</p>
             <div className="grid grid-cols-3 gap-2.5">
               {DIFFICULTIES.map((difficulty) => {
                 const cfg = DIFFICULTY_CONFIG[difficulty];
@@ -424,7 +424,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
                     className={`relative flex flex-col items-center gap-3 rounded-2xl border p-4 text-center transition-colors duration-150 sm:p-5 ${
                       isSelected
                         ? `${cfg.border} ${cfg.bg} ${cfg.glow}`
-                        : "border-slate-700/60 bg-slate-900/50 hover:border-slate-600"
+                        : "border-indigo-400/22 bg-slate-900/55 hover:border-indigo-300/45"
                     } ${startPending ? "cursor-not-allowed opacity-55" : "cursor-pointer"}`}
                   >
                     <span className={isSelected ? cfg.text : "text-slate-500"}>
@@ -434,7 +434,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
                       <p className={`text-sm font-bold ${isSelected ? cfg.text : "text-slate-300"}`}>
                         {cfg.label}
                       </p>
-                      <p className="mt-0.5 text-[11px] leading-tight text-slate-500">
+                      <p className="mt-0.5 text-[11px] leading-tight text-textSecondary">
                         {cfg.description}
                       </p>
                     </div>
@@ -455,7 +455,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
         {/* ── CTA ── */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
           <Button
-            className="w-full py-4 text-lg font-black shadow-lg shadow-sky-500/20"
+            className="w-full py-4 text-lg font-black"
             onClick={handleStart}
             disabled={actionDisabled}
             loading={startPending}

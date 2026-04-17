@@ -2,6 +2,7 @@
 
 import { io, type Socket } from "socket.io-client";
 import type { PowerUpId } from "@/lib/powerups";
+import type { DuelQuestion } from "@/lib/question-model";
 
 /**
  * Resolve the game server URL.
@@ -131,7 +132,7 @@ export type ServerToClientEvents = {
     }>;
   }) => void;
   roomError: (payload: { message: string }) => void;
-  newQuestion: (payload: { question?: string; token?: number } | string) => void;
+  newQuestion: (payload: { question?: string; questionData?: DuelQuestion; token?: number } | string) => void;
   incorrectAnswer: (payload: { strikes: number; eliminated: boolean }) => void;
   opponentStrike: (payload: { opponentStrikes: number; opponentEliminated: boolean }) => void;
   liveLeaderboard: (payload: {

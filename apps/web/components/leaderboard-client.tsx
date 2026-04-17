@@ -118,19 +118,19 @@ export function LeaderboardClient() {
   const showMyRankCard = Boolean(myRank && !visiblePlayerIds.has(myRank.playerId));
 
   return (
-    <section className="w-full max-w-5xl rounded-[2rem] border border-white/10 bg-slate-950/70 p-4 shadow-glow backdrop-blur sm:p-6 md:p-12">
+    <section className="neon-panel-strong w-full max-w-5xl rounded-[2rem] p-4 sm:p-6 md:p-12">
       <div className="flex flex-col gap-4 sm:gap-6 md:gap-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="space-y-3">
-            <span className="inline-flex rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-sky-200">
+            <span className="neon-badge inline-flex rounded-full px-4 py-1 text-xs font-medium uppercase tracking-[0.3em]">
               Competitive Rankings
             </span>
             <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl md:text-5xl">Leaderboard</h1>
-            <p className="text-slate-300">Live standings from persisted player ratings.</p>
+            <p className="text-textSecondary">Live standings from persisted player ratings.</p>
           </div>
 
           <div className="w-full max-w-xs space-y-2">
-            <span className="text-sm font-medium uppercase tracking-[0.2em] text-slate-400">Filter Topic</span>
+            <span className="text-sm font-medium uppercase tracking-[0.2em] text-textSecondary">Filter Topic</span>
             <Dropdown
               aria-label="Filter leaderboard by topic"
               value={selectedTopic}
@@ -140,8 +140,8 @@ export function LeaderboardClient() {
           </div>
         </div>
 
-        <div className="overflow-x-auto rounded-3xl border border-slate-800 bg-slate-900/70">
-          <div className="grid min-w-[300px] grid-cols-[44px_1fr_68px] gap-2 border-b border-slate-800 px-3 py-3 text-xs font-semibold uppercase tracking-[0.25em] text-slate-400 sm:grid-cols-[68px_1fr_96px_1fr] sm:gap-4 sm:px-6 sm:py-4">
+        <div className="neon-panel-soft overflow-x-auto rounded-3xl">
+          <div className="grid min-w-[300px] grid-cols-[44px_1fr_68px] gap-2 border-b border-indigo-300/20 px-3 py-3 text-xs font-semibold uppercase tracking-[0.25em] text-textSecondary sm:grid-cols-[68px_1fr_96px_1fr] sm:gap-4 sm:px-6 sm:py-4">
             <span>#</span>
             <span>Player</span>
             <span>Rating</span>
@@ -163,16 +163,16 @@ export function LeaderboardClient() {
                 return (
                   <div
                     key={entry.playerId}
-                    className={`grid min-w-[300px] grid-cols-[44px_1fr_68px] items-center gap-2 border-b border-slate-800/80 px-3 py-3 text-sm last:border-b-0 sm:grid-cols-[68px_1fr_96px_1fr] sm:gap-4 sm:px-6 sm:py-4 ${
+                    className={`grid min-w-[300px] grid-cols-[44px_1fr_68px] items-center gap-2 border-b border-indigo-300/15 px-3 py-3 text-sm last:border-b-0 sm:grid-cols-[68px_1fr_96px_1fr] sm:gap-4 sm:px-6 sm:py-4 ${
                       isCurrentUser
-                        ? "bg-sky-500/[0.08]"
+                        ? "bg-cyan-400/[0.09]"
                         : isTopThree
-                          ? "bg-sky-500/[0.04]"
+                          ? "bg-indigo-400/[0.08]"
                           : ""
                     }`}
                   >
                     {/* Position */}
-                    <span className={`text-sm font-bold tabular-nums ${isTopThree ? "text-sky-300" : "text-slate-500"}`}>
+                    <span className={`text-sm font-bold tabular-nums ${isTopThree ? "text-cyan-200" : "text-slate-500"}`}>
                       {entry.rank}
                     </span>
 
@@ -183,9 +183,9 @@ export function LeaderboardClient() {
                         <span className="flex min-w-0 items-center gap-1.5">
                           <span className="truncate font-semibold text-white">{entry.name}</span>
                           {isCurrentUser ? (
-                            <span className="shrink-0 rounded-full border border-sky-400/40 bg-sky-500/15 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] text-sky-200">
-                              You
-                            </span>
+                              <span className="shrink-0 rounded-full border border-cyan-300/45 bg-cyan-400/15 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] text-cyan-100">
+                                You
+                              </span>
                           ) : null}
                         </span>
                         <span className="mt-0.5 block">
@@ -206,10 +206,10 @@ export function LeaderboardClient() {
         </div>
 
         {showMyRankCard && myRank ? (
-          <div className="rounded-2xl border border-sky-500/25 bg-sky-500/[0.07] px-4 py-4 sm:px-5">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-sky-400">Your Standing</p>
+          <div className="rounded-2xl border border-cyan-300/28 bg-[linear-gradient(150deg,rgba(0,212,255,0.14),rgba(138,46,255,0.12))] px-4 py-4 sm:px-5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-cyan-200">Your Standing</p>
             <div className="mt-2 flex items-center gap-3">
-              <span className="text-2xl font-black tabular-nums text-sky-100">#{myRank.rank}</span>
+              <span className="text-2xl font-black tabular-nums text-cyan-100">#{myRank.rank}</span>
               <div className="space-y-0.5">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-white">{myRank.name}</span>

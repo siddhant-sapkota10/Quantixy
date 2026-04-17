@@ -79,11 +79,11 @@ export default function ResetPasswordPage() {
 
   return (
     <PageShell className="flex items-center justify-center">
-      <section className="w-full max-w-lg rounded-[2rem] border border-white/10 bg-slate-950/70 p-8 shadow-glow backdrop-blur md:p-10">
+      <section className="neon-panel-strong w-full max-w-lg rounded-[2rem] p-8 md:p-10">
         <div className="space-y-3">
-          <p className="text-sm uppercase tracking-[0.2em] text-slate-400">Account Recovery</p>
+          <p className="text-sm uppercase tracking-[0.2em] text-textSecondary">Account Recovery</p>
           <h1 className="text-3xl font-black tracking-tight text-white">Reset Password</h1>
-          <p className="text-sm text-slate-300">
+          <p className="text-sm text-textSecondary">
             Set a new password for your account.
           </p>
         </div>
@@ -96,7 +96,7 @@ export default function ResetPasswordPage() {
 
         <form className="mt-6 space-y-3" onSubmit={handleSubmit}>
           <label className="block space-y-2">
-            <span className="text-sm font-medium uppercase tracking-[0.2em] text-slate-400">
+            <span className="text-sm font-medium uppercase tracking-[0.2em] text-textSecondary">
               New Password
             </span>
             <input
@@ -107,12 +107,12 @@ export default function ResetPasswordPage() {
                 setError(null);
               }}
               placeholder="Enter a new password"
-              className="w-full rounded-2xl border border-slate-700 bg-slate-900/80 px-4 py-3 text-slate-100 shadow-glow outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/35"
+              className="neon-input w-full rounded-2xl px-4 py-3"
             />
           </label>
 
           <label className="block space-y-2">
-            <span className="text-sm font-medium uppercase tracking-[0.2em] text-slate-400">
+            <span className="text-sm font-medium uppercase tracking-[0.2em] text-textSecondary">
               Confirm Password
             </span>
             <input
@@ -123,7 +123,7 @@ export default function ResetPasswordPage() {
                 setError(null);
               }}
               placeholder="Confirm your new password"
-              className="w-full rounded-2xl border border-slate-700 bg-slate-900/80 px-4 py-3 text-slate-100 shadow-glow outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/35"
+              className="neon-input w-full rounded-2xl px-4 py-3"
             />
           </label>
 
@@ -138,7 +138,7 @@ export default function ResetPasswordPage() {
         <div className="mt-6">
           <Link
             href="/"
-            className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400 transition hover:text-sky-300"
+            className="text-xs font-medium uppercase tracking-[0.2em] text-textSecondary transition hover:text-cyan-200"
           >
             Back to Home
           </Link>

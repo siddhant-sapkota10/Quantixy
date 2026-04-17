@@ -9,6 +9,7 @@ const POWER_UPS = require("../../packages/shared/powerups.json");
 const { verifyAccessToken } = require("./lib/supabase");
 const {
   generateQuestion,
+  getMatchDurationSeconds,
   isCorrectAnswer,
   isValidDifficulty,
   isValidTopic,
@@ -48,7 +49,7 @@ console.log("MATHBATTLE BACKEND LIVE VERSION A3");
 console.log("[server] PORT =", PORT);
 console.log("[server] ALLOWED_ORIGINS =", RESOLVED_ALLOWED_ORIGINS);
 console.log("[server] CORS_ALLOW_VERCEL_PREVIEWS =", ALLOW_VERCEL_PREVIEWS);
-const MATCH_DURATION_MS = 60000;
+const DEFAULT_MATCH_DURATION_MS = 60000;
 const TIMER_UPDATE_INTERVAL_MS = 1000;
 const FREEZE_DURATION_MS = 1600;
 const SLOW_DURATION_MS = 1000;
@@ -507,8 +508,9 @@ function calcDamage(points, fast, streak) {
 }
 
 function buildTimerPayload(game) {
+  const durationMs = Number.isFinite(game?.durationMs) ? game.durationMs : DEFAULT_MATCH_DURATION_MS;
   if (!game.endsAt) {
-    return { secondsLeft: Math.ceil(MATCH_DURATION_MS / 1000) };
+    return { secondsLeft: Math.ceil(durationMs / 1000) };
   }
 
   return {
@@ -704,7 +706,7 @@ function consumePowerUp(game, socketId, type) {
 }
 
 function buildQuestionHint(question) {
-  const answer = String(question?.answer ?? "").trim();
+  const answer = String((question?.acceptedAnswers?.[0] ?? question?.answer) ?? "").trim();
   if (!answer) {
     return "No hint available.";
   }
@@ -927,7 +929,7 @@ function emitNewQuestionToPlayer(roomId, socketId) {
   game.phase = "playing";
   clearPlayerQuestionTimer(game, socketId);
 
-  const payload = { question: question.prompt, token: questionState.generation };
+  const payload = { question: question.prompt, questionData: question, token: questionState.generation };
   console.log(`[server] newQuestion emitted -> room=${roomId} player=${socketId} qi=${questionState.questionIndex} token=${questionState.generation}`);
   io.to(socketId).emit("newQuestion", payload);
   emitQuestionState(roomId);
@@ -941,7 +943,11 @@ function startMatchTimer(roomId) {
   }
 
   game.startedAt = Date.now();
-  game.endsAt = game.startedAt + MATCH_DURATION_MS;
+  const durationMs = Number.isFinite(game.durationMs)
+    ? game.durationMs
+    : getMatchDurationSeconds(game.topic, game.difficulty) * 1000;
+  game.durationMs = durationMs;
+  game.endsAt = game.startedAt + durationMs;
   for (const player of game.players) {
     io.to(player.socketId).emit("timerUpdate", {
       ...buildTimerPayload(game),
@@ -1579,6 +1585,7 @@ function createActiveGame(players, topic, difficulty, customRoomCode = null) {
     roomId,
     topic,
     difficulty,
+    durationMs: getMatchDurationSeconds(topic, difficulty) * 1000,
     customRoomCode,
     players,
     questionBank: [],
@@ -2458,7 +2465,7 @@ io.on("connection", (socket) => {
 
     const hadDoublePoints = isActiveUntil(game.doublePointsUntil[socket.id]);
 
-    if (isCorrectAnswer(answer, currentQuestion.answer, currentQuestion.answerType)) {
+    if (isCorrectAnswer(answer, currentQuestion)) {
       if (hadDoublePoints) {
         game.doublePointsUntil[socket.id] = 0;
       }

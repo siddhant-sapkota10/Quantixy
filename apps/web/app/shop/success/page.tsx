@@ -10,7 +10,7 @@ export default function ShopSuccessPage({
   const sessionId = Array.isArray(raw) ? raw[0] : raw;
 
   return (
-    <section className="w-full max-w-3xl rounded-[2rem] border border-emerald-400/20 bg-slate-950/70 p-6 text-center shadow-glow backdrop-blur sm:p-10">
+    <section className="neon-panel-strong w-full max-w-3xl rounded-[2rem] p-6 text-center sm:p-10">
       <p className="text-xs font-bold uppercase tracking-[0.28em] text-emerald-300">Payment Success</p>
       <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">Emote pack purchased</h1>
       <p className="mt-3 text-sm text-slate-300">
@@ -34,4 +34,3 @@ export default function ShopSuccessPage({
     </section>
   );
 }
-

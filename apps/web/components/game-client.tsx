@@ -36,6 +36,9 @@ import { SnowfallOverlay } from "@/components/animations/SnowfallOverlay";
 import { EmoteBar } from "@/components/EmoteBar";
 import { EmoteDisplay, type EmoteDisplayItem } from "@/components/EmoteDisplay";
 import { OpponentPresence, type OpponentActivity } from "@/components/OpponentPresence";
+import { QuestionContent } from "@/components/question-content";
+import { WorkingScratchpad } from "@/components/working-scratchpad";
+import type { DuelQuestion } from "@/lib/question-model";
 import {
   UltimateActivationOverlay,
   type UltimateActivationCue
@@ -317,6 +320,7 @@ export function GameClient({
   const feedbackRef = useRef(initialFeedback);
   const scoresRef = useRef(initialScores);
   const [currentQuestion, setCurrentQuestion] = useState("Waiting for the first question...");
+  const [currentQuestionData, setCurrentQuestionData] = useState<DuelQuestion | null>(null);
   const [answer, setAnswer] = useState("");
   const answerInputRef = useRef<HTMLInputElement | null>(null);
   const [focusPulseKey, setFocusPulseKey] = useState(0);
@@ -611,6 +615,7 @@ export function GameClient({
     setUltimate(initialUltimate);
     setFeedback(initialFeedback);
     setCurrentQuestion("Waiting for the first question...");
+    setCurrentQuestionData(null);
     setAnswer("");
     setYourName("You");
     setOpponentName("Opponent");
@@ -747,6 +752,7 @@ export function GameClient({
         setStatus("room-lobby");
       }
       setCurrentQuestion("Waiting for match start...");
+      setCurrentQuestionData(null);
     };
 
     const syncUltimateFromPayload = (payload: Record<string, unknown>) => {
@@ -956,6 +962,7 @@ export function GameClient({
 
       setStatus("countdown");
       setCurrentQuestion("");
+      setCurrentQuestionData(null);
       setCountdownValue(null);
       setFeedback({
         ...initialFeedback,
@@ -1026,6 +1033,7 @@ export function GameClient({
       }
       setStatus("countdown");
       setCurrentQuestion("");
+      setCurrentQuestionData(null);
       setAnswer("");
       setCountdownValue(payload.value);
       setFrozenUntil(0);
@@ -1046,13 +1054,17 @@ export function GameClient({
       }
     };
 
-    const handleNewQuestion = (payload: { question?: string; token?: number } | string) => {
+    const handleNewQuestion = (
+      payload: { question?: string; questionData?: DuelQuestion; token?: number } | string
+    ) => {
       console.log("[client] newQuestion received", payload);
       const question = typeof payload === "string" ? payload : payload.question;
+      const questionData = typeof payload === "object" && payload !== null ? payload.questionData ?? null : null;
       const token = typeof payload === "object" && payload !== null ? (payload.token ?? 0) : 0;
       // Store the question token so stale submits can be rejected server-side.
       currentQuestionTokenRef.current = token;
-      setCurrentQuestion(question || "Get ready...");
+      setCurrentQuestion(questionData?.prompt || question || "Get ready...");
+      setCurrentQuestionData(questionData);
       setAnswer("");
       setFocusPulseKey((k) => k + 1);
       setCountdownValue(null);
@@ -1883,6 +1895,7 @@ export function GameClient({
       }
 
       setCurrentQuestion("");
+      setCurrentQuestionData(null);
       setAnswer("");
       setCountdownValue(null);
       setTimer({
@@ -1963,6 +1976,7 @@ export function GameClient({
     const handleOpponentLeft = (payload: { message?: string }) => {
       console.log("[client] opponentLeft received", payload);
       setCurrentQuestion("");
+      setCurrentQuestionData(null);
       setAnswer("");
       setCountdownValue(null);
       setFeedback(initialFeedback);
@@ -2469,7 +2483,7 @@ export function GameClient({
                 ready
                   ? readyClass
                   : used
-                  ? "border-slate-700 bg-slate-900/60 text-slate-500"
+                  ? "border-indigo-300/20 bg-slate-900/70 text-textSecondary"
                   : "border-slate-800 bg-slate-950/70 text-slate-400"
               } ${clickable ? "active:scale-[0.975]" : "cursor-default opacity-70 saturate-50"} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60`}
             >
@@ -2547,11 +2561,6 @@ export function GameClient({
 
   // Dedicated in-match layout (competitive HUD + sticky action bar).
   if (isActiveGameplay) {
-    const youHpPct = Math.max(0, Math.min(100, (youHP / MAX_HP) * 100));
-    const oppHpPct = Math.max(0, Math.min(100, (opponentHP / MAX_HP) * 100));
-    const youHpColor = youHpPct > 60 ? "bg-emerald-400" : youHpPct > 30 ? "bg-amber-400" : "bg-rose-500";
-    const oppHpColor = oppHpPct > 60 ? "bg-emerald-400" : oppHpPct > 30 ? "bg-amber-400" : "bg-rose-500";
-
     return (
       <section className="fixed inset-0 z-10 bg-slate-950 text-white">
         {/* Overlays */}
@@ -2570,97 +2579,82 @@ export function GameClient({
 
         <div className="flex h-[100dvh] flex-col overflow-hidden">
           {/* Top HUD */}
-          <div className="shrink-0 border-b border-white/10 bg-slate-950/85 px-3 pb-2 pt-3 backdrop-blur sm:px-5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="truncate text-xs font-bold uppercase tracking-[0.24em] text-slate-400">
-                    {yourName}
-                  </p>
-                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-slate-400">
-                    {opponentName}
-                  </p>
-                </div>
+          <div className="shrink-0 border-b border-white/10 bg-slate-950/90 px-3 pb-2.5 pt-3 backdrop-blur sm:px-5">
+            <div className="relative rounded-[1.55rem] border border-white/10 bg-slate-950/72 p-2.5 shadow-[0_18px_44px_rgba(2,6,23,0.5)] sm:p-3">
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 rounded-[1.55rem] opacity-70"
+                style={{
+                  background:
+                    "radial-gradient(ellipse at 28% 35%, rgba(56,189,248,0.12) 0%, transparent 56%), radial-gradient(ellipse at 72% 35%, rgba(251,113,133,0.12) 0%, transparent 56%)",
+                }}
+              />
 
-                <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-                  {/* You HP */}
-                  <div>
-                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                      <span>HP</span>
-                      <span className="tabular-nums text-slate-300">{youHP}</span>
-                    </div>
-                    <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-800">
-                      <div className={`h-full ${youHpColor}`} style={{ width: `${youHpPct}%` }} />
-                    </div>
-                  </div>
-
-                  {/* Timer + Score */}
-                  <div className="flex flex-col items-center justify-center px-1">
-                    <div className="rounded-full border border-slate-800 bg-slate-950/80 px-3 py-1 text-xs font-black tracking-[0.22em] text-sky-200">
-                      {timerLabel}
-                    </div>
-                    <div className="mt-2 flex items-baseline gap-2">
-                      <span className="text-2xl font-black tabular-nums text-sky-200">{scores.you}</span>
-                      <span className="text-xs font-black uppercase tracking-[0.35em] text-slate-600">vs</span>
-                      <span className="text-2xl font-black tabular-nums text-rose-200">{scores.opponent}</span>
-                    </div>
-                  </div>
-
-                  {/* Opp HP */}
-                  <div>
-                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                      <span>HP</span>
-                      <span className="tabular-nums text-slate-300">{opponentHP}</span>
-                    </div>
-                    <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-800">
-                      <div className={`h-full ${oppHpColor}`} style={{ width: `${oppHpPct}%` }} />
-                    </div>
-                  </div>
-                </div>
+              <div className="absolute right-2 top-2 z-10 sm:right-3 sm:top-3">
+                <SoundToggle muted={muted} onToggle={handleToggleSound} />
               </div>
 
-              <SoundToggle muted={muted} onToggle={handleToggleSound} />
-            </div>
+              <div className="relative grid items-stretch gap-2 md:grid-cols-[minmax(0,1fr)_8.5rem_minmax(0,1fr)] md:gap-3">
+                <MatchChampionCard
+                  variant="battle"
+                  hp={youHP}
+                  maxHp={MAX_HP}
+                  model={{
+                    side: "you",
+                    playerName: yourName,
+                    avatarId: yourAvatarId,
+                    ultimateType: normalizeUltimateType(ultimate.type),
+                    ultimateName: ultimate.name,
+                    charge: ultimate.charge,
+                    ready: ultimate.ready,
+                    used: ultimate.used,
+                    implemented: ultimate.implemented,
+                    overclockUntil: ultimate.overclockUntil,
+                    blackoutUntil: ultimate.blackoutUntil,
+                    fortressUntil: ultimate.fortressUntil,
+                    fortressBlocksRemaining: ultimate.fortressBlocksRemaining,
+                    infernoPending: ultimate.infernoPending,
+                    infernoPendingUntil: ultimate.infernoPendingUntil,
+                  }}
+                />
 
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              <MatchChampionCard
-                model={{
-                  side: "you",
-                  playerName: yourName,
-                  avatarId: yourAvatarId,
-                  ultimateType: normalizeUltimateType(ultimate.type),
-                  ultimateName: ultimate.name,
-                  charge: ultimate.charge,
-                  ready: ultimate.ready,
-                  used: ultimate.used,
-                  implemented: ultimate.implemented,
-                  overclockUntil: ultimate.overclockUntil,
-                  blackoutUntil: ultimate.blackoutUntil,
-                  fortressUntil: ultimate.fortressUntil,
-                  fortressBlocksRemaining: ultimate.fortressBlocksRemaining,
-                  infernoPending: ultimate.infernoPending,
-                  infernoPendingUntil: ultimate.infernoPendingUntil,
-                }}
-              />
-              <MatchChampionCard
-                model={{
-                  side: "opponent",
-                  playerName: opponentName,
-                  avatarId: opponentAvatarId,
-                  ultimateType: normalizeUltimateType(ultimate.opponentType),
-                  ultimateName: ultimate.opponentName,
-                  charge: ultimate.opponentCharge,
-                  ready: ultimate.opponentReady,
-                  used: ultimate.opponentUsed,
-                  implemented: ultimate.opponentImplemented,
-                  overclockUntil: ultimate.opponentOverclockUntil,
-                  blackoutUntil: ultimate.opponentBlackoutUntil,
-                  fortressUntil: ultimate.opponentFortressUntil,
-                  fortressBlocksRemaining: ultimate.opponentFortressBlocksRemaining,
-                  infernoPending: ultimate.opponentInfernoPending,
-                  infernoPendingUntil: ultimate.opponentInfernoPendingUntil,
-                }}
-              />
+                <div className="flex min-h-[3.75rem] items-center justify-center md:min-h-full">
+                  <div className="w-full rounded-2xl border border-slate-800 bg-slate-950/88 px-3 py-2 text-center">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-textSecondary">Duel</p>
+                    <div className="mt-1 flex items-baseline justify-center gap-2">
+                      <span className="text-2xl font-black tabular-nums text-sky-200 sm:text-3xl">{scores.you}</span>
+                      <span className="text-[10px] font-black uppercase tracking-[0.34em] text-textSecondary sm:text-xs">VS</span>
+                      <span className="text-2xl font-black tabular-nums text-rose-200 sm:text-3xl">{scores.opponent}</span>
+                    </div>
+                    <div className="mt-1.5 inline-flex rounded-full border border-slate-800 bg-slate-900/85 px-3 py-1 text-[10px] font-black tracking-[0.24em] text-sky-200 sm:text-xs">
+                      {timerLabel}
+                    </div>
+                  </div>
+                </div>
+
+                <MatchChampionCard
+                  variant="battle"
+                  hp={opponentHP}
+                  maxHp={MAX_HP}
+                  model={{
+                    side: "opponent",
+                    playerName: opponentName,
+                    avatarId: opponentAvatarId,
+                    ultimateType: normalizeUltimateType(ultimate.opponentType),
+                    ultimateName: ultimate.opponentName,
+                    charge: ultimate.opponentCharge,
+                    ready: ultimate.opponentReady,
+                    used: ultimate.opponentUsed,
+                    implemented: ultimate.opponentImplemented,
+                    overclockUntil: ultimate.opponentOverclockUntil,
+                    blackoutUntil: ultimate.opponentBlackoutUntil,
+                    fortressUntil: ultimate.opponentFortressUntil,
+                    fortressBlocksRemaining: ultimate.opponentFortressBlocksRemaining,
+                    infernoPending: ultimate.opponentInfernoPending,
+                    infernoPendingUntil: ultimate.opponentInfernoPendingUntil,
+                  }}
+                />
+              </div>
             </div>
           </div>
 
@@ -2668,13 +2662,16 @@ export function GameClient({
           <div className="flex min-h-0 flex-1 flex-col items-stretch justify-center px-3 py-4 sm:px-5">
             <motion.div animate={animState.questionShakeControls} className="mx-auto w-full max-w-3xl">
               <div className="relative rounded-[1.5rem] border border-slate-800 bg-slate-900/70 p-4 text-center sm:p-6">
-                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-textSecondary">
                   Question
                 </p>
                 <div className="mt-3 flex items-center justify-center">
-                  <p className="text-2xl font-black tracking-tight text-white sm:text-4xl md:text-5xl">
-                    {currentQuestion}
-                  </p>
+                  <QuestionContent
+                    question={currentQuestionData}
+                    fallbackPrompt={currentQuestion}
+                    compact
+                    promptClassName="text-2xl font-black tracking-tight text-white sm:text-4xl md:text-5xl"
+                  />
                 </div>
 
                 <div className="mt-3 min-h-[2.25rem]">
@@ -2711,6 +2708,7 @@ export function GameClient({
                 />
               </div>
               <form className="flex w-full flex-col gap-2" onSubmit={handleSubmit}>
+              <WorkingScratchpad />
               <input
                 ref={answerInputRef}
                 type="text"
@@ -2723,14 +2721,16 @@ export function GameClient({
                       ? "Eliminated"
                       : feedback.youAnsweredCurrent
                         ? "Waiting..."
-                        : "Type answer…"
+                        : currentQuestionData?.inputMode === "text"
+                          ? "Type text or symbol answer..."
+                          : "Type answer..."
                 }
                 disabled={isJamActive || youEliminated || feedback.youAnsweredCurrent}
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
                 enterKeyHint="go"
-                className="h-12 w-full rounded-2xl border border-slate-700 bg-slate-900/80 px-4 text-slate-100 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/35 disabled:cursor-not-allowed disabled:opacity-60"
+              className="neon-input h-12 w-full rounded-2xl px-4 disabled:cursor-not-allowed disabled:opacity-60"
               />
 
               <div className="grid grid-cols-2 gap-2">
@@ -2761,7 +2761,7 @@ export function GameClient({
   }
 
   return (
-    <section className="relative w-full max-w-5xl rounded-[2rem] border border-white/10 bg-slate-950/70 p-3 shadow-glow backdrop-blur sm:p-5 md:p-7 lg:p-8">
+    <section className="neon-panel-strong relative w-full max-w-5xl rounded-[2rem] p-3 sm:p-5 md:p-7 lg:p-8">
       {/* Game-over overlays (win glow / lose vignette) */}
       <GameOverOverlay result={isFinished ? (gameResult?.result ?? null) : null} />
       <UltimateActivationOverlay cue={ultimateCue} />
@@ -2852,7 +2852,7 @@ export function GameClient({
         {/* Player panels */}
         {isWaitingState ? (
           <motion.div
-            className="relative grid gap-3 rounded-3xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4 md:grid-cols-[minmax(0,1fr)_3rem_minmax(0,1fr)] md:items-stretch md:gap-4 md:p-5 lg:p-6"
+            className="neon-panel-soft relative grid gap-3 rounded-3xl p-3 sm:p-4 md:grid-cols-[minmax(0,1fr)_3rem_minmax(0,1fr)] md:items-stretch md:gap-4 md:p-5 lg:p-6"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, ease: "easeOut" }}
@@ -2901,7 +2901,7 @@ export function GameClient({
               </div>
 
               <div className="rounded-2xl border border-slate-800 bg-slate-950/55 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">Matchmaking</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-textSecondary">Matchmaking</p>
                 <p className="mt-2 text-sm text-slate-200">Searching for an opponent…</p>
                 <motion.p
                   className="mt-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400"
@@ -2923,7 +2923,7 @@ export function GameClient({
 
             {/* VS element (dimmed) */}
             <motion.div
-              className="flex items-center justify-center self-center pb-0 text-xs font-semibold uppercase tracking-[0.35em] text-slate-500 sm:text-sm"
+              className="flex items-center justify-center self-center pb-0 text-xs font-semibold uppercase tracking-[0.35em] text-textSecondary sm:text-sm"
               initial={{ opacity: 0.35, scale: 0.92 }}
               animate={{ opacity: [0.35, 0.55, 0.35], scale: [0.92, 1, 0.92] }}
               transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
@@ -2964,7 +2964,7 @@ export function GameClient({
 
               <div className="min-h-[2.5rem]" aria-hidden="true" />
               <div className="rounded-2xl border border-slate-800 bg-slate-950/55 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">Opponent</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-textSecondary">Opponent</p>
                 <p className="mt-2 text-sm text-slate-300">Searching…</p>
               </div>
             </motion.div>
@@ -2972,7 +2972,7 @@ export function GameClient({
         ) : (
           <motion.div
             key={shakeKey}
-            className="grid gap-3 rounded-3xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4 md:grid-cols-[minmax(0,1fr)_3rem_minmax(0,1fr)] md:items-stretch md:gap-4 md:p-5 lg:p-6"
+            className="neon-panel-soft grid gap-3 rounded-3xl p-3 sm:p-4 md:grid-cols-[minmax(0,1fr)_3rem_minmax(0,1fr)] md:items-stretch md:gap-4 md:p-5 lg:p-6"
             initial={{ x: 0, y: 0 }}
             animate={{
               x: [0, shakeVector.x, -shakeVector.x * 0.65, 0],
@@ -3078,7 +3078,7 @@ export function GameClient({
             </div>
 
             <motion.div
-              className="flex items-center justify-center self-center pb-0 text-xs font-semibold uppercase tracking-[0.35em] text-slate-500 sm:text-sm"
+              className="flex items-center justify-center self-center pb-0 text-xs font-semibold uppercase tracking-[0.35em] text-textSecondary sm:text-sm"
               initial={{ opacity: 0.45, scale: 0.9 }}
               animate={{ opacity: [0.45, 1, 0.65], scale: [0.9, 1.18, 1] }}
               transition={{ duration: 0.55, ease: "easeOut" }}
@@ -3330,13 +3330,13 @@ export function GameClient({
           <>
             {/* Question card — shake wrapper + frost burst overlay */}
             <motion.div animate={animState.questionShakeControls}>
-              <div className="relative rounded-[1.75rem] border border-slate-800 bg-slate-900/80 p-4 text-center transition-all duration-300 sm:p-6">
+              <div className="neon-panel relative rounded-[1.75rem] p-4 text-center transition-all duration-300 sm:p-6">
                 {isActiveGameplay ? (
                   <motion.div
                     className={`absolute right-3 top-3 rounded-full border px-2 py-1 text-sm font-black tracking-[0.15em] sm:right-5 sm:top-5 sm:px-4 sm:py-2 sm:text-lg sm:tracking-[0.2em] ${
                       showFinalPhase
                         ? "border-rose-400/70 bg-rose-950/70 text-rose-100 shadow-[0_0_18px_rgba(248,113,113,0.35)]"
-                        : "border-slate-700 bg-slate-950/80 text-sky-200"
+                        : "border-indigo-300/30 bg-slate-950/82 text-cyan-100"
                     }`}
                     animate={
                       showFinalPhase
@@ -3355,7 +3355,7 @@ export function GameClient({
                     {timerLabel}
                   </motion.div>
                 ) : null}
-                <p className={`text-sm uppercase tracking-[0.3em] text-slate-500 ${isActiveGameplay ? "pr-14 sm:pr-0" : ""}`}>
+                <p className={`text-sm uppercase tracking-[0.3em] text-textSecondary ${isActiveGameplay ? "pr-14 sm:pr-0" : ""}`}>
                   {isCountdown ? "Countdown" : isWaitingState ? "Match Status" : "Current Question"}
                 </p>
 
@@ -3363,9 +3363,20 @@ export function GameClient({
                   {isCountdown ? (
                     <CountdownDisplay value={countdownValue} />
                   ) : (
-                    <p className="max-h-[7rem] overflow-hidden text-xl font-black tracking-tight text-white sm:max-h-[8rem] sm:text-3xl md:max-h-[9rem] md:text-5xl">
-                      {isWaitingState ? statusHeading[status] : currentQuestion}
-                    </p>
+                    <div className="max-h-[9rem] w-full overflow-hidden">
+                      {isWaitingState ? (
+                        <p className="text-xl font-black tracking-tight text-white sm:text-3xl md:text-5xl">
+                          {statusHeading[status]}
+                        </p>
+                      ) : (
+                        <QuestionContent
+                          question={currentQuestionData}
+                          fallbackPrompt={currentQuestion}
+                          compact
+                          promptClassName="text-xl font-black tracking-tight text-white sm:text-3xl md:text-5xl"
+                        />
+                      )}
+                    </div>
                   )}
                 </div>
 
