@@ -11,7 +11,6 @@ type PlayerPanelProps = {
   label: string;
   score: number;
   rating?: number;
-  strikes?: number;
   eliminated?: boolean;
   avatar?: string;
   streakLabel?: string | null;
@@ -67,7 +66,6 @@ export function PlayerPanel({
   label,
   score,
   rating,
-  strikes = 0,
   eliminated = false,
   avatar,
   streakLabel,
@@ -348,9 +346,11 @@ export function PlayerPanel({
             {typeof rating === "number" ? (
               <p className="text-[10px] tabular-nums text-slate-600">{rating}</p>
             ) : null}
-            <p className={`text-[10px] ${eliminated ? "text-rose-400" : "text-slate-600"}`}>
-              {strikes}/3
-            </p>
+            {typeof hp === "number" ? (
+              <p className={`text-[10px] tabular-nums ${hp <= 20 ? "text-rose-300" : "text-slate-600"}`}>
+                {Math.max(0, Math.round(hp))}/{Math.max(1, Math.round(maxHp))} HP
+              </p>
+            ) : null}
           </div>
           <div className="mt-2 flex h-11 items-center justify-center sm:h-12">
             <p className="text-3xl font-bold text-white tabular-nums sm:text-4xl">{score}</p>

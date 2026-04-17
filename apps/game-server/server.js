@@ -10,6 +10,7 @@ const { verifyAccessToken } = require("./lib/supabase");
 const {
   generateQuestion,
   getMatchDurationSeconds,
+  getQuestionTimerSeconds,
   isCorrectAnswer,
   isValidDifficulty,
   isValidTopic,
@@ -72,6 +73,9 @@ const HP_BASE_PER_POINT = 8;
 const HP_FAST_BONUS = 4;
 const HP_STREAK_3_BONUS = 2;
 const HP_STREAK_5_BONUS = 4;
+// HP penalty for mistakes (replaces strikes system).
+const HP_WRONG_ANSWER_PENALTY = 6;
+const HP_TIMEOUT_PENALTY = 8;
 // Ultimate balance tuning (ms)
 const RAPID_FIRE_DURATION_MS = 6000;
 const FORTRESS_DURATION_MS = 6000;
@@ -1231,6 +1235,80 @@ function emitNewQuestionToPlayer(roomId, socketId) {
   console.log(`[server] newQuestion emitted -> room=${roomId} player=${socketId} qi=${questionState.questionIndex} token=${questionState.generation}`);
   io.to(socketId).emit("newQuestion", payload);
   emitQuestionState(roomId);
+
+  // Per-question time limit (topic + difficulty). Enforced server-side.
+  const seconds = getQuestionTimerSeconds(game.topic, game.difficulty);
+  const token = questionState.generation;
+  game.questionTimeouts[socketId] = setTimeout(() => {
+    const activeGame = activeGames.get(roomId);
+    if (!activeGame) return;
+    if (activeGame.phase !== "playing") return;
+    const state = activeGame.playerQuestionState[socketId];
+    if (!state) return;
+    if (state.answered) return;
+    if (state.generation !== token) return;
+
+    applyMistakePenalty(roomId, socketId, "timeout", HP_TIMEOUT_PENALTY);
+  }, seconds * 1000);
+}
+
+function applyMistakePenalty(roomId, playerSocketId, reason, damage) {
+  const game = activeGames.get(roomId);
+  if (!game || game.phase !== "playing") return;
+
+  const playerState = game.playerQuestionState[playerSocketId];
+  if (!playerState || playerState.answered || game.eliminated[playerSocketId]) return;
+
+  playerState.answered = true;
+  clearPlayerQuestionTimer(game, playerSocketId);
+  game.streaks[playerSocketId] = 0;
+
+  if (!game.hp) {
+    game.hp = buildHpMap(game.players);
+  }
+
+  const prev = game.hp[playerSocketId] ?? MAX_HP;
+  const next = Math.max(0, prev - Math.max(0, damage));
+  game.hp[playerSocketId] = next;
+
+  const opponent = getOpponent(game, playerSocketId);
+
+  io.to(playerSocketId).emit("incorrectAnswer", {
+    reason,
+    damage,
+    hp: {
+      you: next,
+      opponent: opponent ? (game.hp[opponent.socketId] ?? MAX_HP) : undefined,
+    },
+    ...buildPlayerUltimateState(game, playerSocketId),
+  });
+
+  if (opponent) {
+    io.to(opponent.socketId).emit("opponentStrike", {
+      reason,
+      damage,
+      hp: {
+        you: game.hp[opponent.socketId] ?? MAX_HP,
+        opponent: next,
+      },
+      ...buildPlayerUltimateState(game, opponent.socketId),
+    });
+  }
+
+  emitQuestionState(roomId);
+  emitLiveLeaderboard(roomId);
+
+  if (next <= 0 && opponent) {
+    void finishGame(roomId, {
+      forceWinnerSocketId: opponent.socketId,
+      endCondition: "ko",
+      reason: `${opponent.name} wins by KO.`
+    });
+    return;
+  }
+
+  // Advance to next question.
+  advancePlayerQuestion(roomId, playerSocketId);
 }
 
 function startMatchTimer(roomId) {
@@ -1847,45 +1925,7 @@ function handleIncorrectAnswer(roomId, playerSocketId) {
     clearTitanOverpowerForPlayer(game, playerSocketId);
   }
 
-  game.strikes[playerSocketId] = (game.strikes[playerSocketId] ?? 0) + 1;
-  game.streaks[playerSocketId] = 0;
-
-  const opponent = getOpponent(game, playerSocketId);
-  const isEliminated = (game.strikes[playerSocketId] ?? 0) >= 3;
-
-  if (isEliminated) {
-    game.eliminated[playerSocketId] = true;
-    const playerState = game.playerQuestionState[playerSocketId];
-
-    if (playerState) {
-      playerState.answered = true;
-    }
-    clearPlayerQuestionTimer(game, playerSocketId);
-  }
-
-  io.to(playerSocketId).emit("incorrectAnswer", {
-    strikes: game.strikes[playerSocketId] ?? 0,
-    eliminated: isEliminated,
-    ...buildPlayerUltimateState(game, playerSocketId)
-  });
-
-  if (opponent) {
-    io.to(opponent.socketId).emit("opponentStrike", {
-      opponentStrikes: game.strikes[playerSocketId] ?? 0,
-      opponentEliminated: isEliminated,
-      ...buildPlayerUltimateState(game, opponent.socketId)
-    });
-  }
-
-  emitQuestionState(roomId);
-  emitLiveLeaderboard(roomId);
-
-  if (isEliminated && opponent) {
-    void finishGame(roomId, {
-      forceWinnerSocketId: opponent.socketId,
-      reason: `${opponent.name} wins by elimination.`
-    });
-  }
+  applyMistakePenalty(roomId, playerSocketId, "wrong", HP_WRONG_ANSWER_PENALTY);
 }
 
 function handleMissedQuestion(roomId, scorerSocketId) {

@@ -69,6 +69,8 @@ const MATCH_DURATION_TOPIC_BONUS_SECONDS = {
   calculus: 10,
 };
 
+const { getRules, getQuestionTimerSeconds } = require("./difficulty-framework");
+
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -174,6 +176,111 @@ function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 
+function countMatches(re, s) {
+  const m = String(s ?? "").match(re);
+  return m ? m.length : 0;
+}
+
+function estimateStepsFromPrompt(prompt) {
+  const s = String(prompt ?? "");
+  // Count visible operations (rough proxy for cognitive steps).
+  const opCount =
+    // Addition/subtraction: count only binary operators with spaces around (avoid unary negatives like "-3").
+    countMatches(/(?:\s\+\s)|(?:\s-\s)/g, s) +
+    // Multiplication: count only between numeric terms "A x B" or "×" (avoid variable "x").
+    countMatches(/(?:\d+\s*[xX]\s*\d+)|\u00d7/g, s) +
+    // Division: count only explicit operator " ÷ " or " / " (do NOT count fraction slashes like "3/4").
+    countMatches(/(?:\s\/\s)|\u00f7|÷/g, s) +
+    // Exponentiation: count only numeric exponent operations like "2^5" (avoid "x^2" inside calculus prompts).
+    countMatches(/\d+\s*\^\s*\d+/g, s) +
+    countMatches(/√/g, s);
+  // Parentheses are formatting; don't add steps by themselves.
+  return Math.max(1, Math.min(6, opCount));
+}
+
+function isNiceTerminatingDecimal(n, maxPlaces = 2) {
+  if (!Number.isFinite(n)) return false;
+  const m = 10 ** maxPlaces;
+  return Math.abs(Math.round(n * m) - n * m) < 1e-9;
+}
+
+function isUglyDecimal(n) {
+  // "Ugly" for this game's feel: long repeating-ish decimals.
+  return Number.isFinite(n) && !Number.isInteger(n) && !isNiceTerminatingDecimal(n, 2);
+}
+
+function validateQuestionShape(topic, difficulty, built) {
+  const rules = getRules(topic, difficulty);
+  const prompt = String(built?.prompt ?? "");
+  const steps = estimateStepsFromPrompt(prompt);
+
+  if (!rules.allowBrackets && (prompt.includes("(") || prompt.includes(")"))) return false;
+  if (steps > rules.maxSteps) return false;
+
+  // Arithmetic easy: only +/-, small numbers, no multiplication/division.
+  if (topic === "arithmetic" && difficulty === "easy") {
+    if (/\bx\b|\u00d7|÷|\//.test(prompt)) return false;
+  }
+
+  // If explicit division is present but not allowed, reject.
+  // NOTE: "/" appears in fractions like "3/4" so only treat " / " (spaced) as division.
+  if (!rules.allowDivision && (prompt.includes("÷") || /\s\/\s/.test(prompt))) return false;
+
+  // Avoid negative answers when disallowed (best-effort on numeric answers).
+  if (rules.allowNegativeAnswer === false) {
+    const ans = Number(String(built?.answer ?? ""));
+    if (Number.isFinite(ans) && ans < 0) return false;
+  }
+
+  return true;
+}
+
+function validateQuestion(topic, difficulty, built) {
+  if (!validateQuestionShape(topic, difficulty, built)) return false;
+
+  const prompt = String(built?.prompt ?? "").trim();
+  const answerType = built?.answerType ?? "text";
+  const answer = String(built?.answer ?? "").trim();
+  if (!prompt || !answer) return false;
+
+  // General cleanliness: avoid ugly decimals unless explicitly intended.
+  if (answerType === "number" || answerType === "percent") {
+    const n = parseLooseNumber(answer);
+    if (n !== null && isUglyDecimal(n)) return false;
+  }
+  if (answerType === "int" || answerType === "angle") {
+    const n = parseLooseNumber(answer);
+    if (n === null || !Number.isFinite(n) || !Number.isInteger(n)) return false;
+  }
+
+  // Topic-specific guards.
+  if (topic === "algebra") {
+    // Ensure it reads like an algebra prompt.
+    const lower = prompt.toLowerCase();
+    if (!(lower.startsWith("solve") || lower.startsWith("evaluate"))) return false;
+    if (lower.startsWith("solve") && !prompt.includes("=")) return false;
+  }
+
+  if (topic === "geometry") {
+    // Must include the given measurements in text (so it's solvable without relying on the diagram renderer).
+    if (!/\d/.test(prompt)) return false;
+  }
+
+  if (topic === "fractions") {
+    // Fraction/percent prompts should not require messy decimals.
+    if (/[.]\d{3,}/.test(answer)) return false;
+  }
+
+  if (topic === "trigonometry") {
+    // Avoid random-degree trig without special values/triples.
+    if (/sin|cos|tan/i.test(prompt) && answerType !== "fraction" && answerType !== "int" && answerType !== "number") {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function getMatchDurationSeconds(topic, difficulty) {
   const safeDifficulty = isValidDifficulty(difficulty) ? difficulty : "easy";
   const safeTopic = isValidTopic(topic) ? topic : "arithmetic";
@@ -217,6 +324,7 @@ function createQuestion(topic, difficulty, subtype, built) {
     timing: {
       expectedSolveSeconds: built.meta?.estimatedSeconds ?? 4,
       matchDurationSeconds: getMatchDurationSeconds(topic, difficulty),
+      questionTimerSeconds: getQuestionTimerSeconds(topic, difficulty),
     },
     meta: {
       estimatedSeconds: built.meta?.estimatedSeconds ?? 4,
@@ -322,12 +430,12 @@ function normalizeAlgebraPrompt(prompt) {
 
 function arithmeticLightning(difficulty) {
   const ranges = {
-    easy: [3, 25],
+    easy: [0, 20],
     medium: [15, 80],
     hard: [30, 180],
   };
   const [min, max] = ranges[difficulty];
-  const op = pick(["+", "-", "x"]);
+  const op = difficulty === "easy" ? pick(["+", "-"]) : pick(["+", "-", "x"]);
   if (op === "x") {
     const a = randomInt(3, difficulty === "easy" ? 9 : difficulty === "medium" ? 14 : 19);
     const b = randomInt(3, difficulty === "easy" ? 9 : difficulty === "medium" ? 14 : 19);
@@ -349,9 +457,14 @@ function arithmeticLightning(difficulty) {
 }
 
 function arithmeticChain(difficulty) {
-  const a = randomInt(5, difficulty === "easy" ? 20 : difficulty === "medium" ? 40 : 70);
-  const b = randomInt(2, difficulty === "easy" ? 8 : 12);
-  const c = randomInt(2, difficulty === "easy" ? 8 : difficulty === "medium" ? 12 : 15);
+  // Medium/Hard only. Easy must never generate multi-step bracket chains.
+  if (difficulty === "easy") {
+    return arithmeticLightning("easy");
+  }
+
+  const a = randomInt(5, difficulty === "medium" ? 18 : 35);
+  const b = randomInt(2, difficulty === "medium" ? 10 : 25);
+  const c = randomInt(2, difficulty === "medium" ? 5 : 9);
   return {
     prompt: `(${a} + ${b}) x ${c}`,
     answer: String((a + b) * c),
@@ -360,18 +473,40 @@ function arithmeticChain(difficulty) {
   };
 }
 
+function arithmeticDivisionChain(difficulty) {
+  // Hard only: clean integer division chains (no ugly decimals).
+  const rules = getRules("arithmetic", difficulty);
+  if (!rules.allowDivision) {
+    return arithmeticChain("hard");
+  }
+
+  const divisor = pick([2, 3, 4, 5, 6, 8, 9, 10, 12]);
+  const quotient = randomInt(4, 20);
+  const a = divisor * quotient;
+  const mult = randomInt(2, 6);
+  const prompt = `${a} ÷ ${divisor} x ${mult}`;
+  return {
+    prompt,
+    answer: String(quotient * mult),
+    answerType: "int",
+    formatting: { style: "math", expression: prompt },
+    meta: { estimatedSeconds: 7, tags: ["division", "chain"] },
+  };
+}
+
 function algebraSolveLinear(difficulty) {
-  const x = randomInt(difficulty === "easy" ? 1 : -8, difficulty === "easy" ? 12 : 14);
-  const a = randomInt(2, difficulty === "easy" ? 6 : 9);
-  const b = randomInt(difficulty === "easy" ? 1 : -10, difficulty === "easy" ? 12 : 10);
+  // Keep as a shared primitive for medium (ax + b = c) style.
+  const x = randomInt(-9, 12);
+  const a = randomInt(2, 9);
+  const b = randomInt(-12, 12);
   const c = a * x + b;
   const bText = b >= 0 ? `+ ${b}` : `- ${Math.abs(b)}`;
   return {
-    prompt: `Solve: ${a}x ${bText} = ${c}, x = ?`,
+    prompt: `Solve: ${a}x ${bText} = ${c}`,
     answer: String(x),
     answerType: "int",
     formatting: { style: "math", expression: `${a}x ${bText} = ${c}` },
-    meta: { estimatedSeconds: difficulty === "hard" ? 6 : 4, tags: ["linear"] },
+    meta: { estimatedSeconds: 5, tags: ["linear"] },
   };
 }
 
@@ -389,12 +524,88 @@ function algebraEvaluate() {
   };
 }
 
+function algebraEasyOneStep() {
+  // x + b = c or x - b = c with small integers
+  const x = randomInt(1, 12);
+  const b = randomInt(1, 12);
+  const plus = Math.random() < 0.5;
+  const c = plus ? x + b : x - b;
+  if (!plus && c < 0) return algebraEasyOneStep();
+  const expr = plus ? `x + ${b} = ${c}` : `x - ${b} = ${c}`;
+  return {
+    prompt: `Solve: ${expr}`,
+    answer: String(x),
+    answerType: "int",
+    formatting: { style: "math", expression: expr },
+    meta: { estimatedSeconds: 3, tags: ["linear", "one-step"] },
+  };
+}
+
+function algebraMediumTwoStep() {
+  // ax + b = c with clean integer x
+  const x = randomInt(-8, 12);
+  const a = pick([2, 3, 4, 5, 6]);
+  const b = randomInt(-12, 12);
+  const c = a * x + b;
+  const bText = b >= 0 ? `+ ${b}` : `- ${Math.abs(b)}`;
+  const expr = `${a}x ${bText} = ${c}`;
+  return {
+    prompt: `Solve: ${expr}`,
+    answer: String(x),
+    answerType: "int",
+    formatting: { style: "math", expression: expr },
+    meta: { estimatedSeconds: 6, tags: ["linear", "two-step"] },
+  };
+}
+
+function algebraHardBracketsOrBothSides() {
+  // 3(x + k) = 2x + c  OR  ax + b = cx + d
+  if (Math.random() < 0.6) {
+    const x = randomInt(-8, 12);
+    const a = pick([2, 3, 4, 5]);
+    const c = pick([1, 2, 3]);
+    if (a === c) return algebraHardBracketsOrBothSides();
+    const b = randomInt(-10, 10);
+    const d = randomInt(-10, 10);
+    const left = a * x + b;
+    const right = c * x + d;
+    const bText = b >= 0 ? `+ ${b}` : `- ${Math.abs(b)}`;
+    const dText = d >= 0 ? `+ ${d}` : `- ${Math.abs(d)}`;
+    const expr = `${a}x ${bText} = ${c}x ${dText}`;
+    if (left !== right) return algebraHardBracketsOrBothSides();
+    return {
+      prompt: `Solve: ${expr}`,
+      answer: String(x),
+      answerType: "int",
+      formatting: { style: "math", expression: expr },
+      meta: { estimatedSeconds: 8, tags: ["linear", "both-sides"] },
+    };
+  }
+
+  const x = randomInt(-8, 12);
+  const a = pick([2, 3, 4, 5]);
+  const k = randomInt(-8, 10);
+  const c = pick([1, 2, 3, 4]);
+  const target = a * (x + k);
+  const rhsConst = target - c * x;
+  const kText = k >= 0 ? `+ ${k}` : `- ${Math.abs(k)}`;
+  const rhsText = rhsConst >= 0 ? `+ ${rhsConst}` : `- ${Math.abs(rhsConst)}`;
+  const expr = `${a}(x ${kText}) = ${c}x ${rhsText}`;
+  return {
+    prompt: `Solve: ${expr}`,
+    answer: String(x),
+    answerType: "int",
+    formatting: { style: "math", expression: expr },
+    meta: { estimatedSeconds: 9, tags: ["linear", "brackets"] },
+  };
+}
+
 function geometryRectangle(difficulty) {
   const w = randomInt(3, difficulty === "easy" ? 11 : difficulty === "medium" ? 18 : 24);
   const h = randomInt(3, difficulty === "easy" ? 11 : difficulty === "medium" ? 18 : 24);
   const askArea = Math.random() < 0.5;
   return {
-    prompt: askArea ? "Area of rectangle" : "Perimeter of rectangle",
+    prompt: askArea ? `Rectangle w=${w}, h=${h}. Area?` : `Rectangle w=${w}, h=${h}. Perimeter?`,
     answer: String(askArea ? w * h : 2 * (w + h)),
     answerType: "int",
     unit: "units",
@@ -405,11 +616,28 @@ function geometryRectangle(difficulty) {
   };
 }
 
+function geometryTriangleArea(difficulty) {
+  const base = randomInt(4, difficulty === "easy" ? 16 : difficulty === "medium" ? 22 : 30);
+  const height = randomInt(3, difficulty === "easy" ? 14 : difficulty === "medium" ? 18 : 24);
+  const area = (base * height) / 2;
+  if (!Number.isInteger(area)) return geometryTriangleArea(difficulty);
+  return {
+    prompt: `Triangle base=${base}, height=${height}. Area?`,
+    answer: String(area),
+    answerType: "int",
+    unit: "square units",
+    visualType: "shape",
+    diagramSpec: { kind: "triangle-area", base, height },
+    formatting: { style: "plain", unit: "square units" },
+    meta: { estimatedSeconds: difficulty === "hard" ? 7 : 5, tags: ["geometry", "area"] },
+  };
+}
+
 function geometryTriangleAngle(difficulty) {
   const a = randomInt(25, difficulty === "easy" ? 80 : 95);
   const b = randomInt(20, difficulty === "easy" ? 70 : 85);
   return {
-    prompt: "Missing triangle angle ?",
+    prompt: `Triangle angles: ${a}°, ${b}°, ?. Find the missing angle.`,
     answer: String(180 - a - b),
     answerType: "angle",
     unit: "deg",
@@ -423,8 +651,9 @@ function geometryTriangleAngle(difficulty) {
 function geometryCircle(difficulty) {
   const r = pick(difficulty === "easy" ? [2, 3, 4, 5] : difficulty === "medium" ? [3, 4, 5, 6, 7] : [4, 5, 6, 7, 8]);
   const ask = pick(["diameter", "radius"]);
+  const givenLabel = ask === "diameter" ? `radius=${r}` : `diameter=${r * 2}`;
   return {
-    prompt: ask === "diameter" ? "Diameter if radius = ?" : "Radius if diameter = ?",
+    prompt: ask === "diameter" ? `Circle ${givenLabel}. Diameter?` : `Circle ${givenLabel}. Radius?`,
     answer: ask === "diameter" ? String(r * 2) : String(r),
     answerType: "int",
     unit: "units",
@@ -449,6 +678,70 @@ function fractionsAddLikeDenominator(difficulty) {
     diagramSpec: { kind: "fraction-bars", denominator: d, numerators: [a, b], operation: "+" },
     formatting: { style: "math", expression: `${a}/${d} + ${b}/${d}` },
     meta: { estimatedSeconds: 4, tags: ["fraction", "visual"] },
+  };
+}
+
+function fractionsSubtractLikeDenominator(difficulty) {
+  const d = pick(difficulty === "easy" ? [2, 3, 4, 5, 8] : difficulty === "medium" ? [3, 4, 5, 6, 8, 10] : [5, 6, 8, 10, 12]);
+  const a = randomInt(1, d - 1);
+  const b = randomInt(1, a);
+  const s = simplifyFraction(a - b, d);
+  return {
+    prompt: `${a}/${d} - ${b}/${d}`,
+    answer: formatFraction(s.n, s.d),
+    acceptedAnswers: s.d !== 1 ? [String(s.n / s.d)] : [],
+    answerType: "fraction",
+    visualType: "fraction_bar",
+    diagramSpec: { kind: "fraction-bars", denominator: d, numerators: [a, b], operation: "-" },
+    formatting: { style: "math", expression: `${a}/${d} - ${b}/${d}` },
+    meta: { estimatedSeconds: 4, tags: ["fraction"] },
+  };
+}
+
+function fractionsMultiply(difficulty) {
+  const a = randomInt(1, 5);
+  const b = randomInt(2, difficulty === "medium" ? 8 : 12);
+  const c = randomInt(1, 5);
+  const d = randomInt(2, difficulty === "medium" ? 8 : 12);
+  const s = simplifyFraction(a * c, b * d);
+  return {
+    prompt: `${a}/${b} x ${c}/${d}`,
+    answer: formatFraction(s.n, s.d),
+    acceptedAnswers: s.d !== 1 ? [String(s.n / s.d)] : [],
+    answerType: "fraction",
+    formatting: { style: "math" },
+    meta: { estimatedSeconds: difficulty === "hard" ? 7 : 5, tags: ["fraction", "multiply"] },
+  };
+}
+
+function fractionsDivide(difficulty) {
+  const a = randomInt(1, 5);
+  const b = randomInt(2, difficulty === "medium" ? 8 : 12);
+  const c = randomInt(1, 5);
+  const d = randomInt(2, difficulty === "medium" ? 8 : 12);
+  const s = simplifyFraction(a * d, b * c);
+  return {
+    prompt: `${a}/${b} ÷ ${c}/${d}`,
+    answer: formatFraction(s.n, s.d),
+    acceptedAnswers: s.d !== 1 ? [String(s.n / s.d)] : [],
+    answerType: "fraction",
+    formatting: { style: "math" },
+    meta: { estimatedSeconds: difficulty === "hard" ? 8 : 6, tags: ["fraction", "divide"] },
+  };
+}
+
+function percentOfNumber(difficulty) {
+  const percent = pick(difficulty === "easy" ? [10, 20, 25, 50] : difficulty === "medium" ? [5, 10, 12, 15, 20, 25, 30, 40, 50] : [6, 8, 12, 15, 18, 22, 24, 28, 35, 45]);
+  const base = randomInt(difficulty === "easy" ? 10 : 20, difficulty === "easy" ? 120 : difficulty === "medium" ? 220 : 320);
+  // Ensure clean integer result.
+  const result = (percent * base) / 100;
+  if (!Number.isInteger(result)) return percentOfNumber(difficulty);
+  return {
+    prompt: `${percent}% of ${base}`,
+    answer: String(result),
+    answerType: "int",
+    formatting: { style: "math" },
+    meta: { estimatedSeconds: difficulty === "hard" ? 7 : 5, tags: ["percent"] },
   };
 }
 
@@ -498,6 +791,41 @@ function ratioScale(difficulty) {
     answerType: "int",
     formatting: { style: "math" },
     meta: { estimatedSeconds: 3, tags: ["ratio"] },
+  };
+}
+
+function ratioSimplify(difficulty) {
+  const a = randomInt(2, difficulty === "easy" ? 18 : 30);
+  const b = randomInt(2, difficulty === "easy" ? 18 : 30);
+  const g = gcd(a, b);
+  const sa = a / g;
+  const sb = b / g;
+  if (g === 1) return ratioSimplify(difficulty);
+  return {
+    prompt: `Simplify ${a}:${b}`,
+    answer: `${sa}:${sb}`,
+    acceptedAnswers: [`${sa} : ${sb}`],
+    answerType: "text",
+    inputMode: "text",
+    formatting: { style: "plain" },
+    meta: { estimatedSeconds: 4, tags: ["ratio", "simplify"] },
+  };
+}
+
+function ratioDivideInRatio(difficulty) {
+  const r1 = randomInt(1, 5);
+  const r2 = randomInt(2, 6);
+  const sum = r1 + r2;
+  const unit = randomInt(2, difficulty === "medium" ? 12 : 20);
+  const total = unit * sum;
+  const ask = pick(["first", "second"]);
+  const part = ask === "first" ? unit * r1 : unit * r2;
+  return {
+    prompt: `Split ${total} in ratio ${r1}:${r2}. ${ask} part?`,
+    answer: String(part),
+    answerType: "int",
+    formatting: { style: "plain" },
+    meta: { estimatedSeconds: difficulty === "hard" ? 8 : 6, tags: ["ratio", "divide"] },
   };
 }
 
@@ -557,18 +885,19 @@ function exponentSquareRoot(difficulty) {
   };
 }
 
-function exponentRule() {
+function exponentRuleSameBase() {
   const a = randomInt(2, 8);
   const m = randomInt(2, 6);
   const n = randomInt(2, 6);
+  const pow = m + n;
   return {
-    prompt: `${a}^${m} x ${a}^${n}`,
-    answer: `${a}^${m + n}`,
-    acceptedAnswers: [String(a ** (m + n))],
+    prompt: `Simplify: ${a}^${m} x ${a}^${n}`,
+    answer: `${a}^${pow}`,
+    acceptedAnswers: [String(a ** pow)],
     answerType: "text",
     inputMode: "text",
     formatting: { style: "math" },
-    meta: { estimatedSeconds: 5, tags: ["rule"] },
+    meta: { estimatedSeconds: 6, tags: ["exponent-rule"] },
   };
 }
 
@@ -596,6 +925,32 @@ function statsMean() {
     answer: Number.isInteger(mean) ? String(mean) : String(Math.round(mean * 10) / 10),
     answerType: Number.isInteger(mean) ? "int" : "number",
     meta: { estimatedSeconds: 4, tags: ["mean"] },
+  };
+}
+
+function statsMedian(difficulty) {
+  const count = difficulty === "easy" ? 5 : 7;
+  const nums = Array.from({ length: count }, () => randomInt(1, difficulty === "easy" ? 15 : 25)).sort((a, b) => a - b);
+  const med = nums[Math.floor(count / 2)];
+  return {
+    prompt: `Median of [${nums.join(", ")}]`,
+    answer: String(med),
+    answerType: "int",
+    meta: { estimatedSeconds: difficulty === "hard" ? 7 : 5, tags: ["median"] },
+  };
+}
+
+function statsMode(difficulty) {
+  const base = Array.from({ length: 5 }, () => randomInt(1, difficulty === "easy" ? 12 : 18));
+  const idx = randomInt(0, base.length - 1);
+  base.push(base[idx]); // ensure a mode
+  base.sort(() => Math.random() - 0.5);
+  const mode = base[idx];
+  return {
+    prompt: `Mode of [${base.join(", ")}]`,
+    answer: String(mode),
+    answerType: "int",
+    meta: { estimatedSeconds: difficulty === "hard" ? 7 : 5, tags: ["mode"] },
   };
 }
 
@@ -662,6 +1017,32 @@ function trigSpecialAngle() {
   };
 }
 
+function trigSolveMissingSide(difficulty) {
+  // Use right triangle triples so answers are integers.
+  const triples = [
+    { opp: 3, adj: 4, hyp: 5 },
+    { opp: 5, adj: 12, hyp: 13 },
+    { opp: 8, adj: 15, hyp: 17 },
+  ];
+  const t = pick(triples);
+  const scale = pick(difficulty === "medium" ? [1, 2, 3] : [2, 3, 4]);
+  const opp = t.opp * scale;
+  const adj = t.adj * scale;
+  const hyp = t.hyp * scale;
+  const ask = pick(["hyp", "opp", "adj"]);
+  const given = ask === "hyp" ? { opp, adj } : ask === "opp" ? { adj, hyp } : { opp, hyp };
+  const answer = ask === "hyp" ? hyp : ask === "opp" ? opp : adj;
+  return {
+    prompt: `Right triangle. opp=${given.opp ?? "?"}, adj=${given.adj ?? "?"}, hyp=${given.hyp ?? "?"}. Find ${ask}.`,
+    answer: String(answer),
+    answerType: "int",
+    visualType: "shape",
+    diagramSpec: { kind: "right-triangle", sides: { opp, adj, hyp }, ask },
+    formatting: { style: "plain" },
+    meta: { estimatedSeconds: difficulty === "hard" ? 9 : 7, tags: ["pythagoras", "trig"] },
+  };
+}
+
 function functionsCoordinateValue() {
   const x = randomInt(-5, 5);
   const y = randomInt(-5, 5);
@@ -709,6 +1090,43 @@ function functionsLinearEval() {
   };
 }
 
+function functionsTransformEval(difficulty) {
+  // Given f(x)=ax+b, evaluate f(x+k) at some x.
+  const a = pick([2, 3, 4, 5]);
+  const b = randomInt(-6, 8);
+  const k = randomInt(1, difficulty === "medium" ? 4 : 6);
+  const x = randomInt(-4, 6);
+  const bText = b >= 0 ? `+ ${b}` : `- ${Math.abs(b)}`;
+  const prompt = `f(x) = ${a}x ${bText}. Find f(${x + k}).`;
+  const answer = a * (x + k) + b;
+  return {
+    prompt,
+    answer: String(answer),
+    answerType: "int",
+    formatting: { style: "math", expression: `f(x) = ${a}x ${bText}` },
+    meta: { estimatedSeconds: difficulty === "hard" ? 9 : 7, tags: ["transform", "function"] },
+  };
+}
+
+function functionsCompose(difficulty) {
+  // f(x)=ax+b, g(x)=x+c, ask f(g(t))
+  const a = pick([2, 3, 4]);
+  const b = randomInt(-6, 8);
+  const c = randomInt(-4, 6);
+  const t = randomInt(-3, 5);
+  const bText = b >= 0 ? `+ ${b}` : `- ${Math.abs(b)}`;
+  const cText = c >= 0 ? `+ ${c}` : `- ${Math.abs(c)}`;
+  const prompt = `f(x) = ${a}x ${bText}, g(x) = x ${cText}. Find f(g(${t})).`;
+  const answer = a * (t + c) + b;
+  return {
+    prompt,
+    answer: String(answer),
+    answerType: "int",
+    formatting: { style: "math" },
+    meta: { estimatedSeconds: difficulty === "hard" ? 10 : 8, tags: ["compose", "function"] },
+  };
+}
+
 function calcDerivativeQuick(difficulty) {
   const a = randomInt(2, difficulty === "easy" ? 5 : 8);
   const p = pick(difficulty === "easy" ? [2, 3] : [2, 3, 4]);
@@ -721,6 +1139,48 @@ function calcDerivativeQuick(difficulty) {
     inputMode: "text",
     formatting: { style: "math" },
     meta: { estimatedSeconds: 5, tags: ["derivative"] },
+  };
+}
+
+function calcDerivativePolynomial(difficulty) {
+  // d/dx (ax^n + bx + c) with small coefficients
+  const a = randomInt(2, difficulty === "medium" ? 6 : 8);
+  const n = pick(difficulty === "medium" ? [2, 3, 4] : [3, 4, 5]);
+  const b = randomInt(1, 9);
+  const c = randomInt(0, 9);
+  const prompt = `d/dx (${a}x^${n} + ${b}x + ${c})`;
+  const coeff = a * n;
+  const pow = n - 1;
+  const term1 = pow === 1 ? `${coeff}x` : `${coeff}x^${pow}`;
+  const term2 = `${b}`;
+  const answer = `${term1} + ${term2}`;
+  return {
+    prompt,
+    answer,
+    answerType: "text",
+    inputMode: "text",
+    formatting: { style: "math" },
+    meta: { estimatedSeconds: difficulty === "hard" ? 11 : 9, tags: ["derivative", "polynomial"] },
+  };
+}
+
+function calcDerivativeChainRule() {
+  // d/dx ( (ax+b)^n ) with integer simplification
+  const a = pick([2, 3, 4, 5]);
+  const b = randomInt(-6, 8);
+  const n = pick([2, 3, 4]);
+  const bText = b >= 0 ? `+ ${b}` : `- ${Math.abs(b)}`;
+  const coeff = a * n;
+  const pow = n - 1;
+  const inside = `( ${a}x ${bText} )`;
+  const answer = pow === 1 ? `${coeff}${inside}` : `${coeff}${inside}^${pow}`;
+  return {
+    prompt: `d/dx (${inside}^${n})`,
+    answer,
+    answerType: "text",
+    inputMode: "text",
+    formatting: { style: "math" },
+    meta: { estimatedSeconds: 12, tags: ["derivative", "chain-rule"] },
   };
 }
 
@@ -755,54 +1215,160 @@ function calcRateOfChange() {
 
 const BANK = {
   arithmetic: {
-    easy: [{ subtype: "lightning-arithmetic", weight: 5, build: arithmeticLightning }, { subtype: "operation-chain", weight: 3, build: arithmeticChain }],
-    medium: [{ subtype: "lightning-arithmetic", weight: 4, build: arithmeticLightning }, { subtype: "operation-chain", weight: 4, build: arithmeticChain }],
-    hard: [{ subtype: "lightning-arithmetic", weight: 3, build: arithmeticLightning }, { subtype: "operation-chain", weight: 5, build: arithmeticChain }],
+    easy: [{ subtype: "lightning-arithmetic", weight: 8, build: arithmeticLightning }],
+    medium: [
+      { subtype: "lightning-arithmetic", weight: 6, build: arithmeticLightning },
+      { subtype: "operation-chain", weight: 4, build: arithmeticChain },
+    ],
+    hard: [
+      { subtype: "lightning-arithmetic", weight: 4, build: arithmeticLightning },
+      { subtype: "operation-chain", weight: 4, build: arithmeticChain },
+      { subtype: "division-chain", weight: 2, build: arithmeticDivisionChain },
+    ],
   },
   algebra: {
-    easy: [{ subtype: "solve-linear", weight: 5, build: algebraSolveLinear }, { subtype: "evaluate-expression", weight: 3, build: algebraEvaluate }],
-    medium: [{ subtype: "solve-linear", weight: 4, build: algebraSolveLinear }, { subtype: "evaluate-expression", weight: 4, build: algebraEvaluate }],
-    hard: [{ subtype: "solve-linear", weight: 5, build: algebraSolveLinear }, { subtype: "evaluate-expression", weight: 3, build: algebraEvaluate }],
+    easy: [
+      { subtype: "solve-one-step", weight: 7, build: algebraEasyOneStep },
+      { subtype: "evaluate-expression", weight: 3, build: algebraEvaluate },
+    ],
+    medium: [
+      { subtype: "solve-two-step", weight: 7, build: algebraMediumTwoStep },
+      { subtype: "evaluate-expression", weight: 3, build: algebraEvaluate },
+    ],
+    hard: [
+      { subtype: "solve-brackets-both-sides", weight: 8, build: algebraHardBracketsOrBothSides },
+      { subtype: "solve-two-step", weight: 2, build: algebraMediumTwoStep },
+    ],
   },
   geometry: {
-    easy: [{ subtype: "rectangle-metrics", weight: 4, build: geometryRectangle }, { subtype: "triangle-missing-angle", weight: 4, build: geometryTriangleAngle }, { subtype: "circle-radius-diameter", weight: 2, build: geometryCircle }],
-    medium: [{ subtype: "rectangle-metrics", weight: 4, build: geometryRectangle }, { subtype: "triangle-missing-angle", weight: 4, build: geometryTriangleAngle }, { subtype: "circle-radius-diameter", weight: 2, build: geometryCircle }],
-    hard: [{ subtype: "rectangle-metrics", weight: 3, build: geometryRectangle }, { subtype: "triangle-missing-angle", weight: 5, build: geometryTriangleAngle }, { subtype: "circle-radius-diameter", weight: 2, build: geometryCircle }],
+    easy: [
+      { subtype: "rectangle-metrics", weight: 5, build: geometryRectangle },
+      { subtype: "circle-radius-diameter", weight: 3, build: geometryCircle },
+      { subtype: "triangle-missing-angle", weight: 2, build: geometryTriangleAngle },
+    ],
+    medium: [
+      { subtype: "rectangle-metrics", weight: 4, build: geometryRectangle },
+      { subtype: "triangle-area", weight: 4, build: geometryTriangleArea },
+      { subtype: "triangle-missing-angle", weight: 2, build: geometryTriangleAngle },
+    ],
+    hard: [
+      { subtype: "triangle-area", weight: 5, build: geometryTriangleArea },
+      { subtype: "rectangle-metrics", weight: 3, build: geometryRectangle },
+      { subtype: "triangle-missing-angle", weight: 2, build: geometryTriangleAngle },
+    ],
   },
   fractions: {
-    easy: [{ subtype: "add-like-fractions", weight: 4, build: fractionsAddLikeDenominator }, { subtype: "fraction-of-number", weight: 4, build: fractionsOfNumber }, { subtype: "compare-fractions", weight: 2, build: fractionsCompare }],
-    medium: [{ subtype: "add-like-fractions", weight: 3, build: fractionsAddLikeDenominator }, { subtype: "fraction-of-number", weight: 3, build: fractionsOfNumber }, { subtype: "compare-fractions", weight: 4, build: fractionsCompare }],
-    hard: [{ subtype: "add-like-fractions", weight: 3, build: fractionsAddLikeDenominator }, { subtype: "fraction-of-number", weight: 2, build: fractionsOfNumber }, { subtype: "compare-fractions", weight: 5, build: fractionsCompare }],
+    easy: [
+      { subtype: "add-like-fractions", weight: 4, build: fractionsAddLikeDenominator },
+      { subtype: "subtract-like-fractions", weight: 3, build: fractionsSubtractLikeDenominator },
+      { subtype: "fraction-of-number", weight: 3, build: fractionsOfNumber },
+    ],
+    medium: [
+      { subtype: "fraction-multiply", weight: 3, build: fractionsMultiply },
+      { subtype: "fraction-divide", weight: 2, build: fractionsDivide },
+      { subtype: "percent-of-number", weight: 3, build: percentOfNumber },
+      { subtype: "compare-fractions", weight: 2, build: fractionsCompare },
+    ],
+    hard: [
+      { subtype: "fraction-divide", weight: 3, build: fractionsDivide },
+      { subtype: "fraction-multiply", weight: 2, build: fractionsMultiply },
+      { subtype: "percent-of-number", weight: 3, build: percentOfNumber },
+      { subtype: "compare-fractions", weight: 2, build: fractionsCompare },
+    ],
   },
   ratios: {
-    easy: [{ subtype: "ratio-scale", weight: 4, build: ratioScale }, { subtype: "ratio-part-whole", weight: 3, build: ratioPartWhole }, { subtype: "unit-rate", weight: 3, build: ratioUnitRate }],
-    medium: [{ subtype: "ratio-scale", weight: 4, build: ratioScale }, { subtype: "ratio-part-whole", weight: 3, build: ratioPartWhole }, { subtype: "unit-rate", weight: 3, build: ratioUnitRate }],
-    hard: [{ subtype: "ratio-scale", weight: 3, build: ratioScale }, { subtype: "ratio-part-whole", weight: 3, build: ratioPartWhole }, { subtype: "unit-rate", weight: 4, build: ratioUnitRate }],
+    easy: [
+      { subtype: "ratio-simplify", weight: 4, build: ratioSimplify },
+      { subtype: "ratio-scale", weight: 3, build: ratioScale },
+      { subtype: "unit-rate", weight: 3, build: ratioUnitRate },
+    ],
+    medium: [
+      { subtype: "ratio-scale", weight: 3, build: ratioScale },
+      { subtype: "divide-in-ratio", weight: 4, build: ratioDivideInRatio },
+      { subtype: "ratio-part-whole", weight: 3, build: ratioPartWhole },
+    ],
+    hard: [
+      { subtype: "divide-in-ratio", weight: 5, build: ratioDivideInRatio },
+      { subtype: "unit-rate", weight: 3, build: ratioUnitRate },
+      { subtype: "ratio-part-whole", weight: 2, build: ratioPartWhole },
+    ],
   },
   exponents: {
-    easy: [{ subtype: "power-value", weight: 4, build: exponentPowerValue }, { subtype: "square-root", weight: 4, build: exponentSquareRoot }, { subtype: "same-base-rule", weight: 2, build: exponentRule }],
-    medium: [{ subtype: "power-value", weight: 4, build: exponentPowerValue }, { subtype: "square-root", weight: 3, build: exponentSquareRoot }, { subtype: "same-base-rule", weight: 3, build: exponentRule }],
-    hard: [{ subtype: "power-value", weight: 3, build: exponentPowerValue }, { subtype: "square-root", weight: 3, build: exponentSquareRoot }, { subtype: "same-base-rule", weight: 4, build: exponentRule }],
+    easy: [
+      { subtype: "power-value", weight: 6, build: exponentPowerValue },
+      { subtype: "square-root", weight: 4, build: exponentSquareRoot },
+    ],
+    medium: [
+      { subtype: "square-root", weight: 4, build: exponentSquareRoot },
+      { subtype: "power-value", weight: 4, build: exponentPowerValue },
+      { subtype: "same-base-rule", weight: 2, build: exponentRuleSameBase },
+    ],
+    hard: [
+      { subtype: "same-base-rule", weight: 5, build: exponentRuleSameBase },
+      { subtype: "square-root", weight: 2, build: exponentSquareRoot },
+      { subtype: "power-value", weight: 3, build: exponentPowerValue },
+    ],
   },
   statistics: {
-    easy: [{ subtype: "sequence-next", weight: 4, build: statsSequence }, { subtype: "mean-fast", weight: 3, build: statsMean }, { subtype: "probability-simplify", weight: 3, build: statsProbability }],
-    medium: [{ subtype: "sequence-next", weight: 4, build: statsSequence }, { subtype: "mean-fast", weight: 3, build: statsMean }, { subtype: "probability-simplify", weight: 3, build: statsProbability }],
-    hard: [{ subtype: "sequence-next", weight: 5, build: statsSequence }, { subtype: "mean-fast", weight: 2, build: statsMean }, { subtype: "probability-simplify", weight: 3, build: statsProbability }],
+    easy: [
+      { subtype: "mean-fast", weight: 6, build: statsMean },
+      { subtype: "sequence-next", weight: 4, build: statsSequence },
+    ],
+    medium: [
+      { subtype: "median", weight: 4, build: statsMedian },
+      { subtype: "mode", weight: 3, build: statsMode },
+      { subtype: "mean-fast", weight: 3, build: statsMean },
+    ],
+    hard: [
+      { subtype: "median", weight: 4, build: statsMedian },
+      { subtype: "mode", weight: 3, build: statsMode },
+      { subtype: "probability-simplify", weight: 3, build: statsProbability },
+    ],
   },
   trigonometry: {
-    easy: [{ subtype: "line-missing-angle", weight: 4, build: trigMissingAngle }, { subtype: "right-triangle-ratio", weight: 3, build: trigRightRatio }, { subtype: "special-angle", weight: 3, build: trigSpecialAngle }],
-    medium: [{ subtype: "line-missing-angle", weight: 3, build: trigMissingAngle }, { subtype: "right-triangle-ratio", weight: 4, build: trigRightRatio }, { subtype: "special-angle", weight: 3, build: trigSpecialAngle }],
-    hard: [{ subtype: "line-missing-angle", weight: 2, build: trigMissingAngle }, { subtype: "right-triangle-ratio", weight: 5, build: trigRightRatio }, { subtype: "special-angle", weight: 3, build: trigSpecialAngle }],
+    easy: [
+      { subtype: "special-angle", weight: 6, build: trigSpecialAngle },
+      { subtype: "right-triangle-ratio", weight: 4, build: trigRightRatio },
+    ],
+    medium: [
+      { subtype: "solve-missing-side", weight: 6, build: trigSolveMissingSide },
+      { subtype: "right-triangle-ratio", weight: 2, build: trigRightRatio },
+      { subtype: "special-angle", weight: 2, build: trigSpecialAngle },
+    ],
+    hard: [
+      { subtype: "solve-missing-side", weight: 7, build: trigSolveMissingSide },
+      { subtype: "right-triangle-ratio", weight: 3, build: trigRightRatio },
+    ],
   },
   functions: {
-    easy: [{ subtype: "coordinate-value", weight: 4, build: functionsCoordinateValue }, { subtype: "line-slope", weight: 3, build: functionsSlope }, { subtype: "function-eval", weight: 3, build: functionsLinearEval }],
-    medium: [{ subtype: "coordinate-value", weight: 3, build: functionsCoordinateValue }, { subtype: "line-slope", weight: 4, build: functionsSlope }, { subtype: "function-eval", weight: 3, build: functionsLinearEval }],
-    hard: [{ subtype: "coordinate-value", weight: 2, build: functionsCoordinateValue }, { subtype: "line-slope", weight: 5, build: functionsSlope }, { subtype: "function-eval", weight: 3, build: functionsLinearEval }],
+    easy: [
+      { subtype: "function-eval", weight: 7, build: functionsLinearEval },
+      { subtype: "coordinate-value", weight: 3, build: functionsCoordinateValue },
+    ],
+    medium: [
+      { subtype: "line-slope", weight: 3, build: functionsSlope },
+      { subtype: "transform-eval", weight: 5, build: functionsTransformEval },
+      { subtype: "function-eval", weight: 2, build: functionsLinearEval },
+    ],
+    hard: [
+      { subtype: "compose-functions", weight: 6, build: functionsCompose },
+      { subtype: "line-slope", weight: 2, build: functionsSlope },
+      { subtype: "transform-eval", weight: 2, build: functionsTransformEval },
+    ],
   },
   calculus: {
-    easy: [{ subtype: "derivative-power-rule", weight: 4, build: calcDerivativeQuick }, { subtype: "definite-integral-linear", weight: 3, build: calcDefiniteIntegral }, { subtype: "rate-of-change", weight: 3, build: calcRateOfChange }],
-    medium: [{ subtype: "derivative-power-rule", weight: 4, build: calcDerivativeQuick }, { subtype: "definite-integral-linear", weight: 4, build: calcDefiniteIntegral }, { subtype: "rate-of-change", weight: 2, build: calcRateOfChange }],
-    hard: [{ subtype: "derivative-power-rule", weight: 4, build: calcDerivativeQuick }, { subtype: "definite-integral-linear", weight: 3, build: calcDefiniteIntegral }, { subtype: "rate-of-change", weight: 3, build: calcRateOfChange }],
+    easy: [
+      { subtype: "derivative-power-rule", weight: 7, build: calcDerivativeQuick },
+      { subtype: "rate-of-change", weight: 3, build: calcRateOfChange },
+    ],
+    medium: [
+      { subtype: "derivative-polynomial", weight: 6, build: calcDerivativePolynomial },
+      { subtype: "definite-integral-linear", weight: 4, build: calcDefiniteIntegral },
+    ],
+    hard: [
+      { subtype: "derivative-chain-rule", weight: 7, build: calcDerivativeChainRule },
+      { subtype: "definite-integral-linear", weight: 3, build: calcDefiniteIntegral },
+    ],
   },
 };
 
@@ -812,7 +1378,23 @@ function generateQuestion(topic, difficulty, scopeKey = "global") {
   const topicBank = BANK[safeTopic];
   const families = topicBank?.[safeDifficulty] ?? BANK.arithmetic.easy;
   const family = pickSubtype(families, scopeKey, safeTopic, safeDifficulty);
-  return buildFamilyResult(safeTopic, safeDifficulty, family.subtype, family.build(safeDifficulty));
+
+  // Safety net: regenerate until the question matches the declared difficulty rules.
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const built = family.build(safeDifficulty);
+    if (!validateQuestion(safeTopic, safeDifficulty, built)) {
+      continue;
+    }
+    return buildFamilyResult(safeTopic, safeDifficulty, family.subtype, built);
+  }
+
+  // Fallback if a generator is misconfigured.
+  return createQuestion("arithmetic", safeDifficulty, "fallback-add", {
+    prompt: safeDifficulty === "hard" ? "(13 + 14) x 4" : safeDifficulty === "medium" ? "(5 + 3) x 2" : "7 + 8",
+    answer: safeDifficulty === "hard" ? "108" : safeDifficulty === "medium" ? "16" : "15",
+    answerType: "int",
+    meta: { estimatedSeconds: 3, tags: ["fallback", "validated"] },
+  });
 }
 
 const QUESTION_CURRICULUM = {
@@ -838,7 +1420,11 @@ module.exports = {
   DIFFICULTY_GAMEPLAY_PROFILE,
   QUESTION_CURRICULUM,
   getMatchDurationSeconds,
+  getQuestionTimerSeconds,
   generateQuestion,
+  validateQuestion,
+  validateQuestionShape,
+  estimateStepsFromPrompt,
   normalizeAnswer,
   isCorrectAnswer,
   isValidTopic,

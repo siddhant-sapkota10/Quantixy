@@ -144,7 +144,7 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
   if (variant === "battle") {
     return (
       <div
-        className={`relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/78 p-3 sm:p-3.5 ${
+        className={`relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/78 p-2.5 sm:p-3.5 ${
           theme.glow
         } ${showReadyPulse ? theme.readyGlow : ""}`}
       >
@@ -170,7 +170,7 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
           }`}
         >
           <div className={`min-w-0 ${isOpponent ? "order-2 text-right" : "order-1 text-left"}`}>
-            <p className="truncate text-[0.95rem] font-black uppercase tracking-[0.06em] text-white sm:text-[1.02rem]">
+            <p className="truncate text-[0.9rem] font-black uppercase tracking-[0.06em] text-white sm:text-[1.02rem]">
               {avatar.name}
             </p>
             <p className="mt-0.5 truncate text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">
@@ -188,7 +188,7 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
               ) : null}
             </div>
 
-            <p className="mt-2 truncate text-[11px] text-slate-200">
+            <p className="mt-1.5 truncate text-[11px] text-slate-200">
               <span className="font-semibold uppercase tracking-[0.16em] text-slate-400">Ultimate</span>{" "}
               <span className="font-semibold">{model.ultimateName}</span>
             </p>

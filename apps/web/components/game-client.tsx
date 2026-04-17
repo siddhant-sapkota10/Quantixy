@@ -83,10 +83,6 @@ type RatingState = {
   opponent: number;
 };
 
-type StrikeState = {
-  you: number;
-  opponent: number;
-};
 
 type TimerState = {
   secondsLeft: number;
@@ -179,10 +175,6 @@ const initialRatings: RatingState = {
   opponent: 1000
 };
 
-const initialStrikes: StrikeState = {
-  you: 0,
-  opponent: 0
-};
 
 const initialTimer: TimerState = {
   secondsLeft: 60
@@ -345,7 +337,6 @@ export function GameClient({
   const [status, setStatus] = useState<GameStatus>("connecting");
   const [scores, setScores] = useState<ScoreState>(initialScores);
   const [ratings, setRatings] = useState<RatingState>(initialRatings);
-  const [strikes, setStrikes] = useState<StrikeState>(initialStrikes);
   const [eliminated, setEliminated] = useState({ you: false, opponent: false });
   const [timer, setTimer] = useState<TimerState>(initialTimer);
   const [ultimate, setUltimate] = useState<UltimateState>(initialUltimate);
@@ -642,7 +633,7 @@ export function GameClient({
     setStatus("connecting");
     setScores(initialScores);
     setRatings(initialRatings);
-    setStrikes(initialStrikes);
+    // strikes removed (HP-only mistakes)
     setEliminated({ you: false, opponent: false });
     setTimer(initialTimer);
     setUltimate(initialUltimate);
@@ -1070,7 +1061,7 @@ export function GameClient({
         youPowerUpAvailable: youPowerUpsAvailable[0] ?? null,
         opponentPowerUpAvailable: opponentPowerUpsAvailable[0] ?? null,
       });
-      setStrikes(initialStrikes);
+      // strikes removed (HP-only mistakes)
       setEliminated({ you: false, opponent: false });
       setTimer(initialTimer);
       setUltimate(initialUltimate);
@@ -1104,7 +1095,7 @@ export function GameClient({
       console.log("[client] countdown received", payload);
       if (payload.value === "3") {
         setScores(initialScores);
-        setStrikes(initialStrikes);
+        // strikes removed (HP-only mistakes)
         setEliminated({ you: false, opponent: false });
         setTimer(initialTimer);
         setUltimate(initialUltimate);
@@ -1257,50 +1248,57 @@ export function GameClient({
       }, 2000);
     };
 
-    const handleIncorrectAnswer = (payload: { strikes?: number; eliminated?: boolean }) => {
+    const handleIncorrectAnswer = (payload: {
+      reason?: string;
+      damage?: number;
+      hp?: { you?: number; opponent?: number };
+      eliminated?: boolean;
+    }) => {
       console.log("[client] incorrectAnswer received", payload);
       soundManager.play("wrong");
       // Show "Streak Broken" popup if local player had a streak going
       if (feedbackRef.current.youStreak >= 2) {
         triggerStreakBroken();
       }
-      setStrikes((previous) => ({
-        ...previous,
-        you: payload.strikes ?? previous.you
-      }));
-      setEliminated((previous) => ({
-        ...previous,
-        you: payload.eliminated ?? previous.you
-      }));
-      if (payload.eliminated) {
-        setAnswer("");
+
+      const dmg = Math.max(0, payload.damage ?? 0);
+      if (dmg > 0) {
+        setLatestYouDamage(dmg);
+        setYouHitKey((k) => k + 1);
+      }
+      if (typeof payload.hp?.you === "number") {
+        setYouDamageTaken(Math.max(0, MAX_HP - payload.hp.you));
+      } else if (dmg > 0) {
+        setYouDamageTaken((prev) => prev + dmg);
       }
     };
 
     const handleOpponentStrike = (payload: {
-      opponentStrikes?: number;
-      opponentEliminated?: boolean;
+      reason?: string;
+      damage?: number;
+      hp?: { you?: number; opponent?: number };
     }) => {
       console.log("[client] opponentStrike received", payload);
-      setStrikes((previous) => ({
-        ...previous,
-        opponent: payload.opponentStrikes ?? previous.opponent
-      }));
-      setEliminated((previous) => ({
-        ...previous,
-        opponent: payload.opponentEliminated ?? previous.opponent
-      }));
+      const dmg = Math.max(0, payload.damage ?? 0);
+      if (dmg > 0) {
+        setLatestOpponentDamage(dmg);
+        setOpponentHitKey((k) => k + 1);
+      }
+      if (typeof payload.hp?.opponent === "number") {
+        setOpponentDamageTaken(Math.max(0, MAX_HP - payload.hp.opponent));
+      } else if (dmg > 0) {
+        setOpponentDamageTaken((prev) => prev + dmg);
+      }
     };
 
     const handleLiveLeaderboard = (payload: {
       entries?: Array<{
         name: string;
         score: number;
-        strikes: number;
-        eliminated: boolean;
+        strikes?: number;
+        eliminated?: boolean;
       }>;
       scores?: { you: number; opponent: number };
-      strikes?: { you: number; opponent: number };
       eliminated?: { you: boolean; opponent: boolean };
       ultimateType?: string;
       ultimateName?: string;
@@ -1326,9 +1324,6 @@ export function GameClient({
       console.log("[client] liveLeaderboard received", payload);
       if (payload.scores) {
         setScores(payload.scores);
-      }
-      if (payload.strikes) {
-        setStrikes(payload.strikes);
       }
       if (payload.eliminated) {
         setEliminated(payload.eliminated);
@@ -1515,10 +1510,6 @@ export function GameClient({
         you: newYouScore,
         opponent: newOpponentScore
       });
-      setStrikes((previous) => ({
-        you: payload.strikes ?? previous.you,
-        opponent: payload.opponentStrikes ?? previous.opponent
-      }));
       setEliminated((previous) => ({
         you: payload.youEliminated ?? previous.you,
         opponent: payload.opponentEliminated ?? previous.opponent
@@ -3070,7 +3061,7 @@ export function GameClient({
                     question={currentQuestionData}
                     fallbackPrompt={currentQuestion}
                     compact
-                    promptClassName="text-2xl font-black tracking-tight text-white sm:text-4xl md:text-5xl"
+                    promptClassName="text-xl font-black tracking-tight text-white sm:text-4xl md:text-5xl"
                   />
                 </div>
 
@@ -3108,53 +3099,53 @@ export function GameClient({
                 />
               </div>
               <form className="flex w-full flex-col gap-2" onSubmit={handleSubmit}>
-              <WorkingScratchpad />
-              <input
-                ref={answerInputRef}
-                type="text"
-                value={answer}
-                onChange={(event) => handleAnswerChange(event.target.value)}
-                placeholder={
-                  isJamActive
-                    ? "Signal jam active - prep your answer..."
-                    : youEliminated
-                      ? "Eliminated"
-                      : feedback.youAnsweredCurrent
-                        ? "Waiting..."
-                        : currentQuestionData?.inputMode === "text"
-                          ? "Type text or symbol answer..."
-                          : "Type answer..."
-                }
-                disabled={youEliminated || feedback.youAnsweredCurrent}
-                autoCapitalize="off"
-                autoCorrect="off"
-                spellCheck={false}
-                enterKeyHint="go"
-              className="neon-input h-12 w-full rounded-2xl px-4 disabled:cursor-not-allowed disabled:opacity-60"
-              />
-
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  className="h-11 w-full"
-                  type="submit"
-                  disabled={!answer.trim() || isJamActive || youEliminated || feedback.youAnsweredCurrent}
-                >
-                  Submit
-                </Button>
-                <UltimateAbilityButton
-                  type={ultimate.type}
-                  ultimateName={ultimate.name}
-                  charge={ultimate.charge}
-                  ready={ultimate.ready}
-                  used={ultimate.used}
-                  implemented={ultimate.implemented}
-                  activating={ultimateActivating}
-                  disabled={!canUseUltimate}
-                  onActivate={handleActivateUltimate}
-                  activationBurstKey={youUltimateActivationKey}
-                  size="compact"
+                <WorkingScratchpad />
+                <input
+                  ref={answerInputRef}
+                  type="text"
+                  value={answer}
+                  onChange={(event) => handleAnswerChange(event.target.value)}
+                  placeholder={
+                    isJamActive
+                      ? "Signal jam active - prep your answer..."
+                      : youEliminated
+                        ? "Eliminated"
+                        : feedback.youAnsweredCurrent
+                          ? "Waiting..."
+                          : currentQuestionData?.inputMode === "text"
+                            ? "Type text or symbol answer..."
+                            : "Type answer..."
+                  }
+                  disabled={youEliminated || feedback.youAnsweredCurrent}
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  enterKeyHint="go"
+                  className="neon-input h-12 w-full rounded-2xl px-4 disabled:cursor-not-allowed disabled:opacity-60"
                 />
-              </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    className="h-11 w-full"
+                    type="submit"
+                    disabled={!answer.trim() || isJamActive || youEliminated || feedback.youAnsweredCurrent}
+                  >
+                    Submit
+                  </Button>
+                  <UltimateAbilityButton
+                    type={ultimate.type}
+                    ultimateName={ultimate.name}
+                    charge={ultimate.charge}
+                    ready={ultimate.ready}
+                    used={ultimate.used}
+                    implemented={ultimate.implemented}
+                    activating={ultimateActivating}
+                    disabled={!canUseUltimate}
+                    onActivate={handleActivateUltimate}
+                    activationBurstKey={youUltimateActivationKey}
+                    size="compact"
+                  />
+                </div>
               </form>
             </div>
           </div>
@@ -3279,7 +3270,6 @@ export function GameClient({
                 label={yourName}
                 score={scores.you}
                 rating={ratings.you}
-                strikes={strikes.you}
                 eliminated={youEliminated}
                 streakLabel={null}
                 streakLevel={null}
@@ -3389,7 +3379,6 @@ export function GameClient({
                 label={yourName}
                 score={scores.you}
                 rating={ratings.you}
-                strikes={strikes.you}
                 eliminated={youEliminated}
                 avatar={yourAvatar}
                 streakLabel={isActiveGameplay ? yourStreakLabel : null}
@@ -3511,7 +3500,6 @@ export function GameClient({
                 label={opponentName}
                 score={scores.opponent}
                 rating={ratings.opponent}
-                strikes={strikes.opponent}
                 eliminated={opponentEliminated}
                 avatar={opponentAvatar}
                 streakLabel={isActiveGameplay ? opponentStreakLabel : null}

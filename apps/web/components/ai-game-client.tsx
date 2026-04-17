@@ -31,7 +31,6 @@ const {
 type AiGameStatus = "countdown" | "playing" | "finished";
 
 type ScoreState = { you: number; opponent: number };
-type StrikeState = { you: number; opponent: number };
 type FeedbackState = {
   youStreak: number;
   opponentStreak: number;
@@ -40,7 +39,6 @@ type FeedbackState = {
 };
 
 const initialScores: ScoreState = { you: 0, opponent: 0 };
-const initialStrikes: StrikeState = { you: 0, opponent: 0 };
 const initialFeedback: FeedbackState = {
   youStreak: 0,
   opponentStreak: 0,
@@ -81,7 +79,7 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
   // Game state
   const [status, setStatus] = useState<AiGameStatus>("countdown");
   const [scores, setScores] = useState<ScoreState>(initialScores);
-  const [strikes, setStrikes] = useState<StrikeState>(initialStrikes);
+  const [mistakes, setMistakes] = useState({ you: 0, opponent: 0 });
   const [eliminated, setEliminated] = useState({ you: false, opponent: false });
   const [secondsLeft, setSecondsLeft] = useState(matchDurationSeconds);
   const [feedback, setFeedback] = useState<FeedbackState>(initialFeedback);
@@ -103,7 +101,6 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
   // Stable refs so callbacks never close over stale state
   const statusRef = useRef<AiGameStatus>("countdown");
   const scoresRef = useRef<ScoreState>(initialScores);
-  const strikesRef = useRef<StrikeState>(initialStrikes);
   const eliminatedRef = useRef({ you: false, opponent: false });
   const feedbackRef = useRef<FeedbackState>(initialFeedback);
   const currentAnswerRef = useRef(""); // correct answer for the current question
@@ -132,7 +129,6 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
   useEffect(() => { statusRef.current = status; }, [status]);
   useEffect(() => { scoresRef.current = scores; }, [scores]);
   useEffect(() => { feedbackRef.current = feedback; }, [feedback]);
-  useEffect(() => { strikesRef.current = strikes; }, [strikes]);
   useEffect(() => { eliminatedRef.current = eliminated; }, [eliminated]);
 
   const playFinalSecondCue = (secondsLeft: number) => {
@@ -277,15 +273,8 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
       }
 
       setFeedback((f) => ({ ...f, opponentStreak: 0 }));
-      setStrikes((previous) => {
-        const next = { ...previous, opponent: previous.opponent + 1 };
-        if (next.opponent >= 3) {
-          setEliminated((current) => ({ ...current, opponent: true }));
-        } else {
-          scheduleAiAttempt();
-        }
-        return next;
-      });
+      // AI "mistakes" only reset streak; we don't show strikes in UI anymore.
+      scheduleAiAttempt();
     }, delay);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [difficulty, topic, triggerEndgameScoreImpact, triggerScoreGlow]);
@@ -303,8 +292,6 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
     setCountdownValue(null);
     setScores(initialScores);
     scoresRef.current = initialScores;
-    setStrikes(initialStrikes);
-    strikesRef.current = initialStrikes;
     setEliminated({ you: false, opponent: false });
     eliminatedRef.current = { you: false, opponent: false };
     setFeedback(initialFeedback);
@@ -451,13 +438,7 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
       soundManager.play("wrong");
       if (feedbackRef.current.youStreak >= 2) triggerStreakBroken();
       setFeedback((f) => ({ ...f, youStreak: 0 }));
-      setStrikes((previous) => {
-        const next = { ...previous, you: previous.you + 1 };
-        if (next.you >= 3) {
-          setEliminated((current) => ({ ...current, you: true }));
-        }
-        return next;
-      });
+      setMistakes((previous) => ({ ...previous, you: previous.you + 1 }));
       setAnswer("");
     }
   };
@@ -595,7 +576,6 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
             <PlayerPanel
               label={yourName}
               score={scores.you}
-              strikes={strikes.you}
               eliminated={youEliminated}
               avatar={yourAvatar}
               streakLabel={isPlaying ? yourStreakLabel : null}
@@ -632,7 +612,6 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
             <PlayerPanel
               label={BOT_NAME}
               score={scores.opponent}
-              strikes={strikes.opponent}
               eliminated={opponentEliminated}
               avatar={BOT_AVATAR}
               streakLabel={isPlaying ? opponentStreakLabel : null}
@@ -735,7 +714,7 @@ export function AiGameClient({ initialTopic, initialDifficulty }: AiGameClientPr
                   Submit Answer
                 </Button>
                 <p className="text-center text-xs uppercase tracking-[0.2em] text-textSecondary">
-                  Strikes: {strikes.you}/3
+                  Mistakes: {mistakes.you}
                 </p>
                 {youEliminated ? (
                   <p className="text-center text-xs uppercase tracking-[0.2em] text-rose-300">

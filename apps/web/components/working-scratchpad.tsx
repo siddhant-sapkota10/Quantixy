@@ -105,12 +105,12 @@ export function WorkingScratchpad() {
   );
 
   return (
-    <div className="neon-panel-soft rounded-2xl p-2.5">
+    <div className="neon-panel-soft rounded-2xl p-2 sm:p-2.5">
       <div className="mb-2 flex items-center justify-between gap-2">
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="rounded-lg border border-indigo-300/35 bg-slate-900/78 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-200 transition-all duration-200 ease-premium hover:border-cyan-300/60"
+          className="rounded-lg border border-indigo-300/35 bg-slate-900/78 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-200 transition-all duration-200 ease-premium hover:border-cyan-300/60 sm:px-3 sm:text-[11px]"
         >
           {open ? "Hide Workpad" : "Show Workpad"}
         </button>

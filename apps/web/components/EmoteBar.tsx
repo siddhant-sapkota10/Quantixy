@@ -66,7 +66,7 @@ export function EmoteBar({
   const durationMs = Math.max(0, cooldownUntil - Date.now());
 
   return (
-    <div ref={containerRef} className="relative flex h-11 items-center gap-2">
+    <div ref={containerRef} className="relative flex h-10 items-center gap-2 sm:h-11">
       {/* Toggle button (collapse/expand) */}
       <button
         type="button"
@@ -74,7 +74,7 @@ export function EmoteBar({
         disabled={disabled}
         aria-label={open ? "Hide emotes" : "Show emotes"}
         title={open ? "Hide emotes" : "Show emotes"}
-        className={`relative flex h-11 w-11 items-center justify-center rounded-full border text-xl transition-all duration-150 ease-out select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
+        className={`relative flex h-10 w-10 items-center justify-center rounded-full border text-[18px] transition-all duration-150 ease-out select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 sm:h-11 sm:w-11 sm:text-xl ${
           disabled
             ? "cursor-not-allowed border-slate-800 bg-slate-950/40 opacity-50"
             : open
@@ -103,7 +103,7 @@ export function EmoteBar({
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: -8, scale: 0.98 }}
             transition={{ duration: 0.14, ease: "easeOut" }}
-            className="flex items-center gap-1.5 rounded-full border border-slate-700/80 bg-slate-900/90 px-2 py-1.5 shadow-xl backdrop-blur-sm"
+            className="flex max-w-[calc(100vw-6.5rem)] items-center gap-1.5 overflow-x-auto rounded-full border border-slate-700/80 bg-slate-900/90 px-2 py-1.5 shadow-xl backdrop-blur-sm sm:max-w-none"
           >
             {emotes.slice(0, 6).map((emote, index) => (
               <EmoteButton key={emote.id} emote={emote} index={index} onSend={onSend} disabled={disabled || coolingDown} />
@@ -133,7 +133,7 @@ function EmoteButton({ emote, index, onSend, disabled }: EmoteButtonProps) {
       disabled={disabled}
       title={`${emote.label} (${index + 1})`}
       aria-label={emote.label}
-      className={`group relative flex h-10 w-10 items-center justify-center rounded-full border text-xl transition-all duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
+      className={`group relative flex h-9 w-9 items-center justify-center rounded-full border text-[18px] transition-all duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 sm:h-10 sm:w-10 sm:text-xl ${
         disabled
           ? "cursor-not-allowed border-slate-800 bg-slate-950/40 opacity-55 saturate-50"
           : "border-slate-700 bg-slate-950/80 hover:border-amber-400/40 hover:bg-slate-800 active:scale-[0.96] active:border-amber-400/70"

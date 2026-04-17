@@ -151,8 +151,20 @@ export type ServerToClientEvents = {
   }) => void;
   roomError: (payload: { message: string }) => void;
   newQuestion: (payload: { question?: string; questionData?: DuelQuestion; token?: number } | string) => void;
-  incorrectAnswer: (payload: { strikes: number; eliminated: boolean }) => void;
-  opponentStrike: (payload: { opponentStrikes: number; opponentEliminated: boolean }) => void;
+  incorrectAnswer: (payload: {
+    reason?: "wrong" | "timeout" | string;
+    damage?: number;
+    hp?: { you?: number; opponent?: number };
+    strikes?: number;
+    eliminated?: boolean;
+  } & UltimateStatePayload) => void;
+  opponentStrike: (payload: {
+    reason?: "wrong" | "timeout" | string;
+    damage?: number;
+    hp?: { you?: number; opponent?: number };
+    opponentStrikes?: number;
+    opponentEliminated?: boolean;
+  } & UltimateStatePayload) => void;
   liveLeaderboard: (payload: {
     entries: Array<{
       socketId: string;
