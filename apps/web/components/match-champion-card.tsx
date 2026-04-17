@@ -163,37 +163,38 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
         ) : null}
 
         <div
-          className={`relative grid items-stretch gap-3 ${
-            isOpponent
-              ? "grid-cols-[5.75rem_minmax(0,1fr)] sm:grid-cols-[6.75rem_minmax(0,1fr)]"
-              : "grid-cols-[minmax(0,1fr)_5.75rem] sm:grid-cols-[minmax(0,1fr)_6.75rem]"
+          className={`relative grid items-stretch gap-3 grid-cols-[minmax(0,1fr)_4.75rem] sm:${
+            isOpponent ? "grid-cols-[6.75rem_minmax(0,1fr)]" : "grid-cols-[minmax(0,1fr)_6.75rem]"
           }`}
         >
-          <div className={`min-w-0 ${isOpponent ? "order-2 text-right" : "order-1 text-left"}`}>
-            <p className="truncate text-[0.9rem] font-black uppercase tracking-[0.06em] text-white sm:text-[1.02rem]">
+          {/* Mobile: always left-aligned + same ordering to avoid lopsided stacked HUD. */}
+          <div className={`min-w-0 order-1 text-left sm:${isOpponent ? "order-2 text-right" : "order-1 text-left"}`}>
+            <p className="truncate text-[0.85rem] font-black uppercase tracking-[0.06em] text-white sm:text-[1.02rem]">
               {avatar.name}
             </p>
             <p className="mt-0.5 truncate text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">
               {model.playerName}
             </p>
 
-            <div className={`mt-2 flex items-center gap-2 ${isOpponent ? "justify-end" : "justify-start"}`}>
+            <div className={`mt-1.5 flex items-center gap-2 justify-start sm:${isOpponent ? "justify-end" : "justify-start"}`}>
               <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ${theme.chip}`}>
-                {ultChip}
+                {model.used ? "USED" : !model.implemented ? "SOON" : ready ? "READY" : `${Math.round(model.charge)}%`}
               </span>
+              {/* Mobile: active label is noisy/truncated; keep it for larger screens */}
               {activeLabel ? (
-                <span className="truncate text-[9px] font-bold uppercase tracking-[0.18em] text-slate-300">
+                <span className="hidden truncate text-[9px] font-bold uppercase tracking-[0.18em] text-slate-300 sm:inline">
                   {activeLabel}
                 </span>
               ) : null}
             </div>
 
-            <p className="mt-1.5 truncate text-[11px] text-slate-200">
+            <p className="mt-1.5 hidden truncate text-[11px] text-slate-200 sm:block">
               <span className="font-semibold uppercase tracking-[0.16em] text-slate-400">Ultimate</span>{" "}
               <span className="font-semibold">{model.ultimateName}</span>
             </p>
 
-            <div className="mt-2.5">
+            {/* Mobile: hide charge bar to save vertical space (chip already shows %) */}
+            <div className="mt-2.5 hidden sm:block">
               <div className={`mb-1 flex items-center justify-between text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500`}>
                 <span>Charge</span>
                 <span className="tabular-nums text-slate-300">{Math.round(model.charge)}%</span>
@@ -211,20 +212,20 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
             </div>
 
             {hpPct !== null ? (
-              <div className="mt-2.5">
+              <div className="mt-2">
                 <div className="mb-1 flex items-center justify-between text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">
                   <span>HP</span>
                   <span className="tabular-nums text-slate-200">{Math.round(hpSafe ?? 0)}</span>
                 </div>
-                <div className="h-2.5 overflow-hidden rounded-full bg-slate-800/90">
+                <div className="h-2 overflow-hidden rounded-full bg-slate-800/90 sm:h-2.5">
                   <div className={`h-full rounded-full transition-all duration-300 ${hpColor}`} style={{ width: `${hpPct}%` }} />
                 </div>
               </div>
             ) : null}
           </div>
 
-          <div className={`${isOpponent ? "order-1" : "order-2"} flex items-center justify-center`}>
-            <div className={`relative w-full max-w-[6.75rem] overflow-hidden rounded-[1.1rem] border border-white/15 bg-slate-900/80 shadow-[0_16px_36px_rgba(2,6,23,0.55)] ring-1 ${theme.ring}`}>
+          <div className={`order-2 flex items-center justify-center sm:${isOpponent ? "order-1" : "order-2"}`}>
+            <div className={`relative w-full max-w-[4.75rem] overflow-hidden rounded-[1.05rem] border border-white/15 bg-slate-900/80 shadow-[0_16px_36px_rgba(2,6,23,0.55)] ring-1 sm:max-w-[6.75rem] ${theme.ring}`}>
               <div className="absolute inset-0 bg-gradient-to-b from-white/6 via-transparent to-slate-950/45" />
               <div className="relative aspect-[3/4]">
                 <Image
@@ -232,7 +233,7 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
                   alt={`${avatar.name} portrait`}
                   fill
                   className="object-cover object-top"
-                  sizes="(max-width: 640px) 96px, 120px"
+                  sizes="(max-width: 640px) 76px, 120px"
                   priority={false}
                 />
               </div>

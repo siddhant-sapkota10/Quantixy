@@ -64,6 +64,7 @@ export function EmoteBar({
   }, [disabled, emotes, onSend]);
 
   const durationMs = Math.max(0, cooldownUntil - Date.now());
+  const maxShortcuts = Math.min(6, emotes.length);
 
   return (
     <div ref={containerRef} className="relative flex h-10 items-center gap-2 sm:h-11">
@@ -103,14 +104,37 @@ export function EmoteBar({
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: -8, scale: 0.98 }}
             transition={{ duration: 0.14, ease: "easeOut" }}
-            className="flex max-w-[calc(100vw-6.5rem)] items-center gap-1.5 overflow-x-auto rounded-full border border-slate-700/80 bg-slate-900/90 px-2 py-1.5 shadow-xl backdrop-blur-sm sm:max-w-none"
+            className="flex max-w-[calc(100vw-6.5rem)] items-center gap-1.5 overflow-hidden rounded-full border border-slate-700/80 bg-slate-900/90 px-2 py-1.5 shadow-xl backdrop-blur-sm sm:max-w-none"
           >
-            {emotes.slice(0, 6).map((emote, index) => (
-              <EmoteButton key={emote.id} emote={emote} index={index} onSend={onSend} disabled={disabled || coolingDown} />
+            {/* Mobile: show 4, Desktop: show up to 6 */}
+            {emotes.slice(0, 4).map((emote, index) => (
+              <EmoteButton
+                key={emote.id}
+                emote={emote}
+                index={index}
+                onSend={onSend}
+                disabled={disabled || coolingDown}
+              />
             ))}
-            <span className="ml-1 hidden text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400 sm:inline">
-              1–6
-            </span>
+            {emotes.length > 4 ? (
+              <>
+                <span className="mx-1 hidden h-6 w-px bg-slate-700/80 sm:block" aria-hidden="true" />
+                {emotes.slice(4, 6).map((emote, index) => (
+                  <EmoteButton
+                    key={emote.id}
+                    emote={emote}
+                    index={index + 4}
+                    onSend={onSend}
+                    disabled={disabled || coolingDown}
+                  />
+                ))}
+              </>
+            ) : null}
+            {maxShortcuts >= 2 ? (
+              <span className="ml-1 hidden text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400 sm:inline">
+                1–{maxShortcuts}
+              </span>
+            ) : null}
           </motion.div>
         ) : null}
       </AnimatePresence>
