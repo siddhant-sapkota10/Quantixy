@@ -67,7 +67,11 @@ export function normalizeAvatarId(value: string | null | undefined): AvatarId {
   }
 
   if (typeof value === "string") {
-    return LEGACY_AVATAR_FALLBACKS[value.toLowerCase()] ?? DEFAULT_AVATAR_ID;
+    const normalized = value.trim().toLowerCase();
+    if (isAvatarId(normalized)) {
+      return normalized;
+    }
+    return LEGACY_AVATAR_FALLBACKS[normalized] ?? DEFAULT_AVATAR_ID;
   }
 
   return DEFAULT_AVATAR_ID;

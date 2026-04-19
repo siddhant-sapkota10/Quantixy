@@ -104,7 +104,7 @@ export function EmoteBar({
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: -8, scale: 0.98 }}
             transition={{ duration: 0.14, ease: "easeOut" }}
-            className="flex max-w-[calc(100vw-6.5rem)] items-center gap-1.5 overflow-hidden rounded-full border border-slate-700/80 bg-slate-900/90 px-2 py-1.5 shadow-xl backdrop-blur-sm sm:max-w-none"
+            className="flex max-w-[calc(100vw-6.5rem)] items-center gap-1.5 overflow-visible rounded-full border border-slate-700/80 bg-slate-900/90 px-2 py-1.5 shadow-xl backdrop-blur-sm sm:max-w-none"
           >
             {/* Mobile: show 4, Desktop: show up to 6 */}
             {emotes.slice(0, 4).map((emote, index) => (
@@ -169,7 +169,7 @@ function EmoteButton({ emote, index, onSend, disabled }: EmoteButtonProps) {
         {index + 1}
       </span>
       {/* Label tooltip — shown on hover */}
-      <span className="pointer-events-none absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-slate-300 opacity-0 transition group-hover:opacity-100">
+      <span className="pointer-events-none absolute -bottom-6 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-slate-300 opacity-0 transition group-hover:opacity-100">
         {emote.label}
       </span>
     </button>

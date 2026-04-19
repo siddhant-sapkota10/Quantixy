@@ -40,20 +40,8 @@ const TOPIC_CONFIG = {
     text: "text-indigo-300",
     ring: "ring-indigo-500/40",
   },
-  geometry: {
-    label: "Geometry",
-    icon: (
-      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 19L12 5l9 14H3z" />
-      </svg>
-    ),
-    border: "border-emerald-500/50",
-    bg: "bg-emerald-500/10",
-    text: "text-emerald-300",
-    ring: "ring-emerald-500/40",
-  },
   fractions: {
-    label: "Fractions / % / Decimals",
+    label: "Fractions",
     icon: (
       <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
         <line x1="5" y1="12" x2="19" y2="12" />
@@ -65,6 +53,20 @@ const TOPIC_CONFIG = {
     bg: "bg-teal-500/10",
     text: "text-teal-300",
     ring: "ring-teal-500/40",
+  },
+  percentages: {
+    label: "Percentages",
+    icon: (
+      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="8" cy="8" r="2.25" />
+        <circle cx="16" cy="16" r="2.25" />
+        <line x1="6" y1="18" x2="18" y2="6" />
+      </svg>
+    ),
+    border: "border-lime-500/50",
+    bg: "bg-lime-500/10",
+    text: "text-lime-300",
+    ring: "ring-lime-500/40",
   },
   ratios: {
     label: "Ratios",
@@ -78,43 +80,19 @@ const TOPIC_CONFIG = {
     text: "text-cyan-300",
     ring: "ring-cyan-500/40",
   },
-  exponents: {
-    label: "Exponents / Roots",
+  geometry: {
+    label: "Geometry",
     icon: (
       <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M5 17h14M7 7h4v4H7zM15 7h4" />
+        <path d="M3 19L12 5l9 14H3z" />
       </svg>
     ),
-    border: "border-amber-500/50",
-    bg: "bg-amber-500/10",
-    text: "text-amber-300",
-    ring: "ring-amber-500/40",
+    border: "border-emerald-500/50",
+    bg: "bg-emerald-500/10",
+    text: "text-emerald-300",
+    ring: "ring-emerald-500/40",
   },
-  statistics: {
-    label: "Data / Stats",
-    icon: (
-      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4 19V5M4 19h16M8 15v-5M12 19V9M16 19v-8" />
-      </svg>
-    ),
-    border: "border-violet-500/50",
-    bg: "bg-violet-500/10",
-    text: "text-violet-300",
-    ring: "ring-violet-500/40",
-  },
-  trigonometry: {
-    label: "Trigonometry",
-    icon: (
-      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4 19h16L4 5v14z" />
-      </svg>
-    ),
-    border: "border-fuchsia-500/50",
-    bg: "bg-fuchsia-500/10",
-    text: "text-fuchsia-300",
-    ring: "ring-fuchsia-500/40",
-  },
-  functions: {
+  graphs_functions: {
     label: "Functions / Graphs",
     icon: (
       <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round">

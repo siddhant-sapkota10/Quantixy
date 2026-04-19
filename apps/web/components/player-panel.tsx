@@ -60,6 +60,8 @@ type PlayerPanelProps = {
   fortressBlocksRemaining?: number;
   infernoPendingUntil?: number;
   infernoStacks?: number;
+  ultimateQuestionsLeft?: number;
+  ultimateName?: string;
 };
 
 export function PlayerPanel({
@@ -106,6 +108,8 @@ export function PlayerPanel({
   fortressBlocksRemaining = 0,
   infernoPendingUntil = 0,
   infernoStacks = 0,
+  ultimateQuestionsLeft = 0,
+  ultimateName,
 }: PlayerPanelProps) {
   const streakVisuals = getStreakEffectVisuals(streakEffect);
 
@@ -312,6 +316,14 @@ export function PlayerPanel({
                   BLAZE x{Math.max(0, infernoStacks)}
                 </span>
               </motion.div>
+            ) : null}
+
+            {ultimateQuestionsLeft > 0 ? (
+              <div className="mt-1 flex items-center justify-center">
+                <span className="rounded-full border border-indigo-300/35 bg-indigo-950/60 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-[0.18em] text-indigo-100">
+                  {ultimateName ? `${ultimateName} ` : ""}{ultimateQuestionsLeft} LEFT
+                </span>
+              </div>
             ) : null}
           </div>
         ) : null}
