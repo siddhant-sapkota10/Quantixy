@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/button";
@@ -27,6 +27,8 @@ import { MatchChampionCard } from "@/components/match-champion-card";
 // Feature flag — set to true to re-enable the powerup system in live matches.
 // While false, powerup UI is hidden and powerup socket events are no-ops.
 const POWERUPS_ENABLED = false;
+/** Per-question timeout UI: skip only after this many seconds (animated fill on the button). */
+const SKIP_QUESTION_CHARGE_SEC = 5;
 import { useGameAnimations } from "@/hooks/useGameAnimations";
 import { FrostBurst } from "@/components/animations/FrostBurst";
 import { FloatingLabel } from "@/components/animations/FloatingLabel";
@@ -44,6 +46,7 @@ import {
   UltimateActivationOverlay,
   type UltimateActivationCue
 } from "@/components/animations/UltimateActivationOverlay";
+import { UltimateCombatFxLayer, type UltimateFxSnapshot } from "@/components/animations/UltimateCombatFxLayer";
 import { ULTIMATE_VFX, normalizeUltimateType, type UltimateType } from "@/lib/ultimate-vfx";
 
 type GameStatus =
@@ -141,6 +144,8 @@ type UltimateState = {
   infernoPendingUntil: number;
   opponentInfernoPending: boolean;
   opponentInfernoPendingUntil: number;
+  flashOverclockStacks: number;
+  opponentFlashOverclockStacks: number;
 };
 
 type FeedbackState = {
@@ -237,7 +242,9 @@ const initialUltimate: UltimateState = {
   infernoPending: false,
   infernoPendingUntil: 0,
   opponentInfernoPending: false,
-  opponentInfernoPendingUntil: 0
+  opponentInfernoPendingUntil: 0,
+  flashOverclockStacks: 0,
+  opponentFlashOverclockStacks: 0
 };
 
 function buildUltimateIdentityFromAvatars(yourAvatarId: AvatarId, opponentAvatarId: AvatarId): Pick<
@@ -339,6 +346,11 @@ type GameClientProps = {
   initialRoomCode?: string;
 };
 
+type TimeoutDecisionPromptState = {
+  open: boolean;
+  token: number;
+};
+
 export function GameClient({
   initialTopic,
   initialDifficulty,
@@ -373,6 +385,12 @@ export function GameClient({
   const [currentQuestion, setCurrentQuestion] = useState("Waiting for the first question...");
   const [currentQuestionData, setCurrentQuestionData] = useState<DuelQuestion | null>(null);
   const [answer, setAnswer] = useState("");
+  const [timeoutDecisionPrompt, setTimeoutDecisionPrompt] = useState<TimeoutDecisionPromptState>({
+    open: false,
+    token: 0
+  });
+  /** True only after the skip-question fill animation finishes for the current timeout prompt. */
+  const [skipQuestionReady, setSkipQuestionReady] = useState(false);
   const answerInputRef = useRef<HTMLInputElement | null>(null);
   const [focusPulseKey, setFocusPulseKey] = useState(0);
   const [yourName, setYourName] = useState("You");
@@ -384,6 +402,8 @@ export function GameClient({
   const [countdownValue, setCountdownValue] = useState<string | null>(null);
   const [frozenUntil, setFrozenUntil] = useState(0);
   const [shieldBlockedUntil, setShieldBlockedUntil] = useState(0);
+  /** Server `newQuestion.inputLockedUntil` — Shadow Neural Jam input lock (epoch ms). */
+  const [neuralInputUnlockAt, setNeuralInputUnlockAt] = useState(0);
   const [emoteBarOpen, setEmoteBarOpen] = useState(false);
   const [emoteCooldownUntil, setEmoteCooldownUntil] = useState(0);
   const [emoteLabels, setEmoteLabels] = useState<EmoteDisplayItem[]>([]);
@@ -457,9 +477,14 @@ export function GameClient({
   const [opponentHitType, setOpponentHitType] = useState<"normal" | "streak" | "ultimate">("normal");
   const [youHitIntensity, setYouHitIntensity] = useState(0.35);
   const [opponentHitIntensity, setOpponentHitIntensity] = useState(0.35);
+  /** Flash combo tier for floating damage on the victim panel (0 = none). */
+  const [youDamageFlashTier, setYouDamageFlashTier] = useState(0);
+  const [opponentDamageFlashTier, setOpponentDamageFlashTier] = useState(0);
   const [shakeKey, setShakeKey] = useState(0);
   const [shakeVector, setShakeVector] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const hitDelayTimeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  const youFlashTierClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const opponentFlashTierClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [isFinalPhase, setIsFinalPhase] = useState(false);
   const [scoreImpactKey, setScoreImpactKey] = useState({ you: 0, opponent: 0 });
@@ -474,13 +499,52 @@ export function GameClient({
   // Animation hook
   const {
     animState,
+    combatFx,
     triggerFreezeHit,
     triggerPowerUpActivated,
     triggerShieldBlock,
     triggerPowerUpReady,
     triggerScoreGlow,
     triggerStreakBroken,
+    triggerFlashBolt,
+    triggerFlashOverclockSnap,
+    triggerInfernoVolley,
+    triggerBurnTickFlare,
+    triggerTitanSlam,
+    triggerTitanHealRipple,
+    triggerArchitectOrb,
+    triggerArchitectBeam,
+    triggerArchitectShatter,
+    triggerShadowMindShock,
   } = useGameAnimations();
+
+  const ultimateFxSnapshot: UltimateFxSnapshot = useMemo(
+    () => ({
+      type: ultimate.type,
+      opponentType: ultimate.opponentType,
+      overclockUntil: ultimate.overclockUntil,
+      opponentOverclockUntil: ultimate.opponentOverclockUntil,
+      infernoPendingUntil: ultimate.infernoPendingUntil,
+      opponentInfernoPendingUntil: ultimate.opponentInfernoPendingUntil,
+      novaBonusRemaining: ultimate.novaBonusRemaining,
+      opponentNovaBonusRemaining: ultimate.opponentNovaBonusRemaining,
+      fortressUntil: ultimate.fortressUntil,
+      opponentFortressUntil: ultimate.opponentFortressUntil,
+      fortressBlocksRemaining: ultimate.fortressBlocksRemaining,
+      opponentFortressBlocksRemaining: ultimate.opponentFortressBlocksRemaining,
+      architectUntil: ultimate.architectUntil,
+      opponentArchitectUntil: ultimate.opponentArchitectUntil,
+      architectSequenceStreak: ultimate.architectSequenceStreak,
+      opponentArchitectSequenceStreak: ultimate.opponentArchitectSequenceStreak,
+      titanOverpowerUntil: ultimate.titanOverpowerUntil,
+      opponentTitanOverpowerUntil: ultimate.opponentTitanOverpowerUntil,
+      shadowCorruptUntil: ultimate.shadowCorruptUntil,
+      opponentShadowCorruptUntil: ultimate.opponentShadowCorruptUntil,
+      flashOverclockStacks: ultimate.flashOverclockStacks,
+      opponentFlashOverclockStacks: ultimate.opponentFlashOverclockStacks
+    }),
+    [ultimate]
+  );
 
   useEffect(() => {
     soundManager.init();
@@ -988,8 +1052,25 @@ export function GameClient({
         opponentInfernoPendingUntil:
           typeof payload.opponentInfernoPendingUntil === "number"
             ? payload.opponentInfernoPendingUntil
-            : (previous as UltimateState & { opponentInfernoPendingUntil?: number }).opponentInfernoPendingUntil ?? 0
+            : (previous as UltimateState & { opponentInfernoPendingUntil?: number }).opponentInfernoPendingUntil ?? 0,
+        flashOverclockStacks:
+          typeof payload.flashOverclockStacks === "number"
+            ? payload.flashOverclockStacks
+            : previous.flashOverclockStacks,
+        opponentFlashOverclockStacks:
+          typeof payload.opponentFlashOverclockStacks === "number"
+            ? payload.opponentFlashOverclockStacks
+            : previous.opponentFlashOverclockStacks
       }));
+      if ("neuralInputUnlockAt" in payload) {
+        const rawNeural = payload.neuralInputUnlockAt;
+        if (typeof rawNeural === "number" && Number.isFinite(rawNeural)) {
+          setNeuralInputUnlockAt((prev) => {
+            if (rawNeural <= Date.now()) return 0;
+            return Math.max(prev, rawNeural);
+          });
+        }
+      }
     };
 
     const handleRoomCreated = (payload: RoomLobbyState) => {
@@ -1114,6 +1195,7 @@ export function GameClient({
       setTimer(initialTimer);
       setFrozenUntil(0);
       setShieldBlockedUntil(0);
+      setNeuralInputUnlockAt(0);
       setEmoteBarOpen(false);
       setEmoteCooldownUntil(0);
       setEmoteLabels([]);
@@ -1136,6 +1218,12 @@ export function GameClient({
       setOpponentHitKey(0);
       setLatestYouDamage(null);
       setLatestOpponentDamage(null);
+      setYouDamageFlashTier(0);
+      setOpponentDamageFlashTier(0);
+      if (youFlashTierClearRef.current) clearTimeout(youFlashTierClearRef.current);
+      if (opponentFlashTierClearRef.current) clearTimeout(opponentFlashTierClearRef.current);
+      youFlashTierClearRef.current = null;
+      opponentFlashTierClearRef.current = null;
     };
 
     const handleCountdown = (payload: { value: string }) => {
@@ -1159,6 +1247,7 @@ export function GameClient({
         setFeedback(initialFeedback);
         setFrozenUntil(0);
         setShieldBlockedUntil(0);
+        setNeuralInputUnlockAt(0);
         setEmoteCooldownUntil(0);
         setEmoteLabels([]);
         seenEmoteMessageIdsRef.current.clear();
@@ -1175,14 +1264,22 @@ export function GameClient({
         setOpponentHitKey(0);
         setLatestYouDamage(null);
         setLatestOpponentDamage(null);
+        setYouDamageFlashTier(0);
+        setOpponentDamageFlashTier(0);
+        if (youFlashTierClearRef.current) clearTimeout(youFlashTierClearRef.current);
+        if (opponentFlashTierClearRef.current) clearTimeout(opponentFlashTierClearRef.current);
+        youFlashTierClearRef.current = null;
+        opponentFlashTierClearRef.current = null;
       }
       setStatus("countdown");
       setCurrentQuestion("");
       setCurrentQuestionData(null);
+      setTimeoutDecisionPrompt({ open: false, token: 0 });
       setAnswer("");
       setCountdownValue(payload.value);
       setFrozenUntil(0);
       setShieldBlockedUntil(0);
+      setNeuralInputUnlockAt(0);
       // Don't force-close the emote picker during countdown; it prevents
       // users from seeing/clicking emote buttons before "GO".
       if (payload.value === "GO") {
@@ -1205,16 +1302,27 @@ export function GameClient({
     };
 
     const handleNewQuestion = (
-      payload: { question?: string; questionData?: DuelQuestion; token?: number } | string
+      payload:
+        | { question?: string; questionData?: DuelQuestion; token?: number; inputLockedUntil?: number }
+        | string
     ) => {
       console.log("[client] newQuestion received", payload);
       const question = typeof payload === "string" ? payload : payload.question;
       const questionData = typeof payload === "object" && payload !== null ? payload.questionData ?? null : null;
       const token = typeof payload === "object" && payload !== null ? (payload.token ?? 0) : 0;
+      const inputLockUntil =
+        typeof payload === "object" &&
+        payload !== null &&
+        typeof payload.inputLockedUntil === "number" &&
+        Number.isFinite(payload.inputLockedUntil)
+          ? payload.inputLockedUntil
+          : 0;
+      setNeuralInputUnlockAt(inputLockUntil);
       // Store the question token so stale submits can be rejected server-side.
       currentQuestionTokenRef.current = token;
       setCurrentQuestion(questionData?.prompt || question || "Get ready...");
       setCurrentQuestionData(questionData);
+      setTimeoutDecisionPrompt({ open: false, token: 0 });
       setAnswer("");
       setFocusPulseKey((k) => k + 1);
       setCountdownValue(null);
@@ -1251,9 +1359,24 @@ export function GameClient({
       // Delay by a tick so the input is enabled + mounted before focusing.
       setTimeout(() => {
         if (!youEliminated && !feedbackRef.current.youAnsweredCurrent) {
-          focusAnswerInput({ select: true });
+          if (!(inputLockUntil > Date.now())) {
+            focusAnswerInput({ select: true });
+          }
         }
       }, 0);
+    };
+
+    const handleTimeoutDecisionPrompt = (payload: { token?: number; decisionWindowMs?: number }) => {
+      const token = Number(payload?.token ?? 0);
+      if (!Number.isFinite(token) || token <= 0) return;
+      setTimeoutDecisionPrompt({
+        open: true,
+        token
+      });
+    };
+
+    const handleTimeoutDecisionResolved = (_payload: { action?: string; token?: number; graceSeconds?: number }) => {
+      setTimeoutDecisionPrompt((prev) => ({ ...prev, open: false }));
     };
 
     const handleTimerUpdate = (payload: {
@@ -1326,9 +1449,23 @@ export function GameClient({
       damage?: number;
       hp?: { you?: number; opponent?: number };
       eliminated?: boolean;
-    }) => {
+      neuralMindShock?: boolean;
+      flashOverclockSnap?: boolean;
+      architectSequenceShatter?: boolean;
+    } & Record<string, unknown>) => {
       console.log("[client] incorrectAnswer received", payload);
+      setTimeoutDecisionPrompt((prev) => ({ ...prev, open: false }));
       soundManager.play("wrong");
+      syncUltimateFromPayload(payload);
+      if (payload.neuralMindShock) {
+        triggerShadowMindShock();
+      }
+      if (payload.flashOverclockSnap) {
+        triggerFlashOverclockSnap();
+      }
+      if (payload.architectSequenceShatter) {
+        triggerArchitectShatter();
+      }
       // Show "Streak Broken" popup if local player had a streak going
       if (feedbackRef.current.youStreak >= 2) {
         triggerStreakBroken();
@@ -1471,9 +1608,37 @@ export function GameClient({
       if (youScored) {
         // Instant feedback: correct answer tick
         soundManager.play("correct", { volume: 0.28, rate: 1.05 });
+        const nowFx = Date.now();
+        const pfx = payload as Record<string, number | undefined>;
+        const overclockCombo = pfx.overclockCombo ?? 0;
+        if (overclockCombo > 0) {
+          triggerFlashBolt(Math.max(1, Math.round(overclockCombo / 100)));
+        }
+        const perfectStrike = pfx.perfectStrikeDamage ?? 0;
+        if (perfectStrike > 0) {
+          triggerArchitectBeam();
+        } else if ((pfx.architectUntil ?? 0) > nowFx && (pfx.architectSequenceStreak ?? 0) > 0) {
+          triggerArchitectOrb();
+        }
+        if ((pfx.infernoPendingUntil ?? 0) > nowFx) {
+          triggerInfernoVolley("you", pfx.novaBonusRemaining ?? 0);
+        }
+        if ((pfx.titanOverpowerUntil ?? 0) > nowFx) {
+          triggerTitanSlam();
+          if ((pfx.titanLifestealApplied ?? 0) > 0) {
+            triggerTitanHealRipple();
+          }
+        }
         const youPointsDelta = newYouScore - prevScores.you;
         const dmgDealt = calcDamage(youPointsDelta, payload.fastAnswer ?? false, streakValue);
+        const flashTierForOpp = overclockCombo > 0 ? Math.max(1, Math.round(overclockCombo / 100)) : 0;
         if (dmgDealt > 0) {
+          setOpponentDamageFlashTier(flashTierForOpp);
+          if (opponentFlashTierClearRef.current) clearTimeout(opponentFlashTierClearRef.current);
+          opponentFlashTierClearRef.current = setTimeout(() => {
+            setOpponentDamageFlashTier(0);
+            opponentFlashTierClearRef.current = null;
+          }, 1000);
           const infernoStacks = Math.max(0, ultimate.novaBonusRemaining ?? 0);
           const isUltimateHit =
             ultimate.overclockUntil > Date.now() ||
@@ -1499,14 +1664,36 @@ export function GameClient({
           }, delayMs);
           hitDelayTimeoutsRef.current.add(t);
           setTimeout(() => hitDelayTimeoutsRef.current.delete(t), delayMs + 20);
+        } else {
+          setOpponentDamageFlashTier(0);
+          if (opponentFlashTierClearRef.current) {
+            clearTimeout(opponentFlashTierClearRef.current);
+            opponentFlashTierClearRef.current = null;
+          }
         }
       }
       if (opponentScored) {
         // Instant feedback: opponent also landed a correct answer
         soundManager.play("correct", { volume: 0.22, rate: 0.98 });
+        const nowO = Date.now();
+        const pfxO = payload as Record<string, number | undefined>;
+        const scorerOc = (payload as { scorerOverclockCombo?: number }).scorerOverclockCombo ?? 0;
+        const flashTierYou = scorerOc > 0 ? Math.max(1, Math.round(scorerOc / 100)) : 0;
+        if ((pfxO.opponentInfernoPendingUntil ?? 0) > nowO) {
+          triggerInfernoVolley("opponent", pfxO.opponentNovaBonusRemaining ?? 0);
+        }
+        if ((pfxO.opponentTitanOverpowerUntil ?? 0) > nowO) {
+          triggerTitanSlam();
+        }
         const oppPointsDelta = newOpponentScore - prevScores.opponent;
         const dmgTaken = calcDamage(oppPointsDelta, payload.opponentFastAnswer ?? false, opponentStreakValue);
         if (dmgTaken > 0) {
+          setYouDamageFlashTier(flashTierYou);
+          if (youFlashTierClearRef.current) clearTimeout(youFlashTierClearRef.current);
+          youFlashTierClearRef.current = setTimeout(() => {
+            setYouDamageFlashTier(0);
+            youFlashTierClearRef.current = null;
+          }, 1000);
           const infernoStacks = Math.max(0, ultimate.opponentNovaBonusRemaining ?? 0);
           const isUltimateHit =
             ultimate.opponentOverclockUntil > Date.now() ||
@@ -1532,6 +1719,12 @@ export function GameClient({
           }, delayMs);
           hitDelayTimeoutsRef.current.add(t);
           setTimeout(() => hitDelayTimeoutsRef.current.delete(t), delayMs + 20);
+        } else {
+          setYouDamageFlashTier(0);
+          if (youFlashTierClearRef.current) {
+            clearTimeout(youFlashTierClearRef.current);
+            youFlashTierClearRef.current = null;
+          }
         }
       }
       const secondsRemaining = timerSecondsRef.current;
@@ -1995,6 +2188,49 @@ export function GameClient({
           }
         }
       }
+
+      if (payload.effect === "guardian_burst_release" && payload.damage && payload.damage > 0 && payload.hp) {
+        const dmg = Math.max(0, Number(payload.damage) || 0);
+        if (payload.by === "you" && typeof payload.hp.opponent === "number") {
+          setOpponentHitType("ultimate");
+          setOpponentHitIntensity(Math.min(1, 0.48 + dmg * 0.02));
+          setOpponentDamageTaken(Math.max(0, MAX_HP - payload.hp.opponent));
+          setLatestOpponentDamage(dmg);
+          setOpponentHitKey((prev) => prev + 1);
+          soundManager.play("hitUltimate", { volume: 0.3, rate: 1.0, allowOverlap: true });
+          triggerScreenShake(Math.min(1, 0.55 + dmg * 0.015));
+        } else if (payload.by === "opponent" && typeof payload.hp.you === "number") {
+          setYouHitType("ultimate");
+          setYouHitIntensity(Math.min(1, 0.48 + dmg * 0.02));
+          setYouDamageTaken(Math.max(0, MAX_HP - payload.hp.you));
+          setLatestYouDamage(dmg);
+          setYouHitKey((prev) => prev + 1);
+          soundManager.play("hitUltimate", { volume: 0.28, rate: 0.96, allowOverlap: true });
+          triggerScreenShake(Math.min(1, 0.52 + dmg * 0.015));
+        }
+
+        const normalizedType = normalizeUltimateType("shield");
+        const cueId = ++ultimateCueIdRef.current;
+        setUltimateCue({
+          id: cueId,
+          by: payload.by,
+          target: payload.target,
+          type: normalizedType
+        });
+        if (ultimateCueTimeoutRef.current) {
+          clearTimeout(ultimateCueTimeoutRef.current);
+        }
+        ultimateCueTimeoutRef.current = setTimeout(() => {
+          setUltimateCue((previous) => (previous?.id === cueId ? null : previous));
+        }, 700);
+        if (payload.by === "you") {
+          setYouUltimateFxType(normalizedType);
+          setYouUltimateFxKey((value) => value + 1);
+        } else {
+          setOpponentUltimateFxType(normalizedType);
+          setOpponentUltimateFxKey((value) => value + 1);
+        }
+      }
     };
 
     const handlePowerUpUsed = (payload: {
@@ -2171,6 +2407,7 @@ export function GameClient({
       syncUltimateFromPayload(payload);
       soundManager.play("hitUltimate", { volume: 0.26, rate: 1.02, allowOverlap: true });
       const intensity = Math.min(1, 0.35 + (payload.burnStacks ?? 0) * 0.08);
+      triggerBurnTickFlare(payload.target === "you" ? "you" : "opponent");
 
       if (payload.target === "you") {
         setYouHitType("ultimate");
@@ -2271,6 +2508,7 @@ export function GameClient({
 
       setCurrentQuestion("");
       setCurrentQuestionData(null);
+      setTimeoutDecisionPrompt({ open: false, token: 0 });
       setAnswer("");
       setCountdownValue(null);
       setTimer({
@@ -2393,6 +2631,8 @@ export function GameClient({
     nextSocket.on("matchFound", handleMatchFound);
     nextSocket.on("countdown", handleCountdown);
     nextSocket.on("newQuestion", handleNewQuestion);
+    nextSocket.on("timeoutDecisionPrompt", handleTimeoutDecisionPrompt);
+    nextSocket.on("timeoutDecisionResolved", handleTimeoutDecisionResolved);
     nextSocket.on("timerUpdate", handleTimerUpdate);
     nextSocket.on("incorrectAnswer", handleIncorrectAnswer);
     nextSocket.on("opponentStrike", handleOpponentStrike);
@@ -2431,6 +2671,8 @@ export function GameClient({
       nextSocket.off("matchFound", handleMatchFound);
       nextSocket.off("countdown", handleCountdown);
       nextSocket.off("newQuestion", handleNewQuestion);
+      nextSocket.off("timeoutDecisionPrompt", handleTimeoutDecisionPrompt);
+      nextSocket.off("timeoutDecisionResolved", handleTimeoutDecisionResolved);
       nextSocket.off("timerUpdate", handleTimerUpdate);
       nextSocket.off("incorrectAnswer", handleIncorrectAnswer);
       nextSocket.off("opponentStrike", handleOpponentStrike);
@@ -2453,10 +2695,19 @@ export function GameClient({
     };
   }, [difficulty, normalizedRoomCode, retryKey, roomJoinMode, router, topic]);
 
+  const isOpponentNeuralJamVictim =
+    normalizeUltimateType(ultimate.opponentType) === "system_corrupt" &&
+    (ultimate.opponentUltimateQuestionsLeft ?? 0) > 0;
+  const isNeuralBurstLocked = neuralInputUnlockAt > Date.now();
+
   const submitAnswer = (rawValue?: string) => {
     const trimmedAnswer = (rawValue ?? answer).trim();
 
     if (!socket || !trimmedAnswer || status !== "playing" || eliminated.you) {
+      return;
+    }
+
+    if (isNeuralBurstLocked || isOpponentNeuralJamVictim) {
       return;
     }
 
@@ -2467,7 +2718,8 @@ export function GameClient({
     // Reset typing throttle so next question triggers fresh emit
     lastTypingEmitRef.current = 0;
 
-    const isCorruptActive = ultimate.shadowCorruptUntil > Date.now();
+    const isCorruptActive =
+      ultimate.shadowCorruptUntil > Date.now() || ultimate.opponentShadowCorruptUntil > Date.now();
     const emitSubmit = () => {
       console.log(`[client] submitAnswer emitted -> ${trimmedAnswer} token=${currentQuestionTokenRef.current}`);
       socket.emit("submitAnswer", { answer: trimmedAnswer, token: currentQuestionTokenRef.current });
@@ -2484,6 +2736,23 @@ export function GameClient({
     window.setTimeout(emitSubmit, delayMs);
   };
 
+  const handleSkipQuestionTimeout = () => {
+    if (!socket || !timeoutDecisionPrompt.open) return;
+    if (!skipQuestionReady) {
+      return;
+    }
+    if (isNeuralBurstLocked) {
+      return;
+    }
+    if (ultimate.blackoutUntil > Date.now()) {
+      return;
+    }
+    socket.emit("timeoutDecision", {
+      action: "change",
+      token: timeoutDecisionPrompt.token
+    });
+  };
+
   /**
    * Throttled handler for answer input changes.
    * Emits playerTyping at most once per 3 s while the input has content.
@@ -2491,6 +2760,10 @@ export function GameClient({
    */
   const handleAnswerChange = (value: string) => {
     if (ultimate.blackoutUntil > Date.now()) {
+      return;
+    }
+
+    if (isNeuralBurstLocked || isOpponentNeuralJamVictim) {
       return;
     }
 
@@ -2621,6 +2894,9 @@ export function GameClient({
             : "ultActivateShadow",
       { volume: 0.28, rate: 1.0, allowOverlap: true }
     );
+    if (id === "titan") {
+      triggerScreenShake(0.42);
+    }
     socket.emit("activateUltimate");
   };
 
@@ -2693,7 +2969,12 @@ export function GameClient({
   const showHP = isActiveGameplay || isFinished;
   const emoteCoolingDown = emoteCooldownUntil > Date.now();
   const isJamActive = ultimate.blackoutUntil > Date.now();
-  const isSystemCorruptActive = ultimate.shadowCorruptUntil > Date.now();
+  const isNeuralJamSilenced = isNeuralBurstLocked || isOpponentNeuralJamVictim;
+  const inputsLocked = isJamActive || isNeuralJamSilenced;
+  /** Timeout UI: only burst + blackout — full Shadow window still allows "stay" so the strip cannot deadlock. */
+  const timeoutNeuralBurstLocked = isJamActive || isNeuralBurstLocked;
+  const isSystemCorruptActive =
+    ultimate.shadowCorruptUntil > Date.now() || ultimate.opponentShadowCorruptUntil > Date.now();
   const isTitanOverpowerActive = ultimate.titanOverpowerUntil > Date.now();
   const isRapidFireActive = ultimate.overclockUntil > Date.now();
   const isInfernoActive = ultimate.infernoPendingUntil > Date.now();
@@ -2715,9 +2996,41 @@ export function GameClient({
     if (status !== "playing") return;
     if (eliminated.you) return;
     if (feedback.youAnsweredCurrent) return;
+    if (isNeuralBurstLocked || isOpponentNeuralJamVictim) return;
     const t = setTimeout(() => focusAnswerInput(), 40);
     return () => clearTimeout(t);
-  }, [status, eliminated.you, feedback.youAnsweredCurrent, focusPulseKey]);
+  }, [
+    status,
+    eliminated.you,
+    feedback.youAnsweredCurrent,
+    focusPulseKey,
+    neuralInputUnlockAt,
+    isNeuralBurstLocked,
+    isOpponentNeuralJamVictim
+  ]);
+
+  useEffect(() => {
+    if (!neuralInputUnlockAt) return;
+    const ms = neuralInputUnlockAt - Date.now();
+    if (ms <= 0) {
+      setNeuralInputUnlockAt(0);
+      return;
+    }
+    const id = window.setTimeout(() => setNeuralInputUnlockAt(0), ms + 30);
+    return () => clearTimeout(id);
+  }, [neuralInputUnlockAt]);
+
+  useLayoutEffect(() => {
+    if (!timeoutDecisionPrompt.open) {
+      setSkipQuestionReady(false);
+      return;
+    }
+    setSkipQuestionReady(false);
+    const ms = Math.round(SKIP_QUESTION_CHARGE_SEC * 1000);
+    const id = window.setTimeout(() => setSkipQuestionReady(true), ms);
+    return () => clearTimeout(id);
+  }, [timeoutDecisionPrompt.open, timeoutDecisionPrompt.token]);
+
   const roomPlayerCount = roomLobby?.players.length ?? 0;
   const roomReady = roomPlayerCount === 2;
   const rematchCtaLabel = rematchRequested
@@ -2752,6 +3065,8 @@ export function GameClient({
   const primaryStatus = isActiveGameplay
     ? isJamActive
       ? { text: "⚫ Blackout — Submits Blocked", color: "text-violet-200",  large: false }
+      : isNeuralJamSilenced
+      ? { text: "🟣 Neural Jam — Inputs Locked", color: "text-violet-200", large: false }
       : isSystemCorruptActive
       ? {
           text: "🟣 Opponent Corrupted",
@@ -2792,8 +3107,10 @@ export function GameClient({
   const secondaryStatus = (() => {
     if (!isActiveGameplay) return null;
     const parts = [
-      isOpponentRapidFireActive      && `⚡ Opp. Overclock${ultimate.opponentFlashBonusRemaining > 0 ? ` x${ultimate.opponentFlashBonusRemaining}` : ""}`,
-      isOpponentGuardianShieldActive && `🛡️ Opp. Aegis Domain (${ultimate.opponentFortressBlocksRemaining} stored)`,
+      isOpponentRapidFireActive &&
+        `⚡ Opp. Overclock${ultimate.opponentFlashOverclockStacks > 0 ? ` x${ultimate.opponentFlashOverclockStacks}` : ""}`,
+      isOpponentGuardianShieldActive &&
+        `🛡️ Opp. Reflect Bastion (${ultimate.opponentFortressBlocksRemaining} stored)`,
       !youEliminated && opponentEliminated && "Opponent Eliminated",
       !feedback.youAnsweredCurrent && feedback.opponentAnsweredCurrent && "Opponent answered — still your turn",
     ].filter(Boolean) as string[];
@@ -3037,9 +3354,14 @@ export function GameClient({
         {/* Overlays */}
         <GameOverOverlay result={null} />
         <UltimateActivationOverlay cue={ultimateCue} />
+        <UltimateCombatFxLayer
+          ultimate={ultimateFxSnapshot}
+          combatFx={combatFx}
+          neuralInputUnlockAt={neuralInputUnlockAt}
+        />
         {isSystemCorruptActive ? (
           <motion.div
-            key={`corrupt-ui-${ultimate.shadowCorruptUntil}`}
+            key={`corrupt-ui-${Math.max(ultimate.shadowCorruptUntil, ultimate.opponentShadowCorruptUntil)}`}
             aria-hidden="true"
             className="pointer-events-none absolute inset-0 z-20 overflow-hidden rounded-[2rem]"
             initial={{ opacity: 0 }}
@@ -3053,7 +3375,6 @@ export function GameClient({
             }}
           />
         ) : null}
-
         {/* Emote bubbles (HUD layout doesn't render PlayerPanels) */}
         <div className="pointer-events-none absolute left-0 right-0 top-16 z-30 flex items-start justify-between gap-3 px-3 sm:px-5">
           <div className="relative h-14 w-[46%] max-w-sm">
@@ -3106,7 +3427,14 @@ export function GameClient({
                     infernoPending: ultimate.infernoPending,
                     infernoPendingUntil: ultimate.infernoPendingUntil,
                     infernoStacks: ultimate.novaBonusRemaining,
+                    flashOverclockStacks: ultimate.flashOverclockStacks,
                     ultimateQuestionsLeft: ultimate.ultimateQuestionsLeft,
+                    damageFloat:
+                      typeof latestYouDamage === "number" &&
+                      latestYouDamage > 0 &&
+                      youHitKey > 0
+                        ? { hitKey: youHitKey, amount: latestYouDamage, flashTier: youDamageFlashTier }
+                        : null,
                   }}
                 />
 
@@ -3148,7 +3476,18 @@ export function GameClient({
                     infernoPending: ultimate.opponentInfernoPending,
                     infernoPendingUntil: ultimate.opponentInfernoPendingUntil,
                     infernoStacks: ultimate.opponentNovaBonusRemaining,
+                    flashOverclockStacks: ultimate.opponentFlashOverclockStacks,
                     ultimateQuestionsLeft: ultimate.opponentUltimateQuestionsLeft,
+                    damageFloat:
+                      typeof latestOpponentDamage === "number" &&
+                      latestOpponentDamage > 0 &&
+                      opponentHitKey > 0
+                        ? {
+                            hitKey: opponentHitKey,
+                            amount: latestOpponentDamage,
+                            flashTier: opponentDamageFlashTier
+                          }
+                        : null,
                   }}
                 />
               </div>
@@ -3190,6 +3529,50 @@ export function GameClient({
             </motion.div>
           </div>
 
+          {timeoutDecisionPrompt.open ? (
+            <div className="shrink-0 border-t border-amber-500/20 bg-slate-950/95 px-3 py-2.5 backdrop-blur sm:px-5">
+              <div className="mx-auto w-full max-w-3xl rounded-2xl border border-amber-500/25 bg-slate-900/80 px-3 py-2.5 sm:px-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-300/95">Question timer</p>
+                <p className="mt-0.5 text-sm font-semibold leading-snug text-slate-100">
+                  Question time is up — keep solving below, or skip after the bar fills. Skipping counts as a timeout
+                  penalty and moves you to the next card.
+                </p>
+                <div className="mt-2.5">
+                  <Button
+                    type="button"
+                    className={`relative w-full overflow-hidden py-3 text-sm ${timeoutNeuralBurstLocked || !skipQuestionReady ? "opacity-95" : ""}`}
+                    disabled={timeoutNeuralBurstLocked || !skipQuestionReady}
+                    aria-label={
+                      skipQuestionReady
+                        ? "Skip question (counts as timeout)"
+                        : `Skip question — charging, ${SKIP_QUESTION_CHARGE_SEC} second fill`
+                    }
+                    onClick={handleSkipQuestionTimeout}
+                  >
+                    <motion.div
+                      key={timeoutDecisionPrompt.token}
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0 z-0 bg-[linear-gradient(105deg,rgba(34,211,238,0.5),rgba(167,139,250,0.48))]"
+                      initial={{ scaleX: 0 }}
+                      animate={{ scaleX: 1 }}
+                      transition={{ duration: SKIP_QUESTION_CHARGE_SEC, ease: "linear" }}
+                      style={{ transformOrigin: "left" }}
+                    />
+                    <span className="relative z-10 flex min-h-[2.25rem] flex-col items-center justify-center gap-0.5">
+                      <span className="font-semibold">Skip question</span>
+                      <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-950/80">
+                        {skipQuestionReady ? "Ready · counts as timeout" : `Charging ${SKIP_QUESTION_CHARGE_SEC}s…`}
+                      </span>
+                    </span>
+                    {isNeuralBurstLocked && !isJamActive ? (
+                      <span className="pointer-events-none absolute inset-0 z-[5] rounded-xl bg-violet-950/55 bg-[repeating-linear-gradient(0deg,transparent_0px,transparent_2px,rgba(167,139,250,0.07)_2px,rgba(167,139,250,0.07)_4px)]" />
+                    ) : null}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           {/* Bottom: Sticky action bar */}
           <div className="shrink-0 border-t border-white/10 bg-slate-950/90 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 backdrop-blur sm:px-5">
             <div className="mx-auto w-full max-w-3xl">
@@ -3205,7 +3588,7 @@ export function GameClient({
                 />
               </div>
               <form className="flex w-full flex-col gap-2" onSubmit={handleSubmit}>
-                <WorkingScratchpad />
+                <WorkingScratchpad answerInputLocked={inputsLocked} />
                 {Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0 ? (
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     {currentQuestionData.options.map((option, idx) => (
@@ -3221,12 +3604,15 @@ export function GameClient({
                         className={`relative min-h-[2.75rem] w-full justify-start text-left text-sm ${
                           hidden ? "overflow-hidden border-violet-400/40 bg-violet-950/35 text-violet-100" : ""
                         }`}
-                        disabled={isJamActive || youEliminated || feedback.youAnsweredCurrent}
+                        disabled={inputsLocked || youEliminated || feedback.youAnsweredCurrent}
                         onClick={() => handleOptionSubmit(option)}
                       >
                         {hidden ? "██ HIDDEN ███" : option}
                         {hidden ? (
                           <span className="pointer-events-none absolute inset-0 animate-pulse bg-[repeating-linear-gradient(90deg,rgba(167,139,250,0.08)_0px,rgba(167,139,250,0.08)_6px,rgba(34,211,238,0.08)_6px,rgba(34,211,238,0.08)_12px)]" />
+                        ) : null}
+                        {isNeuralJamSilenced && !isJamActive ? (
+                          <span className="pointer-events-none absolute inset-0 bg-violet-950/55 bg-[repeating-linear-gradient(0deg,transparent_0px,transparent_2px,rgba(167,139,250,0.07)_2px,rgba(167,139,250,0.07)_4px)]" />
                         ) : null}
                       </Button>
                         );
@@ -3246,15 +3632,19 @@ export function GameClient({
                       placeholder={
                         isJamActive
                           ? "Signal jam active - prep your answer..."
-                          : youEliminated
-                            ? "Eliminated"
-                            : feedback.youAnsweredCurrent
-                              ? "Waiting..."
-                              : currentQuestionData?.inputMode === "text"
-                                ? "Type text or symbol answer..."
-                                : "Type answer..."
+                          : isNeuralJamSilenced
+                            ? isOpponentNeuralJamVictim
+                              ? "Neural jam — opponent locked your inputs..."
+                              : "Neural jam — inputs unlock shortly..."
+                            : youEliminated
+                              ? "Eliminated"
+                              : feedback.youAnsweredCurrent
+                                ? "Waiting..."
+                                : currentQuestionData?.inputMode === "text"
+                                  ? "Type text or symbol answer..."
+                                  : "Type answer..."
                       }
-                      disabled={isJamActive || youEliminated || feedback.youAnsweredCurrent}
+                      disabled={inputsLocked || youEliminated || feedback.youAnsweredCurrent}
                       autoCapitalize="off"
                       autoCorrect="off"
                       spellCheck={false}
@@ -3264,7 +3654,7 @@ export function GameClient({
                     <Button
                       className="h-12 w-[7.5rem] shrink-0"
                       type="submit"
-                      disabled={!answer.trim() || isJamActive || youEliminated || feedback.youAnsweredCurrent}
+                      disabled={!answer.trim() || inputsLocked || youEliminated || feedback.youAnsweredCurrent}
                     >
                       Submit
                     </Button>
@@ -3612,6 +4002,7 @@ export function GameClient({
                 latestDamage={latestYouDamage}
                 hitType={youHitType}
                 hitIntensity={youHitIntensity}
+                damageFlashTier={youDamageFlashTier}
                 ultReadyCueKey={ultReadyCueKey.you}
                 overclockUntil={ultimate.overclockUntil}
                 blackoutUntil={ultimate.blackoutUntil}
@@ -3673,6 +4064,7 @@ export function GameClient({
                     infernoPending: ultimate.infernoPending,
                     infernoPendingUntil: ultimate.infernoPendingUntil,
                     infernoStacks: ultimate.novaBonusRemaining,
+                    flashOverclockStacks: ultimate.flashOverclockStacks,
                     ultimateQuestionsLeft: ultimate.ultimateQuestionsLeft,
                   }}
                 />
@@ -3736,6 +4128,7 @@ export function GameClient({
                 latestDamage={latestOpponentDamage}
                 hitType={opponentHitType}
                 hitIntensity={opponentHitIntensity}
+                damageFlashTier={opponentDamageFlashTier}
                 ultReadyCueKey={ultReadyCueKey.opponent}
                 overclockUntil={ultimate.opponentOverclockUntil}
                 blackoutUntil={ultimate.opponentBlackoutUntil}
@@ -3800,6 +4193,7 @@ export function GameClient({
                   infernoPending: ultimate.opponentInfernoPending,
                   infernoPendingUntil: ultimate.opponentInfernoPendingUntil,
                   infernoStacks: ultimate.opponentNovaBonusRemaining,
+                  flashOverclockStacks: ultimate.opponentFlashOverclockStacks,
                   ultimateQuestionsLeft: ultimate.opponentUltimateQuestionsLeft,
                 }}
               />

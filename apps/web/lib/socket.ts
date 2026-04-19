@@ -86,6 +86,15 @@ type UltimateStatePayload = {
   infernoPendingUntil?: number;
   opponentInfernoPending?: boolean;
   opponentInfernoPendingUntil?: number;
+  flashOverclockStacks?: number;
+  opponentFlashOverclockStacks?: number;
+  neuralInputUnlockAt?: number;
+  opponentNeuralInputUnlockAt?: number;
+  overclockCombo?: number;
+  scorerOverclockCombo?: number;
+  overclockBonusDamage?: number;
+  perfectStrikeDamage?: number;
+  titanLifestealApplied?: number;
 };
 
 export type ServerToClientEvents = {
@@ -150,13 +159,22 @@ export type ServerToClientEvents = {
     }>;
   }) => void;
   roomError: (payload: { message: string }) => void;
-  newQuestion: (payload: { question?: string; questionData?: DuelQuestion; token?: number } | string) => void;
+  newQuestion: (
+    payload:
+      | { question?: string; questionData?: DuelQuestion; token?: number; inputLockedUntil?: number }
+      | string
+  ) => void;
+  timeoutDecisionPrompt: (payload: { token: number; decisionWindowMs?: number; keepGraceSeconds?: number }) => void;
+  timeoutDecisionResolved: (payload: { action: "keep" | "change"; token: number; graceSeconds?: number }) => void;
   incorrectAnswer: (payload: {
     reason?: "wrong" | "timeout" | string;
     damage?: number;
     hp?: { you?: number; opponent?: number };
     strikes?: number;
     eliminated?: boolean;
+    neuralMindShock?: boolean;
+    flashOverclockSnap?: boolean;
+    architectSequenceShatter?: boolean;
   } & UltimateStatePayload) => void;
   opponentStrike: (payload: {
     reason?: "wrong" | "timeout" | string;
@@ -356,6 +374,7 @@ export type ClientToServerEvents = {
   startRoomMatch: () => void;
   leaveRoom: () => void;
   submitAnswer: (payload: { answer: string; token: number }) => void;
+  timeoutDecision: (payload: { action: "keep" | "change"; token: number }) => void;
   requestRematch: () => void;
   usePowerUp: (payload: { type: PowerUpId }) => void;
   activateUltimate: () => void;
