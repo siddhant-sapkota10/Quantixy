@@ -30,6 +30,7 @@ export type MatchChampionCardModel = {
   infernoPending?: boolean;
   infernoPendingUntil?: number;
   infernoStacks?: number;
+  ultimateQuestionsLeft?: number;
 };
 
 type MatchChampionCardProps = {
@@ -101,15 +102,18 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
   const isActiveFortress = (model.fortressUntil ?? 0) > now;
   const isArmedInferno = Boolean(model.infernoPending) && (model.infernoPendingUntil ?? 0) > now;
   const infernoStacks = model.infernoStacks ?? 0;
+  const questionsLeft = Math.max(0, model.ultimateQuestionsLeft ?? 0);
 
   const activeLabel = isActiveRapid
-    ? `ACTIVE - ${secondsLeft(model.overclockUntil ?? 0, now)}s`
+    ? `ACTIVE - ${questionsLeft || secondsLeft(model.overclockUntil ?? 0, now)}${questionsLeft ? " left" : "s"}`
     : isActiveCorrupt
-      ? `SYSTEM CORRUPT - ${secondsLeft(model.shadowCorruptUntil ?? 0, now)}s${
+      ? `VOID GLITCH - ${questionsLeft || secondsLeft(model.shadowCorruptUntil ?? 0, now)}${
+          questionsLeft ? " left" : "s"
+        }${
           (model.shadowCorruptStacks ?? 0) > 0 ? ` - x${model.shadowCorruptStacks}` : ""
         }`
       : isActiveArchitect
-        ? `PERFECT SEQUENCE - ${secondsLeft(model.architectUntil ?? 0, now)}s${
+        ? `DECONSTRUCT - ${questionsLeft || secondsLeft(model.architectUntil ?? 0, now)}${questionsLeft ? " left" : "s"}${
             (model.architectMarks ?? 0) > 0 ? ` - MARKS x${model.architectMarks}` : ""
           }${
             (model.architectSequenceStreak ?? 0) > 0 ? ` - ${model.architectSequenceStreak}/3` : ""
@@ -117,9 +121,9 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
       : isActiveJam
         ? `SIGNAL JAM - ${secondsLeft(model.blackoutUntil ?? 0, now)}s`
       : isActiveFortress
-        ? `AEGIS DOMAIN - ${secondsLeft(model.fortressUntil ?? 0, now)}s - STORED ${fortressBlocks}`
+        ? `REFLECT BASTION - ${questionsLeft || secondsLeft(model.fortressUntil ?? 0, now)}${questionsLeft ? " left" : "s"} - REFLECT ${fortressBlocks}`
         : isArmedInferno
-          ? `BLAZE SURGE - ${secondsLeft(model.infernoPendingUntil ?? 0, now)}s - BURN x${infernoStacks}`
+          ? `WILDFIRE - ${questionsLeft || secondsLeft(model.infernoPendingUntil ?? 0, now)}${questionsLeft ? " left" : "s"} - BURN x${infernoStacks}`
           : null;
 
   const ready = model.ready && !model.used && model.implemented;

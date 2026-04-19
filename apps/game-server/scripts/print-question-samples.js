@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
 
-const { TOPICS, DIFFICULTIES, generateQuestion } = require("../../../packages/shared/question-engine");
+const { TOPICS, DIFFICULTIES, generateQuestionBatch } = require("../../../packages/shared/question-engine");
 
 function pad(s, n) {
   const str = String(s);
@@ -12,14 +12,15 @@ function print() {
     console.log(`\n=== ${topic.toUpperCase()} ===`);
     for (const diff of DIFFICULTIES) {
       console.log(`\n${pad(diff.toUpperCase(), 6)}:`);
-      for (let i = 0; i < 20; i += 1) {
-        const q = generateQuestion(topic, diff, `samples:${topic}:${diff}`);
+      const batch = generateQuestionBatch(topic, diff, 20, `samples:${topic}:${diff}`);
+      for (const q of batch) {
         const timer = q.timing?.questionTimerSeconds ?? "?";
-        console.log(`- ${q.prompt}  ->  ${q.answer}  [${q.subtype}]  (${timer}s)`);
+        console.log(
+          `- ${q.prompt}  ->  ${q.correctAnswer ?? q.answer}  [${q.subtype}]  (${timer}s, est=${q.estimatedSolveTime}s, score=${q.difficultyScore})`
+        );
       }
     }
   }
 }
 
 print();
-

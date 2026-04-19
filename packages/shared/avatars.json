@@ -9,15 +9,14 @@
       "accent": "#38BDF8",
       "glow": "rgba(56,189,248,0.45)"
     },
-    "description": "Flash weaponizes unstable lightning to keep constant pressure and punish hesitation.",
-    "passive": "Tempo duelist. Every uninterrupted chain ramps his threat, but one mistake drops the momentum.",
+    "description": "Too fast to punish.",
+    "passive": "Overclock turns answer speed into burst damage for the next 4 questions.",
     "ultimateId": "rapid_fire",
     "ultimateName": "Overclock",
-    "ultimateDescription": "Build combos to deal more damage. Faster answers hit harder.",
+    "ultimateDescription": "For the next 4 questions, faster answers deal bonus damage with timing multipliers.",
     "ultimateMeta": {
-      "effectType": "timed_bonus",
-      "durationMs": 6000,
-      "bonusPoints": 1,
+      "effectType": "timing_multiplier",
+      "durationQuestions": 4,
       "chargeMultiplier": 1.0
     }
   },
@@ -31,14 +30,14 @@
       "accent": "#A78BFA",
       "glow": "rgba(167,139,250,0.42)"
     },
-    "description": "Shadow destabilizes enemy focus, turning small errors into escalating pressure.",
-    "passive": "Control disruptor. He warps rhythm and forces panic decisions without hard-locking play.",
+    "description": "You can't answer what you can't read.",
+    "passive": "Void Glitch hides two enemy choices for the next 4 questions while keeping them clickable.",
     "ultimateId": "system_corrupt",
-    "ultimateName": "System Corrupt",
-    "ultimateDescription": "Disrupt your opponent. Their mistakes deal extra damage.",
+    "ultimateName": "Void Glitch",
+    "ultimateDescription": "For the next 4 opponent questions, 2 options are visually hidden with glitch static.",
     "ultimateMeta": {
-      "effectType": "corrupt_interface",
-      "durationMs": 5000,
+      "effectType": "visibility_modifier",
+      "durationQuestions": 4,
       "chargeMultiplier": 1.02
     }
   },
@@ -52,35 +51,35 @@
       "accent": "#34D399",
       "glow": "rgba(52,211,153,0.4)"
     },
-    "description": "Guardian anchors the fight and converts enemy aggression into controlled retaliation.",
-    "passive": "Defensive tank. He shrugs off pressure, reflects chip damage, and punishes overcommitment.",
+    "description": "Everything you throw at me comes right back.",
+    "passive": "Reflect Bastion reduces incoming damage and reflects a portion for 4 questions.",
     "ultimateId": "shield",
-    "ultimateName": "Aegis Domain",
-    "ultimateDescription": "Take less damage. When it ends, release it back.",
+    "ultimateName": "Reflect Bastion",
+    "ultimateDescription": "For the next 4 questions, incoming damage is reduced and part of it is reflected.",
     "ultimateMeta": {
       "effectType": "domain_reflect",
-      "durationMs": 6000,
+      "durationQuestions": 4,
       "chargeMultiplier": 0.98
     }
   },
   {
     "id": "inferno",
-    "name": "Inferno",
-    "role": "Carry",
+    "name": "Blaze",
+    "role": "Burst",
     "icon": "\uD83D\uDD25",
     "emoji": "\uD83D\uDD25",
     "theme": {
       "accent": "#FB7185",
       "glow": "rgba(251,113,133,0.43)"
     },
-    "description": "Inferno snowballs through accuracy, turning every correct answer into sustained burn pressure.",
-    "passive": "Damage-over-time carry. He scales hardest when he can keep answers clean and continuous.",
+    "description": "The longer you survive, the hotter it gets.",
+    "passive": "Wildfire Surge builds burn stacks for 4 questions; stacks apply repeat burn ticks.",
     "ultimateId": "double",
-    "ultimateName": "Blaze Surge",
-    "ultimateDescription": "Stack burn damage that drains your opponent over time.",
+    "ultimateName": "Wildfire Surge",
+    "ultimateDescription": "For the next 4 questions, each correct answer adds a burn stack that deals damage over time.",
     "ultimateMeta": {
       "effectType": "stacking_burn_dot",
-      "durationMs": 6000,
+      "durationQuestions": 4,
       "tickEveryMs": 800,
       "chargeMultiplier": 0.95
     }
@@ -99,16 +98,16 @@
     "priceUsd": 4.99,
     "storeSku": "avatar_architect",
     "roleLabel": "Precision / Combo Burst",
-    "premiumTagline": "Premium Precision Overload",
-    "howItPlays": "During ultimate, correct answers rapidly stack marks and fire unblockable precision cuts. Every 2-answer sequence detonates all marks in a massive collapse hit.",
-    "description": "Architect scripts the battlefield like a solved proof, layering pressure until the opponent is forced into checkmate.",
-    "passive": "Premium burst controller. He banks marks quickly, cashes out often, and converts consistency into repeated lethal spikes.",
+    "premiumTagline": "I don’t fight your game. I rewrite it.",
+    "howItPlays": "Deconstruct runs for 6 questions. Your hits stay full while enemy correct answers are reduced.",
+    "description": "Dimensional Engineer.",
+    "passive": "Deconstruct weakens opponent damage for the next 6 questions without reducing your own output.",
     "ultimateId": "perfect_sequence",
-    "ultimateName": "Perfect Sequence",
-    "ultimateDescription": "Build marks. Land a combo to unleash a powerful strike.",
+    "ultimateName": "Deconstruct",
+    "ultimateDescription": "For the next 6 questions, opponent correct answers deal reduced damage.",
     "ultimateMeta": {
       "effectType": "premium_sequence_overload",
-      "durationMs": 6000,
+      "durationQuestions": 6,
       "chargeMultiplier": 0.98
     }
   },
@@ -126,16 +125,16 @@
     "priceUsd": 4.99,
     "storeSku": "avatar_titan",
     "roleLabel": "Heavy Hitter / Defense Breaker",
-    "premiumTagline": "Premium Juggernaut Wincon",
-    "howItPlays": "While active, all answer damage is unstoppable and heals Titan. Build a short chain, then fire an empowered Break Hit that ignores all mitigation.",
-    "description": "Titan is pure inevitability. Once he starts rolling, defenses stop mattering and every exchange tilts harder in his favor.",
-    "passive": "Premium bruiser carry. He converts correct answers into unavoidable damage, sustain, and armor-breaking finishers.",
+    "premiumTagline": "I don’t lose trades. I win them.",
+    "howItPlays": "Cataclysm runs for 6 questions: massive hit damage, wrong-answer self-protection, and slight resistance.",
+    "description": "Unstoppable Force.",
+    "passive": "Cataclysm boosts outgoing damage and grants controlled safety during risky exchanges.",
     "ultimateId": "overpower",
-    "ultimateName": "Overpower",
-    "ultimateDescription": "Hit harder, heal, and break through defenses.",
+    "ultimateName": "Cataclysm",
+    "ultimateDescription": "For the next 6 questions, your hits are massive and wrong answers do not self-damage.",
     "ultimateMeta": {
       "effectType": "premium_juggernaut_burst",
-      "durationMs": 5000,
+      "durationQuestions": 6,
       "chargeMultiplier": 0.98
     }
   }

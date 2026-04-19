@@ -10,16 +10,22 @@ function CoordinateGrid({
   xRange = [-6, 6],
   yRange = [-6, 6],
   points = [],
-  showLine = false,
+  lines = [],
+  showGrid = true,
+  showAxisNumbers = true,
+  showAxisLabels = true,
 }: {
   xRange?: [number, number];
   yRange?: [number, number];
   points?: Array<{ x: number; y: number; label?: string; color?: string }>;
-  showLine?: boolean;
+  lines?: Array<{ m: number; b: number; color?: string; label?: string }>;
+  showGrid?: boolean;
+  showAxisNumbers?: boolean;
+  showAxisLabels?: boolean;
 }) {
-  const width = 320;
-  const height = 220;
-  const pad = 24;
+  const width = 560;
+  const height = 360;
+  const pad = 40;
   const [xMin, xMax] = xRange;
   const [yMin, yMax] = yRange;
 
@@ -32,25 +38,93 @@ function CoordinateGrid({
   for (let y = yMin; y <= yMax; y += 1) yTicks.push(y);
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-[14rem] w-full text-slate-200">
-      <rect x="0" y="0" width={width} height={height} rx="16" fill="rgba(15,23,42,0.72)" />
-      {xTicks.map((x) => (
-        <line key={`x-${x}`} x1={sx(x)} y1={pad} x2={sx(x)} y2={height - pad} stroke="rgba(148,163,184,0.16)" />
-      ))}
-      {yTicks.map((y) => (
-        <line key={`y-${y}`} x1={pad} y1={sy(y)} x2={width - pad} y2={sy(y)} stroke="rgba(148,163,184,0.16)" />
-      ))}
-      <line x1={sx(0)} y1={pad} x2={sx(0)} y2={height - pad} stroke="rgba(148,163,184,0.6)" />
-      <line x1={pad} y1={sy(0)} x2={width - pad} y2={sy(0)} stroke="rgba(148,163,184,0.6)" />
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-[22rem] w-full text-slate-200">
+      <rect x="0" y="0" width={width} height={height} rx="18" fill="rgba(15,23,42,0.78)" />
+      <rect x={pad} y={pad} width={width - pad * 2} height={height - pad * 2} rx="10" fill="rgba(2,6,23,0.45)" />
 
-      {showLine && points.length >= 2 ? (
-        <line x1={sx(points[0].x)} y1={sy(points[0].y)} x2={sx(points[1].x)} y2={sy(points[1].y)} stroke="rgba(56,189,248,0.7)" strokeWidth="2.6" />
+      {showGrid
+        ? xTicks.map((x) => (
+            <line key={`x-${x}`} x1={sx(x)} y1={pad} x2={sx(x)} y2={height - pad} stroke="rgba(148,163,184,0.18)" />
+          ))
+        : null}
+      {showGrid
+        ? yTicks.map((y) => (
+            <line key={`y-${y}`} x1={pad} y1={sy(y)} x2={width - pad} y2={sy(y)} stroke="rgba(148,163,184,0.18)" />
+          ))
+        : null}
+
+      <line x1={sx(0)} y1={pad} x2={sx(0)} y2={height - pad} stroke="rgba(148,163,184,0.9)" strokeWidth="2.4" />
+      <line x1={pad} y1={sy(0)} x2={width - pad} y2={sy(0)} stroke="rgba(148,163,184,0.9)" strokeWidth="2.4" />
+
+      {showAxisNumbers
+        ? xTicks.map((x) => (
+            <text
+              key={`xt-${x}`}
+              x={sx(x)}
+              y={sy(0) + 16}
+              textAnchor="middle"
+              fill="rgba(203,213,225,0.95)"
+              fontSize="11"
+              fontWeight="700"
+            >
+              {x}
+            </text>
+          ))
+        : null}
+      {showAxisNumbers
+        ? yTicks.map((y) => (
+            <text
+              key={`yt-${y}`}
+              x={sx(0) - 10}
+              y={sy(y) + 4}
+              textAnchor="end"
+              fill="rgba(203,213,225,0.95)"
+              fontSize="11"
+              fontWeight="700"
+            >
+              {y}
+            </text>
+          ))
+        : null}
+
+      {showAxisLabels ? (
+        <>
+          <text x={width - pad + 12} y={sy(0) + 4} fill="rgba(186,230,253,0.95)" fontSize="13" fontWeight="800">
+            x
+          </text>
+          <text x={sx(0) + 8} y={pad - 10} fill="rgba(186,230,253,0.95)" fontSize="13" fontWeight="800">
+            y
+          </text>
+          <circle cx={sx(0)} cy={sy(0)} r="4.5" fill="rgba(56,189,248,0.9)" />
+        </>
       ) : null}
+
+      {lines.map((line, idx) => {
+        const x1 = xMin;
+        const y1 = line.m * x1 + line.b;
+        const x2 = xMax;
+        const y2 = line.m * x2 + line.b;
+        const color = line.color ?? "rgba(56,189,248,0.98)";
+        const labelX = xMax - 1;
+        const labelY = line.m * labelX + line.b;
+
+        return (
+          <g key={`line-${idx}`}>
+            <line x1={sx(x1)} y1={sy(y1)} x2={sx(x2)} y2={sy(y2)} stroke={color} strokeWidth="3.2" />
+            {line.label ? (
+              <text x={sx(labelX)} y={sy(labelY) - 8} fill="rgba(226,232,240,0.95)" fontSize="12" fontWeight="800">
+                {line.label}
+              </text>
+            ) : null}
+          </g>
+        );
+      })}
 
       {points.map((p, idx) => (
         <g key={`${p.x}-${p.y}-${idx}`}>
-          <circle cx={sx(p.x)} cy={sy(p.y)} r="5.5" fill={p.color ?? "rgba(56,189,248,0.95)"} />
-          <text x={sx(p.x) + 8} y={sy(p.y) - 8} fill="rgba(226,232,240,0.95)" fontSize="12" fontWeight="700">
+          <circle cx={sx(p.x)} cy={sy(p.y)} r="7" fill={p.color ?? "rgba(248,250,252,0.98)"} />
+          <circle cx={sx(p.x)} cy={sy(p.y)} r="3.6" fill="rgba(15,23,42,0.9)" />
+          <text x={sx(p.x) + 10} y={sy(p.y) - 10} fill="rgba(226,232,240,0.98)" fontSize="14" fontWeight="800">
             {p.label ?? ""}
           </text>
         </g>
@@ -293,10 +367,23 @@ export function QuestionVisual({ spec }: QuestionVisualProps) {
   }
 
   if (spec.kind === "coordinate-point") {
-    return <CoordinateGrid xRange={spec.xRange} yRange={spec.yRange} points={[{ x: spec.x, y: spec.y, label: spec.label ?? "P" }]} />;
+    return (
+      <CoordinateGrid
+        xRange={spec.xRange}
+        yRange={spec.yRange}
+        points={[{ x: spec.x, y: spec.y, label: spec.label ?? "P" }]}
+        showGrid
+        showAxisNumbers
+        showAxisLabels
+      />
+    );
   }
 
   if (spec.kind === "coordinate-two-points") {
+    const dx = spec.b.x - spec.a.x;
+    const dy = spec.b.y - spec.a.y;
+    const m = dx === 0 ? null : dy / dx;
+    const b = m === null ? null : spec.a.y - m * spec.a.x;
     return (
       <CoordinateGrid
         xRange={spec.xRange}
@@ -305,7 +392,24 @@ export function QuestionVisual({ spec }: QuestionVisualProps) {
           { ...spec.a, color: "rgba(56,189,248,0.95)" },
           { ...spec.b, color: "rgba(251,113,133,0.95)" },
         ]}
-        showLine
+        lines={m === null || b === null ? [] : [{ m, b }]}
+        showGrid
+        showAxisNumbers
+        showAxisLabels
+      />
+    );
+  }
+
+  if (spec.kind === "graph-cartesian") {
+    return (
+      <CoordinateGrid
+        xRange={spec.xRange}
+        yRange={spec.yRange}
+        points={(spec.points ?? []).map((point) => ({ ...point }))}
+        lines={(spec.lines ?? []).map((line) => ({ ...line }))}
+        showGrid={spec.showGrid ?? true}
+        showAxisNumbers={spec.showAxisNumbers ?? true}
+        showAxisLabels={spec.showAxisLabels ?? true}
       />
     );
   }

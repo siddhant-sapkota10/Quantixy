@@ -35,7 +35,7 @@ export const ULTIMATE_VFX: Record<UltimateType, UltimateVfxConfig> = {
     accent: "#FACC15",
     glow: "rgba(250, 204, 21, 0.52)",
     tint: "rgba(250, 204, 21, 0.16)",
-    durationMs: 6000,
+    durationMs: 1200,
     presentation: {
       primary: "#FACC15",
       secondary: "#FDE68A",
@@ -48,12 +48,12 @@ export const ULTIMATE_VFX: Record<UltimateType, UltimateVfxConfig> = {
   },
   system_corrupt: {
     avatarName: "Shadow",
-    ultimateName: "System Corrupt",
+    ultimateName: "Void Glitch",
     icon: "\uD83C\uDF11",
     accent: "#A78BFA",
     glow: "rgba(167, 139, 250, 0.45)",
     tint: "rgba(76, 29, 149, 0.22)",
-    durationMs: 5000,
+    durationMs: 1200,
     presentation: {
       primary: "#A78BFA",
       secondary: "#C4B5FD",
@@ -67,12 +67,12 @@ export const ULTIMATE_VFX: Record<UltimateType, UltimateVfxConfig> = {
   },
   perfect_sequence: {
     avatarName: "Architect",
-    ultimateName: "Perfect Sequence",
+    ultimateName: "Deconstruct",
     icon: "\uD83D\uDCD0",
     accent: "#FBBF24",
     glow: "rgba(251, 191, 36, 0.46)",
     tint: "rgba(217, 119, 6, 0.18)",
-    durationMs: 6000,
+    durationMs: 1200,
     presentation: {
       primary: "#FBBF24",
       secondary: "#FDE68A",
@@ -86,12 +86,12 @@ export const ULTIMATE_VFX: Record<UltimateType, UltimateVfxConfig> = {
   },
   overpower: {
     avatarName: "Titan",
-    ultimateName: "Overpower",
+    ultimateName: "Cataclysm",
     icon: "\uD83E\uDEA8",
     accent: "#F59E0B",
     glow: "rgba(245, 158, 11, 0.48)",
     tint: "rgba(120, 53, 15, 0.22)",
-    durationMs: 5000,
+    durationMs: 1200,
     presentation: {
       primary: "#F59E0B",
       secondary: "#FDE68A",
@@ -105,12 +105,12 @@ export const ULTIMATE_VFX: Record<UltimateType, UltimateVfxConfig> = {
   },
   shield: {
     avatarName: "Guardian",
-    ultimateName: "Aegis Domain",
+    ultimateName: "Reflect Bastion",
     icon: "\uD83D\uDEE1\uFE0F",
     accent: "#22D3EE",
     glow: "rgba(34, 211, 238, 0.42)",
     tint: "rgba(34, 211, 238, 0.14)",
-    durationMs: 6000,
+    durationMs: 1200,
     presentation: {
       primary: "#38BDF8",
       secondary: "#A5F3FC",
@@ -122,8 +122,8 @@ export const ULTIMATE_VFX: Record<UltimateType, UltimateVfxConfig> = {
     }
   },
   double: {
-    avatarName: "Inferno",
-    ultimateName: "Blaze Surge",
+    avatarName: "Blaze",
+    ultimateName: "Wildfire Surge",
     icon: "\uD83D\uDD25",
     accent: "#FB7185",
     glow: "rgba(251, 113, 133, 0.46)",

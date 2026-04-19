@@ -102,6 +102,11 @@ type UltimateState = {
   opponentReady: boolean;
   opponentUsed: boolean;
   opponentImplemented: boolean;
+  ultimateQuestionsLeft: number;
+  opponentUltimateQuestionsLeft: number;
+  wildfireStacks: number;
+  opponentWildfireStacks: number;
+  visibilityMaskActive: boolean;
   titanUntil: number;
   opponentTitanUntil: number;
   blackoutUntil: number;
@@ -194,6 +199,11 @@ const initialUltimate: UltimateState = {
   opponentReady: false,
   opponentUsed: false,
   opponentImplemented: true,
+  ultimateQuestionsLeft: 0,
+  opponentUltimateQuestionsLeft: 0,
+  wildfireStacks: 0,
+  opponentWildfireStacks: 0,
+  visibilityMaskActive: false,
   titanUntil: 0,
   opponentTitanUntil: 0,
   blackoutUntil: 0,
@@ -229,6 +239,23 @@ const initialUltimate: UltimateState = {
   opponentInfernoPending: false,
   opponentInfernoPendingUntil: 0
 };
+
+function buildUltimateIdentityFromAvatars(yourAvatarId: AvatarId, opponentAvatarId: AvatarId): Pick<
+  UltimateState,
+  "type" | "name" | "description" | "implemented" | "opponentType" | "opponentName" | "opponentImplemented"
+> {
+  const yourAvatar = getAvatar(yourAvatarId);
+  const opponentAvatar = getAvatar(opponentAvatarId);
+  return {
+    type: yourAvatar.ultimateId,
+    name: yourAvatar.ultimateName,
+    description: yourAvatar.ultimateDescription,
+    implemented: true,
+    opponentType: opponentAvatar.ultimateId,
+    opponentName: opponentAvatar.ultimateName,
+    opponentImplemented: true,
+  };
+}
 
 const initialFeedback: FeedbackState = {
   youStreak: 0,
@@ -819,6 +846,24 @@ export function GameClient({
           typeof payload.opponentUltimateImplemented === "boolean"
             ? payload.opponentUltimateImplemented
             : previous.opponentImplemented,
+        ultimateQuestionsLeft:
+          typeof payload.ultimateQuestionsLeft === "number"
+            ? payload.ultimateQuestionsLeft
+            : previous.ultimateQuestionsLeft,
+        opponentUltimateQuestionsLeft:
+          typeof payload.opponentUltimateQuestionsLeft === "number"
+            ? payload.opponentUltimateQuestionsLeft
+            : previous.opponentUltimateQuestionsLeft,
+        wildfireStacks:
+          typeof payload.wildfireStacks === "number" ? payload.wildfireStacks : previous.wildfireStacks,
+        opponentWildfireStacks:
+          typeof payload.opponentWildfireStacks === "number"
+            ? payload.opponentWildfireStacks
+            : previous.opponentWildfireStacks,
+        visibilityMaskActive:
+          typeof payload.visibilityMaskActive === "boolean"
+            ? payload.visibilityMaskActive
+            : previous.visibilityMaskActive,
         titanUntil: typeof payload.titanUntil === "number" ? payload.titanUntil : previous.titanUntil,
         opponentTitanUntil:
           typeof payload.opponentTitanUntil === "number"
@@ -1033,7 +1078,10 @@ export function GameClient({
       if (payload.ratings) {
         setRatings(payload.ratings);
       }
-      setUltimate(initialUltimate);
+      setUltimate({
+        ...initialUltimate,
+        ...buildUltimateIdentityFromAvatars(nextYourAvatarId, nextOpponentAvatarId),
+      });
       syncUltimateFromPayload(payload);
       const youPowerUpsAvailable = Array.isArray((payload as { powerUpsAvailable?: PowerUpId[] }).powerUpsAvailable)
         ? (payload as { powerUpsAvailable?: PowerUpId[] }).powerUpsAvailable ?? []
@@ -1064,7 +1112,6 @@ export function GameClient({
       // strikes removed (HP-only mistakes)
       setEliminated({ you: false, opponent: false });
       setTimer(initialTimer);
-      setUltimate(initialUltimate);
       setFrozenUntil(0);
       setShieldBlockedUntil(0);
       setEmoteBarOpen(false);
@@ -1098,7 +1145,17 @@ export function GameClient({
         // strikes removed (HP-only mistakes)
         setEliminated({ you: false, opponent: false });
         setTimer(initialTimer);
-        setUltimate(initialUltimate);
+        // Keep avatar-linked ultimate identity from matchFound; only reset round state.
+        setUltimate((previous) => ({
+          ...initialUltimate,
+          type: previous.type,
+          name: previous.name,
+          description: previous.description,
+          implemented: previous.implemented,
+          opponentType: previous.opponentType,
+          opponentName: previous.opponentName,
+          opponentImplemented: previous.opponentImplemented,
+        }));
         setFeedback(initialFeedback);
         setFrozenUntil(0);
         setShieldBlockedUntil(0);
@@ -1646,6 +1703,7 @@ export function GameClient({
       type: string;
       effect: string;
       durationMs?: number;
+      jamDurationMs?: number;
       questionsRemaining?: number;
       damage?: number;
       marksConsumed?: number;
@@ -1722,6 +1780,20 @@ export function GameClient({
       if ((payload.effect === "jam_active" || payload.effect === "input_disabled") && payload.target === "you" && payload.durationMs) {
         setFrozenUntil(Date.now() + payload.durationMs);
         triggerFreezeHit("you");
+      }
+
+      if (payload.effect === "system_corrupt_active" && payload.target === "you") {
+        const jamMs =
+          typeof payload.jamDurationMs === "number"
+            ? payload.jamDurationMs
+            : payload.durationMs;
+        if (jamMs && jamMs > 0) {
+          setUltimate((previous) => ({
+            ...previous,
+            blackoutUntil: Math.max(previous.blackoutUntil, Date.now() + jamMs),
+          }));
+          setAnswer("");
+        }
       }
 
       if (payload.effect === "perfect_strike" && payload.damage && payload.damage > 0 && payload.hp) {
@@ -2381,10 +2453,14 @@ export function GameClient({
     };
   }, [difficulty, normalizedRoomCode, retryKey, roomJoinMode, router, topic]);
 
-  const submitAnswer = () => {
-    const trimmedAnswer = answer.trim();
+  const submitAnswer = (rawValue?: string) => {
+    const trimmedAnswer = (rawValue ?? answer).trim();
 
     if (!socket || !trimmedAnswer || status !== "playing" || eliminated.you) {
+      return;
+    }
+
+    if (ultimate.blackoutUntil > Date.now()) {
       return;
     }
 
@@ -2414,6 +2490,10 @@ export function GameClient({
    * Never emits when the input is cleared (opponent sees nothing = cleared).
    */
   const handleAnswerChange = (value: string) => {
+    if (ultimate.blackoutUntil > Date.now()) {
+      return;
+    }
+
     setAnswer(value);
 
     if (!socket || status !== "playing" || eliminated.you || !value) return;
@@ -2428,6 +2508,11 @@ export function GameClient({
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     submitAnswer();
+  };
+
+  const handleOptionSubmit = (option: string) => {
+    if (!option) return;
+    submitAnswer(option);
   };
 
   const handlePlayAgain = () => {
@@ -3021,6 +3106,7 @@ export function GameClient({
                     infernoPending: ultimate.infernoPending,
                     infernoPendingUntil: ultimate.infernoPendingUntil,
                     infernoStacks: ultimate.novaBonusRemaining,
+                    ultimateQuestionsLeft: ultimate.ultimateQuestionsLeft,
                   }}
                 />
 
@@ -3062,6 +3148,7 @@ export function GameClient({
                     infernoPending: ultimate.opponentInfernoPending,
                     infernoPendingUntil: ultimate.opponentInfernoPendingUntil,
                     infernoStacks: ultimate.opponentNovaBonusRemaining,
+                    ultimateQuestionsLeft: ultimate.opponentUltimateQuestionsLeft,
                   }}
                 />
               </div>
@@ -3119,39 +3206,70 @@ export function GameClient({
               </div>
               <form className="flex w-full flex-col gap-2" onSubmit={handleSubmit}>
                 <WorkingScratchpad />
-                <div className="flex items-stretch gap-2">
-                  <input
-                    ref={answerInputRef}
-                    type="text"
-                    autoFocus
-                    value={answer}
-                    onChange={(event) => handleAnswerChange(event.target.value)}
-                    placeholder={
-                      isJamActive
-                        ? "Signal jam active - prep your answer..."
-                        : youEliminated
-                          ? "Eliminated"
-                          : feedback.youAnsweredCurrent
-                            ? "Waiting..."
-                            : currentQuestionData?.inputMode === "text"
-                              ? "Type text or symbol answer..."
-                              : "Type answer..."
-                    }
-                    disabled={youEliminated || feedback.youAnsweredCurrent}
-                    autoCapitalize="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    enterKeyHint="go"
-                    className="neon-input h-12 min-w-0 flex-1 rounded-2xl px-4 disabled:cursor-not-allowed disabled:opacity-60"
-                  />
-                  <Button
-                    className="h-12 w-[7.5rem] shrink-0"
-                    type="submit"
-                    disabled={!answer.trim() || isJamActive || youEliminated || feedback.youAnsweredCurrent}
-                  >
-                    Submit
-                  </Button>
-                </div>
+                {Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {currentQuestionData.options.map((option, idx) => (
+                      (() => {
+                        const hidden =
+                          Array.isArray(currentQuestionData.hiddenOptionIndexes) &&
+                          currentQuestionData.hiddenOptionIndexes.includes(idx);
+                        return (
+                      <Button
+                        key={`${option}-${idx}`}
+                        type="button"
+                        variant="secondary"
+                        className={`relative min-h-[2.75rem] w-full justify-start text-left text-sm ${
+                          hidden ? "overflow-hidden border-violet-400/40 bg-violet-950/35 text-violet-100" : ""
+                        }`}
+                        disabled={isJamActive || youEliminated || feedback.youAnsweredCurrent}
+                        onClick={() => handleOptionSubmit(option)}
+                      >
+                        {hidden ? "██ HIDDEN ███" : option}
+                        {hidden ? (
+                          <span className="pointer-events-none absolute inset-0 animate-pulse bg-[repeating-linear-gradient(90deg,rgba(167,139,250,0.08)_0px,rgba(167,139,250,0.08)_6px,rgba(34,211,238,0.08)_6px,rgba(34,211,238,0.08)_12px)]" />
+                        ) : null}
+                      </Button>
+                        );
+                      })()
+                    ))}
+                  </div>
+                ) : null}
+
+                {!(Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0) ? (
+                  <div className="flex items-stretch gap-2">
+                    <input
+                      ref={answerInputRef}
+                      type="text"
+                      autoFocus
+                      value={answer}
+                      onChange={(event) => handleAnswerChange(event.target.value)}
+                      placeholder={
+                        isJamActive
+                          ? "Signal jam active - prep your answer..."
+                          : youEliminated
+                            ? "Eliminated"
+                            : feedback.youAnsweredCurrent
+                              ? "Waiting..."
+                              : currentQuestionData?.inputMode === "text"
+                                ? "Type text or symbol answer..."
+                                : "Type answer..."
+                      }
+                      disabled={isJamActive || youEliminated || feedback.youAnsweredCurrent}
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      enterKeyHint="go"
+                      className="neon-input h-12 min-w-0 flex-1 rounded-2xl px-4 disabled:cursor-not-allowed disabled:opacity-60"
+                    />
+                    <Button
+                      className="h-12 w-[7.5rem] shrink-0"
+                      type="submit"
+                      disabled={!answer.trim() || isJamActive || youEliminated || feedback.youAnsweredCurrent}
+                    >
+                      Submit
+                    </Button>
+                  </div>
+                ) : null}
 
                 {/* Abilities row: keep things orderly (no empty placeholder box). */}
                 <div className={`grid gap-2 ${POWERUPS_ENABLED ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-2"}`}>
@@ -3515,6 +3633,8 @@ export function GameClient({
                 fortressBlocksRemaining={ultimate.fortressBlocksRemaining}
                 infernoPendingUntil={ultimate.infernoPendingUntil}
                 infernoStacks={ultimate.novaBonusRemaining}
+                ultimateQuestionsLeft={ultimate.ultimateQuestionsLeft}
+                ultimateName={ultimate.name}
               />
               <AnimatePresence>
                 {scoreImpactKey.you > 0 ? (
@@ -3553,6 +3673,7 @@ export function GameClient({
                     infernoPending: ultimate.infernoPending,
                     infernoPendingUntil: ultimate.infernoPendingUntil,
                     infernoStacks: ultimate.novaBonusRemaining,
+                    ultimateQuestionsLeft: ultimate.ultimateQuestionsLeft,
                   }}
                 />
 
@@ -3636,6 +3757,8 @@ export function GameClient({
                 fortressBlocksRemaining={ultimate.opponentFortressBlocksRemaining}
                 infernoPendingUntil={ultimate.opponentInfernoPendingUntil}
                 infernoStacks={ultimate.opponentNovaBonusRemaining}
+                ultimateQuestionsLeft={ultimate.opponentUltimateQuestionsLeft}
+                ultimateName={ultimate.opponentName}
               />
               <AnimatePresence>
                 {scoreImpactKey.opponent > 0 ? (
@@ -3677,6 +3800,7 @@ export function GameClient({
                   infernoPending: ultimate.opponentInfernoPending,
                   infernoPendingUntil: ultimate.opponentInfernoPendingUntil,
                   infernoStacks: ultimate.opponentNovaBonusRemaining,
+                  ultimateQuestionsLeft: ultimate.opponentUltimateQuestionsLeft,
                 }}
               />
               <FloatingLabel items={opponentFloatingItems} />
