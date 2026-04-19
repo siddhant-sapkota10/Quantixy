@@ -5,7 +5,12 @@ import { useEffect, useRef, useState } from "react";
 const COLORS = ["#e2e8f0", "#7dd3fc", "#fda4af", "#fcd34d", "#86efac"];
 const SIZES = [2, 3, 5];
 
-export function WorkingScratchpad() {
+type WorkingScratchpadProps = {
+  /** When true, the pad cannot be opened or drawn (e.g. Neural Jam / blackout). */
+  answerInputLocked?: boolean;
+};
+
+export function WorkingScratchpad({ answerInputLocked = false }: WorkingScratchpadProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -28,6 +33,12 @@ export function WorkingScratchpad() {
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
   }, [open]);
+
+  useEffect(() => {
+    if (answerInputLocked) {
+      setOpen(false);
+    }
+  }, [answerInputLocked]);
 
   const getPos = (event: PointerEvent | React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -60,6 +71,7 @@ export function WorkingScratchpad() {
   const lastRef = useRef<{ x: number; y: number } | null>(null);
 
   const onPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (answerInputLocked) return;
     drawingRef.current = true;
     (event.target as HTMLCanvasElement).setPointerCapture(event.pointerId);
     const p = getPos(event);
@@ -67,7 +79,7 @@ export function WorkingScratchpad() {
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!drawingRef.current) return;
+    if (answerInputLocked || !drawingRef.current) return;
     const p = getPos(event);
     const last = lastRef.current;
     if (!last) {
@@ -109,8 +121,10 @@ export function WorkingScratchpad() {
       <div className="flex items-center justify-start">
         <button
           type="button"
+          disabled={answerInputLocked}
+          title={answerInputLocked ? "Unavailable during input lock" : undefined}
           onClick={() => setOpen(true)}
-          className="rounded-xl border border-indigo-300/28 bg-slate-900/55 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-200 shadow-[0_10px_30px_rgba(2,6,23,0.35)] backdrop-blur transition-all duration-200 ease-premium hover:border-cyan-300/55"
+          className="rounded-xl border border-indigo-300/28 bg-slate-900/55 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-200 shadow-[0_10px_30px_rgba(2,6,23,0.35)] backdrop-blur transition-all duration-200 ease-premium hover:border-cyan-300/55 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-indigo-300/28"
         >
           Show Workpad
         </button>
@@ -186,7 +200,7 @@ export function WorkingScratchpad() {
       >
         <canvas
           ref={canvasRef}
-          className="h-full w-full touch-none"
+          className={`h-full w-full touch-none ${answerInputLocked ? "pointer-events-none opacity-50" : ""}`}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={stopDraw}

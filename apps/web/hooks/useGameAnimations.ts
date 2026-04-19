@@ -3,6 +3,8 @@
 import { useCallback, useRef, useState } from "react";
 import { useAnimation, type AnimationControls } from "framer-motion";
 import type { PowerUpId } from "@/lib/powerups";
+import type { CombatFxKeys } from "@/components/animations/UltimateCombatFxLayer";
+import { INITIAL_COMBAT_FX } from "@/components/animations/UltimateCombatFxLayer";
 
 export type ShieldBlockedLabel = { id: number; who: "you" | "opponent" };
 export type PowerUpActivatedLabel = {
@@ -60,6 +62,7 @@ export function useGameAnimations() {
   const [youPowerUpGlowKey, setYouPowerUpGlowKey] = useState(0);
   const [opponentPowerUpGlowKey, setOpponentPowerUpGlowKey] = useState(0);
   const [streakBrokenVisible, setStreakBrokenVisible] = useState(false);
+  const [combatFx, setCombatFx] = useState<CombatFxKeys>(INITIAL_COMBAT_FX);
 
   const labelIdRef = useRef(0);
 
@@ -133,6 +136,56 @@ export function useGameAnimations() {
     setTimeout(() => setStreakBrokenVisible(false), 1800);
   }, []);
 
+  const triggerFlashBolt = useCallback((tier: number) => {
+    const safe = Math.max(1, Math.min(5, Math.round(tier) || 1));
+    setCombatFx((prev) => ({ ...prev, flashBoltKey: prev.flashBoltKey + 1, flashBoltTier: safe }));
+  }, []);
+
+  const triggerFlashOverclockSnap = useCallback(() => {
+    setCombatFx((prev) => ({ ...prev, flashSnapKey: prev.flashSnapKey + 1 }));
+  }, []);
+
+  const triggerInfernoVolley = useCallback((from: "you" | "opponent", stacksHint: number) => {
+    setCombatFx((prev) => ({
+      ...prev,
+      infernoVolleyKey: prev.infernoVolleyKey + 1,
+      infernoVolleyFrom: from,
+      infernoStacksHint: Math.max(0, stacksHint)
+    }));
+  }, []);
+
+  const triggerBurnTickFlare = useCallback((target: "you" | "opponent") => {
+    setCombatFx((prev) => ({
+      ...prev,
+      burnTickFlareKey: prev.burnTickFlareKey + 1,
+      burnTickTarget: target
+    }));
+  }, []);
+
+  const triggerTitanSlam = useCallback(() => {
+    setCombatFx((prev) => ({ ...prev, titanSlamKey: prev.titanSlamKey + 1 }));
+  }, []);
+
+  const triggerTitanHealRipple = useCallback(() => {
+    setCombatFx((prev) => ({ ...prev, titanHealRippleKey: prev.titanHealRippleKey + 1 }));
+  }, []);
+
+  const triggerArchitectOrb = useCallback(() => {
+    setCombatFx((prev) => ({ ...prev, architectOrbKey: prev.architectOrbKey + 1 }));
+  }, []);
+
+  const triggerArchitectBeam = useCallback(() => {
+    setCombatFx((prev) => ({ ...prev, architectBeamKey: prev.architectBeamKey + 1 }));
+  }, []);
+
+  const triggerArchitectShatter = useCallback(() => {
+    setCombatFx((prev) => ({ ...prev, architectShatterKey: prev.architectShatterKey + 1 }));
+  }, []);
+
+  const triggerShadowMindShock = useCallback(() => {
+    setCombatFx((prev) => ({ ...prev, shadowMindShockKey: prev.shadowMindShockKey + 1 }));
+  }, []);
+
   return {
     animState: {
       frostBurstActive,
@@ -149,11 +202,22 @@ export function useGameAnimations() {
       opponentPowerUpGlowKey,
       streakBrokenVisible,
     } satisfies GameAnimationState,
+    combatFx,
     triggerFreezeHit,
     triggerPowerUpActivated,
     triggerShieldBlock,
     triggerPowerUpReady,
     triggerScoreGlow,
     triggerStreakBroken,
+    triggerFlashBolt,
+    triggerFlashOverclockSnap,
+    triggerInfernoVolley,
+    triggerBurnTickFlare,
+    triggerTitanSlam,
+    triggerTitanHealRipple,
+    triggerArchitectOrb,
+    triggerArchitectBeam,
+    triggerArchitectShatter,
+    triggerShadowMindShock,
   };
 }

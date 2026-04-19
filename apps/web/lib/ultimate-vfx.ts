@@ -48,7 +48,7 @@ export const ULTIMATE_VFX: Record<UltimateType, UltimateVfxConfig> = {
   },
   system_corrupt: {
     avatarName: "Shadow",
-    ultimateName: "Void Glitch",
+    ultimateName: "Neural Jam",
     icon: "\uD83C\uDF11",
     accent: "#A78BFA",
     glow: "rgba(167, 139, 250, 0.45)",
@@ -67,7 +67,7 @@ export const ULTIMATE_VFX: Record<UltimateType, UltimateVfxConfig> = {
   },
   perfect_sequence: {
     avatarName: "Architect",
-    ultimateName: "Deconstruct",
+    ultimateName: "Perfect Sequence",
     icon: "\uD83D\uDCD0",
     accent: "#FBBF24",
     glow: "rgba(251, 191, 36, 0.46)",
@@ -86,7 +86,7 @@ export const ULTIMATE_VFX: Record<UltimateType, UltimateVfxConfig> = {
   },
   overpower: {
     avatarName: "Titan",
-    ultimateName: "Cataclysm",
+    ultimateName: "Overpower",
     icon: "\uD83E\uDEA8",
     accent: "#F59E0B",
     glow: "rgba(245, 158, 11, 0.48)",
@@ -123,7 +123,7 @@ export const ULTIMATE_VFX: Record<UltimateType, UltimateVfxConfig> = {
   },
   double: {
     avatarName: "Blaze",
-    ultimateName: "Wildfire Surge",
+    ultimateName: "Blaze Surge",
     icon: "\uD83D\uDD25",
     accent: "#FB7185",
     glow: "rgba(251, 113, 133, 0.46)",

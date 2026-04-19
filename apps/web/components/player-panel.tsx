@@ -37,6 +37,8 @@ type PlayerPanelProps = {
   hitType?: HitType;
   /** 0..1 intensity multiplier (affects flash strength + damage number scale). */
   hitIntensity?: number;
+  /** Flash Overclock tier on the attacker's last hit (0 = none) — scales floating damage pop. */
+  damageFlashTier?: number;
   /** One-shot key: pulse when ultimate becomes ready. */
   ultReadyCueKey?: number;
   /** Status effects for richer ultimate visibility. */
@@ -87,6 +89,7 @@ export function PlayerPanel({
   latestDamage = null,
   hitType = "normal",
   hitIntensity = 0.35,
+  damageFlashTier = 0,
   ultReadyCueKey = 0,
   overclockUntil = 0,
   blackoutUntil = 0,
@@ -145,6 +148,8 @@ export function PlayerPanel({
       if (trailTimeoutRef.current) clearTimeout(trailTimeoutRef.current);
     };
   }, [hpPercent, showHp]);
+
+  const damagePopScale = 1 + Math.max(0, damageFlashTier - 1) * 0.12;
 
   const hitPalette = useMemo(() => {
     if (hitType === "ultimate") {
@@ -321,7 +326,7 @@ export function PlayerPanel({
             {ultimateQuestionsLeft > 0 ? (
               <div className="mt-1 flex items-center justify-center">
                 <span className="rounded-full border border-indigo-300/35 bg-indigo-950/60 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-[0.18em] text-indigo-100">
-                  {ultimateName ? `${ultimateName} ` : ""}{ultimateQuestionsLeft} LEFT
+                  {`${ultimateName ? `${ultimateName} ` : ""}${ultimateQuestionsLeft}s`}
                 </span>
               </div>
             ) : null}
@@ -447,18 +452,39 @@ export function PlayerPanel({
         {/* Persistent ultimate auras (active / jam) */}
         <AnimatePresence>
           {rapidActive ? (
-            <motion.div
-              key="rapid-aura"
-              className="pointer-events-none absolute inset-0 rounded-2xl"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: [0.1, 0.28, 0.12, 0.26, 0.1] }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 1.15, repeat: Infinity, ease: "easeInOut" }}
-              style={{
-                background:
-                  "radial-gradient(ellipse at 50% 35%, rgba(250,204,21,0.22) 0%, transparent 62%)"
-              }}
-            />
+            <>
+              <motion.div
+                key="rapid-aura"
+                className="pointer-events-none absolute inset-0 rounded-2xl"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: [0.1, 0.28, 0.12, 0.26, 0.1] }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 1.15, repeat: Infinity, ease: "easeInOut" }}
+                style={{
+                  background:
+                    "radial-gradient(ellipse at 50% 35%, rgba(250,204,21,0.22) 0%, transparent 62%)"
+                }}
+              />
+              <motion.div
+                key="rapid-streaks"
+                className="pointer-events-none absolute inset-y-2 left-1 w-1.5 rounded-full opacity-70"
+                animate={{ backgroundPosition: ["0px 0px", "0px 80px"] }}
+                transition={{ duration: 0.45, repeat: Infinity, ease: "linear" }}
+                style={{
+                  background:
+                    "repeating-linear-gradient(180deg, transparent 0px, transparent 6px, rgba(250,204,21,0.45) 6px, rgba(250,204,21,0.45) 8px)"
+                }}
+              />
+              <motion.div
+                className="pointer-events-none absolute inset-y-2 right-1 w-1.5 rounded-full opacity-70"
+                animate={{ backgroundPosition: ["0px 0px", "0px -80px"] }}
+                transition={{ duration: 0.4, repeat: Infinity, ease: "linear" }}
+                style={{
+                  background:
+                    "repeating-linear-gradient(180deg, transparent 0px, transparent 5px, rgba(253,224,71,0.35) 5px, rgba(253,224,71,0.35) 7px)"
+                }}
+              />
+            </>
           ) : null}
         </AnimatePresence>
 
@@ -692,16 +718,37 @@ export function PlayerPanel({
                 y: hitType === "ultimate" ? -40 : hitType === "streak" ? -36 : -30,
                 scale:
                   hitType === "ultimate"
-                    ? [0.95, 1.2 + hitIntensity * 0.25, 1.05, 0.98]
+                    ? [
+                        0.95 * damagePopScale,
+                        (1.2 + hitIntensity * 0.25) * damagePopScale,
+                        1.05 * damagePopScale,
+                        0.98 * damagePopScale
+                      ]
                     : hitType === "streak"
-                      ? [0.82, 1.14 + hitIntensity * 0.18, 1.02, 0.97]
-                      : [0.74, 1.08 + hitIntensity * 0.14, 1, 0.96]
+                      ? [
+                          0.82 * damagePopScale,
+                          (1.14 + hitIntensity * 0.18) * damagePopScale,
+                          1.02 * damagePopScale,
+                          0.97 * damagePopScale
+                        ]
+                      : [
+                          0.74 * damagePopScale,
+                          (1.08 + hitIntensity * 0.14) * damagePopScale,
+                          1 * damagePopScale,
+                          0.96 * damagePopScale
+                        ]
               }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.78, ease: "easeOut" }}
             >
-              <span className={`rounded-full border ${hitPalette.badgeBorder} ${hitPalette.badgeBg} px-2.5 py-1 text-sm font-black ${hitPalette.badgeText} shadow-lg`}>
-                -{latestDamage}
+              <span
+                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-sm font-black shadow-lg ${
+                  damageFlashTier > 0
+                    ? "border-amber-300/70 bg-amber-950/95 text-amber-100"
+                    : `${hitPalette.badgeBorder} ${hitPalette.badgeBg} ${hitPalette.badgeText}`
+                }`}
+              >
+                {damageFlashTier > 0 ? <span className="text-amber-300">⚡</span> : null}-{latestDamage}
               </span>
             </motion.div>
           )}

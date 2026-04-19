@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useMemo } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { getAvatar, type AvatarId } from "@/lib/avatars";
 import { ULTIMATE_VFX, type UltimateType } from "@/lib/ultimate-vfx";
 
@@ -30,7 +31,12 @@ export type MatchChampionCardModel = {
   infernoPending?: boolean;
   infernoPendingUntil?: number;
   infernoStacks?: number;
+  /** Flash Overclock: consecutive-correct damage stacks (server-synced). */
+  flashOverclockStacks?: number;
+  /** Seconds remaining for your active ultimate (server field name unchanged). */
   ultimateQuestionsLeft?: number;
+  /** Battle HUD: floating damage on this card when this player was just hit. */
+  damageFloat?: { hitKey: number; amount: number; flashTier: number } | null;
 };
 
 type MatchChampionCardProps = {
@@ -104,16 +110,17 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
   const infernoStacks = model.infernoStacks ?? 0;
   const questionsLeft = Math.max(0, model.ultimateQuestionsLeft ?? 0);
 
+  const flashStacks = model.flashOverclockStacks ?? 0;
   const activeLabel = isActiveRapid
-    ? `ACTIVE - ${questionsLeft || secondsLeft(model.overclockUntil ?? 0, now)}${questionsLeft ? " left" : "s"}`
+    ? `OVERCLOCK - ${questionsLeft || secondsLeft(model.overclockUntil ?? 0, now)}s${
+        flashStacks > 0 ? ` - x${flashStacks}` : ""
+      }`
     : isActiveCorrupt
-      ? `VOID GLITCH - ${questionsLeft || secondsLeft(model.shadowCorruptUntil ?? 0, now)}${
-          questionsLeft ? " left" : "s"
-        }${
+      ? `NEURAL JAM - ${questionsLeft || secondsLeft(model.shadowCorruptUntil ?? 0, now)}s${
           (model.shadowCorruptStacks ?? 0) > 0 ? ` - x${model.shadowCorruptStacks}` : ""
         }`
       : isActiveArchitect
-        ? `DECONSTRUCT - ${questionsLeft || secondsLeft(model.architectUntil ?? 0, now)}${questionsLeft ? " left" : "s"}${
+        ? `PERFECT SEQUENCE - ${questionsLeft || secondsLeft(model.architectUntil ?? 0, now)}s${
             (model.architectMarks ?? 0) > 0 ? ` - MARKS x${model.architectMarks}` : ""
           }${
             (model.architectSequenceStreak ?? 0) > 0 ? ` - ${model.architectSequenceStreak}/3` : ""
@@ -121,9 +128,9 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
       : isActiveJam
         ? `SIGNAL JAM - ${secondsLeft(model.blackoutUntil ?? 0, now)}s`
       : isActiveFortress
-        ? `REFLECT BASTION - ${questionsLeft || secondsLeft(model.fortressUntil ?? 0, now)}${questionsLeft ? " left" : "s"} - REFLECT ${fortressBlocks}`
+        ? `REFLECT BASTION - ${questionsLeft || secondsLeft(model.fortressUntil ?? 0, now)}s - STORED ${fortressBlocks}`
         : isArmedInferno
-          ? `WILDFIRE - ${questionsLeft || secondsLeft(model.infernoPendingUntil ?? 0, now)}${questionsLeft ? " left" : "s"} - BURN x${infernoStacks}`
+          ? `BLAZE SURGE - ${questionsLeft || secondsLeft(model.infernoPendingUntil ?? 0, now)}s - BURN x${infernoStacks}`
           : null;
 
   const ready = model.ready && !model.used && model.implemented;
@@ -216,7 +223,39 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
             </div>
 
             {hpPct !== null ? (
-              <div className="mt-2">
+              <div className="relative mt-2">
+                <AnimatePresence>
+                  {model.damageFloat && model.damageFloat.amount > 0 && model.damageFloat.hitKey > 0 ? (
+                    <motion.div
+                      key={`dmg-${model.damageFloat.hitKey}`}
+                      className={`pointer-events-none absolute -top-1 z-20 whitespace-nowrap sm:-top-2 ${isOpponent ? "right-0" : "left-0"}`}
+                      initial={{ opacity: 0, y: 6, scale: 0.82 }}
+                      animate={{
+                        opacity: [0, 1, 1, 0],
+                        y: [6, -8, -22, -34],
+                        scale: [
+                          0.82,
+                          1 + Math.max(0, model.damageFloat.flashTier - 1) * 0.12,
+                          1 + Math.max(0, model.damageFloat.flashTier - 1) * 0.1,
+                          0.95
+                        ]
+                      }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.85, ease: "easeOut" }}
+                    >
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-black tabular-nums shadow-lg sm:px-2.5 sm:py-1 sm:text-sm ${
+                          model.damageFloat.flashTier > 0
+                            ? "border-amber-300/70 bg-amber-950/95 text-amber-100"
+                            : "border-rose-400/55 bg-rose-950/95 text-rose-100"
+                        }`}
+                      >
+                        {model.damageFloat.flashTier > 0 ? <span className="text-amber-300">⚡</span> : null}-
+                        {Math.round(model.damageFloat.amount)}
+                      </span>
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
                 <div className="mb-1 flex items-center justify-between text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">
                   <span>HP</span>
                   <span className="tabular-nums text-slate-200">{Math.round(hpSafe ?? 0)}</span>

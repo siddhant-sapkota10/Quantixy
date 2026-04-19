@@ -1,8 +1,8 @@
 const abilities = [
   {
     avatar: 'Shadow',
-    ultimate: 'Void Glitch',
-    questions: 4,
+    ultimate: 'Neural Jam',
+    questions: 5,
     simulate() {
       return {
         hiddenChoiceSets: [
@@ -17,16 +17,16 @@ const abilities = [
   },
   {
     avatar: 'Blaze',
-    ultimate: 'Wildfire Surge',
-    questions: 4,
+    ultimate: 'Blaze Surge',
+    questions: 5,
     simulate() {
       const correctPattern = [true, true, false, true];
       let stacks = 0;
       const ticks = [];
       for (const ok of correctPattern) {
-        if (ok) stacks = Math.min(5, stacks + 1);
+        if (ok) stacks = Math.min(6, stacks + 1);
         else stacks = Math.max(0, stacks - 1);
-        const burnDamage = stacks > 0 ? 1 + (stacks - 1) : 0;
+        const burnDamage = stacks > 0 ? 2 + (stacks - 1) : 0;
         ticks.push({ ok, stacks, burnDamage });
       }
       return { correctPattern, ticks };
@@ -35,13 +35,13 @@ const abilities = [
   {
     avatar: 'Guardian',
     ultimate: 'Reflect Bastion',
-    questions: 4,
+    questions: 5,
     simulate() {
       const incoming = [14, 11, 17, 9];
       return incoming.map((value) => {
-        const reduced = Math.max(1, Math.round(value * 0.62));
+        const reduced = Math.max(1, Math.round(value * 0.55));
         const prevented = Math.max(0, value - reduced);
-        const reflected = Math.max(0, Math.round(prevented * 0.28));
+        const reflected = Math.max(0, Math.round(prevented * 0.32));
         return { incoming: value, reduced, reflected };
       });
     }
@@ -49,38 +49,38 @@ const abilities = [
   {
     avatar: 'Flash',
     ultimate: 'Overclock',
-    questions: 4,
+    questions: 5,
     simulate() {
       const responseMs = [1200, 2100, 3400, 1500];
       return responseMs.map((ms) => {
-        const multiplier = ms <= 1800 ? 1.45 : ms <= 3200 ? 1.25 : 1.1;
+        const multiplier = ms <= 1600 ? 1.38 : ms <= 2800 ? 1.22 : 1.08;
         return { responseMs: ms, multiplier };
       });
     }
   },
   {
     avatar: 'Architect',
-    ultimate: 'Deconstruct',
-    questions: 6,
+    ultimate: 'Perfect Sequence',
+    questions: 7,
     simulate() {
       const opponentCorrectBase = [10, 12, 9, 11, 10, 13];
       return opponentCorrectBase.map((base) => ({
         base,
-        reduced: Math.max(1, Math.round(base * 0.58))
+        reduced: Math.max(1, Math.round(base * 0.52))
       }));
     }
   },
   {
     avatar: 'Titan',
-    ultimate: 'Cataclysm',
-    questions: 6,
+    ultimate: 'Overpower',
+    questions: 7,
     simulate() {
       const correctBase = [9, 11, 10, 12, 8, 10];
-      const boosted = correctBase.map((base) => Math.max(1, Math.round(base * 1.55)) + 3);
+      const boosted = correctBase.map((base) => Math.max(1, Math.round(base * 1.42)) + 2);
       return {
         boosted,
         wrongAnswerSelfDamage: 0,
-        incomingMitigationMultiplier: 0.85
+        incomingMitigationMultiplier: 0.82
       };
     }
   }
