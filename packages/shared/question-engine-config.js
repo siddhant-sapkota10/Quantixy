@@ -13,9 +13,24 @@ const QUESTION_FORMATS = {
 const TOPIC_ALLOWED_FORMATS = {
   arithmetic: [QUESTION_FORMATS.MULTIPLE_CHOICE, QUESTION_FORMATS.TRUE_FALSE, QUESTION_FORMATS.FILL_IN],
   algebra: [QUESTION_FORMATS.MULTIPLE_CHOICE, QUESTION_FORMATS.TRUE_FALSE, QUESTION_FORMATS.FILL_IN],
-  fractions: [QUESTION_FORMATS.MULTIPLE_CHOICE, QUESTION_FORMATS.TRUE_FALSE, QUESTION_FORMATS.RANK_ORDER],
-  percentages: [QUESTION_FORMATS.MULTIPLE_CHOICE, QUESTION_FORMATS.TRUE_FALSE, QUESTION_FORMATS.RANK_ORDER],
-  ratios: [QUESTION_FORMATS.MULTIPLE_CHOICE, QUESTION_FORMATS.TRUE_FALSE, QUESTION_FORMATS.RANK_ORDER],
+  fractions: [
+    QUESTION_FORMATS.MULTIPLE_CHOICE,
+    QUESTION_FORMATS.TRUE_FALSE,
+    QUESTION_FORMATS.RANK_ORDER,
+    QUESTION_FORMATS.FILL_IN,
+  ],
+  percentages: [
+    QUESTION_FORMATS.MULTIPLE_CHOICE,
+    QUESTION_FORMATS.TRUE_FALSE,
+    QUESTION_FORMATS.RANK_ORDER,
+    QUESTION_FORMATS.FILL_IN,
+  ],
+  ratios: [
+    QUESTION_FORMATS.MULTIPLE_CHOICE,
+    QUESTION_FORMATS.TRUE_FALSE,
+    QUESTION_FORMATS.RANK_ORDER,
+    QUESTION_FORMATS.FILL_IN,
+  ],
   geometry: [QUESTION_FORMATS.MULTIPLE_CHOICE, QUESTION_FORMATS.RANK_ORDER, QUESTION_FORMATS.FILL_IN],
   graphs_functions: [
     QUESTION_FORMATS.MULTIPLE_CHOICE,
@@ -27,23 +42,24 @@ const TOPIC_ALLOWED_FORMATS = {
 };
 
 const FORMAT_WEIGHTS_BY_DIFFICULTY = {
+  // Kept intentionally close so the selector can rotate near-evenly.
   easy: {
-    [QUESTION_FORMATS.MULTIPLE_CHOICE]: 8,
-    [QUESTION_FORMATS.TRUE_FALSE]: 5,
+    [QUESTION_FORMATS.MULTIPLE_CHOICE]: 1,
+    [QUESTION_FORMATS.TRUE_FALSE]: 1,
     [QUESTION_FORMATS.RANK_ORDER]: 1,
-    [QUESTION_FORMATS.FILL_IN]: 2,
+    [QUESTION_FORMATS.FILL_IN]: 1,
   },
   medium: {
-    [QUESTION_FORMATS.MULTIPLE_CHOICE]: 7,
-    [QUESTION_FORMATS.TRUE_FALSE]: 4,
-    [QUESTION_FORMATS.RANK_ORDER]: 3,
-    [QUESTION_FORMATS.FILL_IN]: 2,
+    [QUESTION_FORMATS.MULTIPLE_CHOICE]: 1,
+    [QUESTION_FORMATS.TRUE_FALSE]: 1,
+    [QUESTION_FORMATS.RANK_ORDER]: 1,
+    [QUESTION_FORMATS.FILL_IN]: 1,
   },
   hard: {
-    [QUESTION_FORMATS.MULTIPLE_CHOICE]: 6,
-    [QUESTION_FORMATS.TRUE_FALSE]: 2,
-    [QUESTION_FORMATS.RANK_ORDER]: 4,
-    [QUESTION_FORMATS.FILL_IN]: 3,
+    [QUESTION_FORMATS.MULTIPLE_CHOICE]: 1,
+    [QUESTION_FORMATS.TRUE_FALSE]: 1,
+    [QUESTION_FORMATS.RANK_ORDER]: 1,
+    [QUESTION_FORMATS.FILL_IN]: 1,
   },
 };
 
@@ -90,10 +106,23 @@ const FORMAT_VALIDATION = {
   rankOrderMaxItems: 4,
   trueFalseOptions: ["True", "False"],
   fillInMaxAnswerLength: 14,
+  fillInPromptMaxLength: 110,
+  fillInMaxCognitiveStepsByDifficulty: {
+    easy: 1,
+    medium: 2,
+    hard: 3,
+  },
+  fillInExpressionSafePattern: /^[-+]?(\d+(\.\d+)?)(x(\^\d+)?)?([+-]\d*(x(\^\d+)?)?)*$/,
   // Fill-in should be reserved for safe formats only.
-  fillInAllowedAnswerTypes: new Set(["int", "number", "fraction"]),
+  fillInAllowedAnswerTypes: new Set(["int", "number", "fraction", "percent"]),
   // True/false should not read like a mini word problem.
   trueFalsePromptMaxLength: 120,
+  // Rotation policy: avoid long streaks while keeping randomness.
+  maxConsecutiveSameFormat: 2,
+  recentFormatWindow: 8,
+  leastUsedBoost: 2.6,
+  recencyPenaltyBase: 0.48,
+  hardBlockSameFormatStreak: 3,
 };
 
 module.exports = {
@@ -104,4 +133,3 @@ module.exports = {
   ROUND_CATEGORY_FORMAT_BIAS,
   FORMAT_VALIDATION,
 };
-
