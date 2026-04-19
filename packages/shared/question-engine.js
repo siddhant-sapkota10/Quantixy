@@ -39,6 +39,7 @@ const {
 const RECENT_SUBTYPE_BY_SCOPE = new Map();
 const RECENT_QUESTION_KEYS_BY_SCOPE = new Map();
 const RECENT_FORMAT_BY_SCOPE = new Map();
+const FORMAT_STATS_BY_SCOPE = new Map();
 
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -122,15 +123,19 @@ function normalizeText(value) {
     .replace(/%/g, "")
     .replace(/\u00d7/g, "x")
     .replace(/\u00f7/g, "/")
-    .replace(/\*/g, "x");
+    .replace(/\*/g, "");
 }
 
 function normalizeExpressionText(value) {
   return normalizeText(value)
+    .replace(/[−–—]/g, "-")
+    .replace(/·/g, "")
     .replace(/\(\)/g, "")
     .replace(/\+\-/g, "-")
     .replace(/\-\+/g, "-")
-    .replace(/\-\-/g, "+");
+    .replace(/\-\-/g, "+")
+    .replace(/1x/g, "x")
+    .replace(/\+\+/g, "+");
 }
 
 function countOps(prompt) {
@@ -201,10 +206,33 @@ function getRecentFormatKey(scopeKey, topic, difficulty) {
   return `${scopeKey}:${topic}:${difficulty}:format`;
 }
 
+function getFormatStatsKey(scopeKey, topic, difficulty) {
+  return `${scopeKey}:${topic}:${difficulty}:format-stats`;
+}
+
+function getFormatStats(scopeKey, topic, difficulty) {
+  const key = getFormatStatsKey(scopeKey, topic, difficulty);
+  const existing = FORMAT_STATS_BY_SCOPE.get(key);
+  if (existing) return existing;
+  const created = {
+    total: 0,
+    counts: Object.create(null),
+    recent: [],
+  };
+  FORMAT_STATS_BY_SCOPE.set(key, created);
+  return created;
+}
+
 function rememberFormat(scopeKey, topic, difficulty, format) {
   const key = getRecentFormatKey(scopeKey, topic, difficulty);
   const recent = RECENT_FORMAT_BY_SCOPE.get(key) ?? [];
-  RECENT_FORMAT_BY_SCOPE.set(key, [...recent, format].slice(-2));
+  const nextRecent = [...recent, format].slice(-FORMAT_VALIDATION.recentFormatWindow);
+  RECENT_FORMAT_BY_SCOPE.set(key, nextRecent);
+
+  const stats = getFormatStats(scopeKey, topic, difficulty);
+  stats.total += 1;
+  stats.counts[format] = (stats.counts[format] ?? 0) + 1;
+  stats.recent = [...stats.recent, format].slice(-FORMAT_VALIDATION.recentFormatWindow);
 }
 
 function getRoundCategory(roundIndex) {
@@ -263,6 +291,43 @@ function toNumericRankingValue(value) {
   return null;
 }
 
+function isFillInEligible(question, difficulty) {
+  if (!FORMAT_VALIDATION.fillInAllowedAnswerTypes.has(question.answerType)) return false;
+  if (String(question.correctAnswer ?? "").length > FORMAT_VALIDATION.fillInMaxAnswerLength) return false;
+  if (String(question.prompt ?? "").length > FORMAT_VALIDATION.fillInPromptMaxLength) return false;
+  const steps = Number(question?.cognitive?.steps ?? 1);
+  const maxSteps = FORMAT_VALIDATION.fillInMaxCognitiveStepsByDifficulty[difficulty] ?? 2;
+  if (steps > maxSteps) return false;
+
+  const correct = String(question.correctAnswer ?? "").trim();
+  if (question.answerType === "text") {
+    return FORMAT_VALIDATION.fillInExpressionSafePattern.test(
+      normalizeExpressionText(correct).replace(/\^/g, "")
+    );
+  }
+
+  if (question.answerType === "fraction") {
+    return Boolean(parseFraction(correct));
+  }
+
+  return parseNumberLoose(correct) !== null;
+}
+
+function isRankOrderEligible(question) {
+  const allValues = [question.correctAnswer, ...(question.wrongAnswers ?? [])];
+  const numericCount = allValues.filter((x) => toNumericRankingValue(x) !== null).length;
+  return numericCount >= 4;
+}
+
+function recentConsecutiveCount(recent, format) {
+  let count = 0;
+  for (let i = recent.length - 1; i >= 0; i -= 1) {
+    if (recent[i] !== format) break;
+    count += 1;
+  }
+  return count;
+}
+
 function chooseQuestionFormat(topic, difficulty, question, scopeKey, context) {
   const allowed = TOPIC_ALLOWED_FORMATS[topic] ?? [QUESTION_FORMATS.MULTIPLE_CHOICE];
   const roundCategory = context.roundCategory ?? getRoundCategory(context.roundIndex ?? -1);
@@ -276,29 +341,41 @@ function chooseQuestionFormat(topic, difficulty, question, scopeKey, context) {
 
   const recencyKey = getRecentFormatKey(scopeKey, topic, difficulty);
   const recent = RECENT_FORMAT_BY_SCOPE.get(recencyKey) ?? [];
-  const blocked = new Set(recent.length > 0 ? [recent[recent.length - 1]] : []);
+  const stats = getFormatStats(scopeKey, topic, difficulty);
 
-  const candidates = allowed
-    .filter((format) => {
-      if (format === QUESTION_FORMATS.FILL_IN) {
-        if (!FORMAT_VALIDATION.fillInAllowedAnswerTypes.has(question.answerType)) return false;
-        if (String(question.correctAnswer).length > FORMAT_VALIDATION.fillInMaxAnswerLength) return false;
-      }
-      if (format === QUESTION_FORMATS.RANK_ORDER) {
-        const allValues = [question.correctAnswer, ...(question.wrongAnswers ?? [])];
-        const numericCount = allValues.filter((x) => toNumericRankingValue(x) !== null).length;
-        if (numericCount < 4) return false;
-      }
-      return true;
-    })
+  const validPool = allowed.filter((format) => {
+    if (format === QUESTION_FORMATS.FILL_IN) return isFillInEligible(question, difficulty);
+    if (format === QUESTION_FORMATS.RANK_ORDER) return isRankOrderEligible(question);
+    return true;
+  });
+
+  const candidates = validPool
     .map((format) => {
-      const base = byDifficulty[format] ?? 0.1;
+      const base = byDifficulty[format] ?? 1;
       const bias = roundBias[format] ?? 1;
       const custom = Number.isFinite(customWeights[format]) ? customWeights[format] : 1;
-      let weight = base * bias * custom;
-      if (blocked.has(format)) weight *= 0.52;
-      return { format, weight: Math.max(0.001, weight) };
-    });
+      const used = stats.counts[format] ?? 0;
+      const minUsed = validPool.reduce((m, f) => Math.min(m, stats.counts[f] ?? 0), Number.POSITIVE_INFINITY);
+      const leastUsedGap = Math.max(0, used - minUsed);
+      const leastUsedBoost = leastUsedGap === 0 ? FORMAT_VALIDATION.leastUsedBoost : 1 / (1 + leastUsedGap);
+
+      const recentPenalty = recent.includes(format) ? FORMAT_VALIDATION.recencyPenaltyBase : 1;
+      const consecutive = recentConsecutiveCount(recent, format);
+      const hardBlock = consecutive >= FORMAT_VALIDATION.hardBlockSameFormatStreak && validPool.length > 1;
+      if (hardBlock) {
+        return { format, weight: 0 };
+      }
+
+      const streakPenalty =
+        consecutive >= FORMAT_VALIDATION.maxConsecutiveSameFormat
+          ? 0.08
+          : 1 / (1 + consecutive * 0.65);
+
+      let weight = base * bias * custom * leastUsedBoost * recentPenalty * streakPenalty;
+      weight *= 0.7 + Math.random() * 0.6; // keep distribution balanced but still random.
+      return { format, weight: Math.max(0.0001, weight) };
+    })
+    .filter((x) => x.weight > 0);
 
   if (candidates.length === 0) return QUESTION_FORMATS.MULTIPLE_CHOICE;
   return pickWeighted(candidates).format;
@@ -473,7 +550,17 @@ function isCorrectAgainstType(userAnswer, expected, answerType) {
     return Math.trunc(un) === Math.trunc(en);
   }
 
-  if (answerType === "number" || answerType === "percent") {
+  if (answerType === "percent") {
+    const un = parseNumberLoose(userAnswer);
+    const en = parseNumberLoose(expected);
+    if (un === null || en === null) return false;
+    const direct = Math.abs(un - en) < 1e-9;
+    const scaledDown = Math.abs(un / 100 - en) < 1e-9;
+    const scaledUp = Math.abs(un - en / 100) < 1e-9;
+    return direct || scaledDown || scaledUp;
+  }
+
+  if (answerType === "number") {
     const un = parseNumberLoose(userAnswer);
     const en = parseNumberLoose(expected);
     if (un === null || en === null) return false;
@@ -497,7 +584,21 @@ function isCorrectAnswer(userAnswer, questionOrAnswer, answerType = "text") {
 }
 
 function normalizeAnswer(value) {
-  return normalizeText(value);
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+
+  const frac = parseFraction(raw);
+  if (frac) {
+    return `${frac.n}/${frac.d}`;
+  }
+
+  const n = parseNumberLoose(raw);
+  if (n !== null) {
+    const normalized = Number.isInteger(n) ? String(n) : String(Number(n.toFixed(10)));
+    return normalized.replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
+  }
+
+  return normalizeExpressionText(raw);
 }
 
 function buildQuestionId(topic, subtype, difficulty) {
@@ -757,8 +858,7 @@ function validateQuestion(topic, difficulty, question) {
 
   if (format === QUESTION_FORMATS.FILL_IN) {
     if (question.options && question.options.length > 0) return false;
-    if (!FORMAT_VALIDATION.fillInAllowedAnswerTypes.has(question.answerType)) return false;
-    if (String(question.correctAnswer).length > FORMAT_VALIDATION.fillInMaxAnswerLength) return false;
+    if (!isFillInEligible(question, difficulty)) return false;
   }
 
   return true;
@@ -2609,6 +2709,62 @@ function generateRoundQuestionSequence(topic, difficulty, count = 12, scopeKey =
   return generateQuestionBatch(topic, difficulty, count, scopeKey, { roundIndexStart: 0 });
 }
 
+function generateFormatDistributionReport(options = {}) {
+  const topics = Array.isArray(options.topics) && options.topics.length > 0 ? options.topics : TOPICS;
+  const difficulties =
+    Array.isArray(options.difficulties) && options.difficulties.length > 0 ? options.difficulties : DIFFICULTIES;
+  const sampleCount = clamp(Math.trunc(options.countPerCombo ?? 120), 20, 1000);
+  const report = [];
+
+  for (const topic of topics) {
+    for (const difficulty of difficulties) {
+      const scope = `format-report:${topic}:${difficulty}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+      const batch = generateQuestionBatch(topic, difficulty, sampleCount, scope);
+      const formatCounts = Object.fromEntries(Object.values(QUESTION_FORMATS).map((f) => [f, 0]));
+      for (const q of batch) {
+        formatCounts[q.format] = (formatCounts[q.format] ?? 0) + 1;
+      }
+
+      const validBaseline = TOPIC_ALLOWED_FORMATS[topic] ?? [QUESTION_FORMATS.MULTIPLE_CHOICE];
+      const activeFormats = validBaseline.filter((f) => formatCounts[f] > 0);
+      const shares = Object.fromEntries(
+        validBaseline.map((f) => [f, Number(((formatCounts[f] ?? 0) / sampleCount).toFixed(4))])
+      );
+      const activeShares = activeFormats.map((f) => shares[f]);
+      const maxShare = activeShares.length > 0 ? Math.max(...activeShares) : 0;
+      const minShare = activeShares.length > 0 ? Math.min(...activeShares) : 0;
+      const spread = Number((maxShare - minShare).toFixed(4));
+      const expectedEven = activeFormats.length > 0 ? 1 / activeFormats.length : 1;
+      const imbalanceFlag = spread > Math.max(0.15, expectedEven * 0.8);
+
+      const flags = [];
+      if (imbalanceFlag) {
+        flags.push(`format_spread_high:${spread}`);
+      }
+
+      if (validBaseline.includes(QUESTION_FORMATS.FILL_IN)) {
+        const fillShare = shares[QUESTION_FORMATS.FILL_IN] ?? 0;
+        if (fillShare < 0.12) flags.push(`fill_in_underrepresented:${fillShare}`);
+        if (fillShare > 0.5) flags.push(`fill_in_overrepresented:${fillShare}`);
+      }
+
+      report.push({
+        topic,
+        difficulty,
+        sampleCount,
+        validBaseline,
+        formatCounts,
+        shares,
+        activeFormats,
+        spread,
+        flags,
+      });
+    }
+  }
+
+  return report;
+}
+
 function getMatchDurationSecondsCompat(topic, difficulty) {
   const safeDifficulty = normalizeDifficulty(typeof difficulty === "string" ? difficulty : topic);
   return getMatchDurationSeconds(safeDifficulty);
@@ -2676,6 +2832,7 @@ module.exports = {
   generateQuestion,
   generateQuestionBatch,
   generateRoundQuestionSequence,
+  generateFormatDistributionReport,
   getRoundCategory,
   validateQuestion,
   validateQuestionShape,
