@@ -848,18 +848,18 @@ export function HomeHero() {
         onSave={handleOnboardingSave}
         onLogout={() => void handleLogout()}
       />
-      <PageContent size="md" className="w-full min-w-0 max-w-2xl">
+      <PageContent size="lg" className="w-full min-w-0">
         <motion.section
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, ease: "easeOut" }}
-          className="w-full p-2 sm:p-3"
+          className="w-full"
         >
         <div className="space-y-3 text-center sm:space-y-4">
           <span className="inline-flex rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-sky-200">
             Multiplayer Math Arena
           </span>
-          <h1 className="text-3xl font-black tracking-tight text-white sm:text-5xl md:text-6xl">
+          <h1 className="text-3xl font-black tracking-tight text-white sm:text-5xl md:text-5xl">
            Quantixy
           </h1>
           <p className="text-base text-slate-300 sm:text-lg md:text-xl">Real-time multiplayer math</p>
@@ -944,232 +944,238 @@ export function HomeHero() {
             </div>
           ) : (
             // Has session — premium lobby
-            <div className="space-y-5">
-              {/* ── PLAY ─────────────────────────────────────── */}
-              <div className="space-y-2.5">
-                <p className="text-left text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-500">Play</p>
+            <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr] lg:items-start">
+              {/* Left: PLAY */}
+              <div className="space-y-5">
+                <div className="space-y-2.5">
+                  <p className="text-left text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-500">Play</p>
 
-                {/* Play Online — hero CTA */}
-                <motion.button
-                  onClick={handlePlayNow}
-                  disabled={Boolean(routeBusy)}
-                  whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
-                  whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
-                  transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                  className="group w-full rounded-2xl border border-sky-500/30 bg-gradient-to-br from-sky-500/15 via-sky-500/5 to-transparent p-5 text-left transition-colors hover:border-sky-400/50 hover:from-sky-500/20 disabled:cursor-not-allowed disabled:opacity-55 sm:p-6"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-sky-400/30 bg-sky-400/10 text-sky-300">
-                      <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-                      </svg>
+                  {/* Play Online — hero CTA */}
+                  <motion.button
+                    onClick={handlePlayNow}
+                    disabled={Boolean(routeBusy)}
+                    whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
+                    whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
+                    transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
+                    className="group w-full rounded-2xl border border-sky-500/30 bg-gradient-to-br from-sky-500/15 via-sky-500/5 to-transparent p-5 text-left transition-colors hover:border-sky-400/50 hover:from-sky-500/20 disabled:cursor-not-allowed disabled:opacity-55 sm:p-6"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-sky-400/30 bg-sky-400/10 text-sky-300">
+                        <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-lg font-black text-white sm:text-xl">Play Online</p>
+                        <p className="text-sm text-slate-400">Compete against real players in live duels</p>
+                      </div>
+                      {routeBusy === "play" ? (
+                        <div className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-sky-400/30 border-t-sky-400" />
+                      ) : (
+                        <svg className="h-5 w-5 shrink-0 text-sky-400 opacity-50 transition-opacity group-hover:opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M9 18l6-6-6-6" />
+                        </svg>
+                      )}
                     </div>
-                    <div className="flex-1">
-                      <p className="text-lg font-black text-white sm:text-xl">Play Online</p>
-                      <p className="text-sm text-slate-400">Compete against real players in live duels</p>
-                    </div>
-                    {routeBusy === "play" ? (
-                      <div className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-sky-400/30 border-t-sky-400" />
-                    ) : (
-                      <svg className="h-5 w-5 shrink-0 text-sky-400 opacity-50 transition-opacity group-hover:opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M9 18l6-6-6-6" />
-                      </svg>
-                    )}
-                  </div>
-                </motion.button>
+                  </motion.button>
 
-                {/* Practice vs AI */}
-                <motion.button
-                  onClick={handlePlayVsAi}
-                  disabled={Boolean(routeBusy)}
-                  whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
-                  whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
-                  transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                  className="group w-full rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80 disabled:cursor-not-allowed disabled:opacity-55 sm:p-5"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300">
-                      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="11" width="18" height="10" rx="2" />
-                        <path d="M9 11V7a3 3 0 016 0v4M12 15v2M8 15v.01M16 15v.01" />
-                      </svg>
+                  {/* Practice vs AI */}
+                  <motion.button
+                    onClick={handlePlayVsAi}
+                    disabled={Boolean(routeBusy)}
+                    whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
+                    whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
+                    transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
+                    className="group w-full rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80 disabled:cursor-not-allowed disabled:opacity-55 sm:p-5"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300">
+                        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="11" width="18" height="10" rx="2" />
+                          <path d="M9 11V7a3 3 0 016 0v4M12 15v2M8 15v.01M16 15v.01" />
+                        </svg>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-base font-bold text-white">Practice vs AI</p>
+                        <p className="text-sm text-slate-500">Sharpen your skills offline</p>
+                      </div>
+                      {routeBusy === "ai" ? (
+                        <div className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-slate-500/30 border-t-slate-400" />
+                      ) : (
+                        <svg className="h-4 w-4 shrink-0 text-slate-500 opacity-60 transition-opacity group-hover:opacity-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M9 18l6-6-6-6" />
+                        </svg>
+                      )}
                     </div>
-                    <div className="flex-1">
-                      <p className="text-base font-bold text-white">Practice vs AI</p>
-                      <p className="text-sm text-slate-500">Sharpen your skills offline</p>
-                    </div>
-                    {routeBusy === "ai" ? (
-                      <div className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-slate-500/30 border-t-slate-400" />
-                    ) : (
-                      <svg className="h-4 w-4 shrink-0 text-slate-500 opacity-60 transition-opacity group-hover:opacity-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M9 18l6-6-6-6" />
-                      </svg>
-                    )}
-                  </div>
-                </motion.button>
-              </div>
-
-              {/* ── IDENTITY PANEL ───────────────────────────── */}
-              <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-900/50 px-4 py-3">
-                <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-sky-400/20 bg-slate-950/80">
-                  <Image
-                    src={getAvatarCardSrc(normalizeAvatarId(accountIdentity?.avatarId ?? DEFAULT_AVATAR_ID))}
-                    alt="Equipped avatar"
-                    fill
-                    sizes="44px"
-                    className="object-cover"
-                    priority={false}
-                  />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="truncate text-sm font-semibold text-white">
-                      {accountIdentity?.displayName ?? (isGuest ? suggestedGuestName : "Player")}
-                    </p>
-                    {!isGuest && accountIdentity?.highestRating !== undefined ? (
-                      <RankBadge rating={accountIdentity.highestRating} size="sm" />
-                    ) : null}
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    {isGuest
-                      ? "Guest · progress not saved"
-                      : accountIdentity?.highestRating !== undefined
-                        ? `Rating ${accountIdentity.highestRating}`
-                        : "Loading profile…"}
-                  </p>
+                  </motion.button>
                 </div>
               </div>
 
-              {/* ── ACCOUNT ──────────────────────────────────── */}
-              <div className="space-y-2.5">
-                <p className="text-left text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-500">Account</p>
-
-                {isGuest ? (
-                  <>
-                    <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-200">
-                      Playing as a guest — progress won&apos;t be saved across sessions.
+              {/* Right: IDENTITY + ACCOUNT */}
+              <div className="space-y-5">
+                <div className="space-y-2.5">
+                  <p className="text-left text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-500">You</p>
+                  <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-900/50 px-4 py-3">
+                    <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-sky-400/20 bg-slate-950/80">
+                      <Image
+                        src={getAvatarCardSrc(normalizeAvatarId(accountIdentity?.avatarId ?? DEFAULT_AVATAR_ID))}
+                        alt="Equipped avatar"
+                        fill
+                        sizes="44px"
+                        className="object-cover"
+                        priority={false}
+                      />
                     </div>
-                    <div className="grid gap-2.5 sm:grid-cols-2">
-                      <motion.button
-                        onClick={() => openAuthModal("signup")}
-                        whileHover={{ scale: 1.01, y: -1 }}
-                        whileTap={{ scale: 0.99 }}
-                        transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                        className="group flex flex-col gap-3 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80"
-                      >
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300 transition-colors group-hover:border-sky-500/40 group-hover:bg-sky-500/10 group-hover:text-sky-300">
-                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM19 8v6M22 11h-6" />
-                          </svg>
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-white">Upgrade Account</p>
-                          <p className="text-xs text-slate-500">Save stats &amp; earn ranks</p>
-                        </div>
-                      </motion.button>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-sm font-semibold text-white">
+                          {accountIdentity?.displayName ?? (isGuest ? suggestedGuestName : "Player")}
+                        </p>
+                        {!isGuest && accountIdentity?.highestRating !== undefined ? (
+                          <RankBadge rating={accountIdentity.highestRating} size="sm" />
+                        ) : null}
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        {isGuest
+                          ? "Guest · progress not saved"
+                          : accountIdentity?.highestRating !== undefined
+                            ? `Rating ${accountIdentity.highestRating}`
+                            : "Loading profile…"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
-                      <motion.button
-                        onClick={() => { setRouteBusy("leaderboard"); router.push("/leaderboard"); }}
-                        disabled={Boolean(routeBusy)}
-                        whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
-                        whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
-                        transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                        className="group flex flex-col gap-3 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80 disabled:opacity-55"
-                      >
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300 transition-colors group-hover:border-yellow-500/40 group-hover:bg-yellow-500/10 group-hover:text-yellow-300">
-                          {routeBusy === "leaderboard" ? (
-                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-500/30 border-t-slate-400" />
-                          ) : (
+                <div className="space-y-2.5">
+                  <p className="text-left text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-500">Account</p>
+
+                  {isGuest ? (
+                    <>
+                      <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-200">
+                        Playing as a guest — progress won&apos;t be saved across sessions.
+                      </div>
+                      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-1">
+                        <motion.button
+                          onClick={() => openAuthModal("signup")}
+                          whileHover={{ scale: 1.01, y: -1 }}
+                          whileTap={{ scale: 0.99 }}
+                          transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
+                          className="group flex flex-col gap-3 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80"
+                        >
+                          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300 transition-colors group-hover:border-sky-500/40 group-hover:bg-sky-500/10 group-hover:text-sky-300">
                             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M6 9H4.5a2.5 2.5 0 010-5H6M18 9h1.5a2.5 2.5 0 000-5H18M6 9v8a6 6 0 0012 0V9M6 9H18" />
+                              <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM19 8v6M22 11h-6" />
                             </svg>
-                          )}
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-white">Leaderboard</p>
-                          <p className="text-xs text-slate-500">See the top players</p>
-                        </div>
-                      </motion.button>
-                    </div>
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-white">Upgrade Account</p>
+                            <p className="text-xs text-slate-500">Save stats &amp; earn ranks</p>
+                          </div>
+                        </motion.button>
 
-                    <button
-                      onClick={() => openAuthModal("login")}
-                      className="w-full py-1.5 text-xs font-medium uppercase tracking-[0.2em] text-slate-500 transition-colors hover:text-slate-300"
-                    >
-                      Already have an account? Log In
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <div className="grid gap-2.5 sm:grid-cols-2">
-                      <motion.button
-                        onClick={() => { setRouteBusy("profile"); router.push("/profile"); }}
-                        disabled={Boolean(routeBusy)}
-                        whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
-                        whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
-                        transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                        className="group flex flex-col gap-3 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80 disabled:opacity-55"
+                        <motion.button
+                          onClick={() => { setRouteBusy("leaderboard"); router.push("/leaderboard"); }}
+                          disabled={Boolean(routeBusy)}
+                          whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
+                          whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
+                          transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
+                          className="group flex flex-col gap-3 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80 disabled:opacity-55"
+                        >
+                          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300 transition-colors group-hover:border-yellow-500/40 group-hover:bg-yellow-500/10 group-hover:text-yellow-300">
+                            {routeBusy === "leaderboard" ? (
+                              <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-500/30 border-t-slate-400" />
+                            ) : (
+                              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M6 9H4.5a2.5 2.5 0 010-5H6M18 9h1.5a2.5 2.5 0 000-5H18M6 9v8a6 6 0 0012 0V9M6 9H18" />
+                              </svg>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-white">Leaderboard</p>
+                            <p className="text-xs text-slate-500">See the top players</p>
+                          </div>
+                        </motion.button>
+                      </div>
+
+                      <button
+                        onClick={() => openAuthModal("login")}
+                        className="w-full py-1.5 text-xs font-medium uppercase tracking-[0.2em] text-slate-500 transition-colors hover:text-slate-300"
                       >
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300 transition-colors group-hover:border-sky-500/40 group-hover:bg-sky-500/10 group-hover:text-sky-300">
-                          {routeBusy === "profile" ? (
-                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-500/30 border-t-slate-400" />
-                          ) : (
-                            <span className="relative h-7 w-7 overflow-hidden rounded-lg border border-white/10 bg-slate-950/60">
-                              <Image
-                                src={getAvatarCardSrc(normalizeAvatarId(accountIdentity?.avatarId ?? DEFAULT_AVATAR_ID))}
-                                alt="Equipped avatar"
-                                fill
-                                sizes="28px"
-                                className="object-cover"
-                                priority={false}
-                              />
-                            </span>
-                          )}
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-white">Profile</p>
-                          <p className="text-xs text-slate-500">Stats &amp; match history</p>
-                        </div>
-                      </motion.button>
+                        Already have an account? Log In
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-1">
+                        <motion.button
+                          onClick={() => { setRouteBusy("profile"); router.push("/profile"); }}
+                          disabled={Boolean(routeBusy)}
+                          whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
+                          whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
+                          transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
+                          className="group flex flex-col gap-3 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80 disabled:opacity-55"
+                        >
+                          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300 transition-colors group-hover:border-sky-500/40 group-hover:bg-sky-500/10 group-hover:text-sky-300">
+                            {routeBusy === "profile" ? (
+                              <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-500/30 border-t-slate-400" />
+                            ) : (
+                              <span className="relative h-7 w-7 overflow-hidden rounded-lg border border-white/10 bg-slate-950/60">
+                                <Image
+                                  src={getAvatarCardSrc(normalizeAvatarId(accountIdentity?.avatarId ?? DEFAULT_AVATAR_ID))}
+                                  alt="Equipped avatar"
+                                  fill
+                                  sizes="28px"
+                                  className="object-cover"
+                                  priority={false}
+                                />
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-white">Profile</p>
+                            <p className="text-xs text-slate-500">Stats &amp; match history</p>
+                          </div>
+                        </motion.button>
 
-                      <motion.button
-                        onClick={() => { setRouteBusy("leaderboard"); router.push("/leaderboard"); }}
-                        disabled={Boolean(routeBusy)}
-                        whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
-                        whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
-                        transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                        className="group flex flex-col gap-3 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80 disabled:opacity-55"
+                        <motion.button
+                          onClick={() => { setRouteBusy("leaderboard"); router.push("/leaderboard"); }}
+                          disabled={Boolean(routeBusy)}
+                          whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
+                          whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
+                          transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
+                          className="group flex flex-col gap-3 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80 disabled:opacity-55"
+                        >
+                          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300 transition-colors group-hover:border-yellow-500/40 group-hover:bg-yellow-500/10 group-hover:text-yellow-300">
+                            {routeBusy === "leaderboard" ? (
+                              <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-500/30 border-t-slate-400" />
+                            ) : (
+                              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M6 9H4.5a2.5 2.5 0 010-5H6M18 9h1.5a2.5 2.5 0 000-5H18M6 9v8a6 6 0 0012 0V9M6 9H18" />
+                              </svg>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-white">Leaderboard</p>
+                            <p className="text-xs text-slate-500">See the top players</p>
+                          </div>
+                        </motion.button>
+                      </div>
+
+                      <button
+                        onClick={() => void handleLogout()}
+                        disabled={logoutBusy}
+                        className="group relative w-full overflow-hidden rounded-2xl border border-rose-400/25 bg-gradient-to-r from-rose-500/20 via-rose-500/10 to-transparent px-4 py-3 text-left text-xs font-black uppercase tracking-[0.24em] text-rose-100 shadow-[0_18px_50px_rgba(244,63,94,0.18)] transition-colors hover:border-rose-400/40 hover:from-rose-500/26 disabled:cursor-not-allowed disabled:opacity-55"
                       >
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300 transition-colors group-hover:border-yellow-500/40 group-hover:bg-yellow-500/10 group-hover:text-yellow-300">
-                          {routeBusy === "leaderboard" ? (
-                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-500/30 border-t-slate-400" />
-                          ) : (
-                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M6 9H4.5a2.5 2.5 0 010-5H6M18 9h1.5a2.5 2.5 0 000-5H18M6 9v8a6 6 0 0012 0V9M6 9H18" />
-                            </svg>
-                          )}
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-white">Leaderboard</p>
-                          <p className="text-xs text-slate-500">See the top players</p>
-                        </div>
-                      </motion.button>
-                    </div>
-
-                    <button
-                      onClick={() => void handleLogout()}
-                      disabled={logoutBusy}
-                      className="group relative w-full overflow-hidden rounded-2xl border border-rose-400/25 bg-gradient-to-r from-rose-500/20 via-rose-500/10 to-transparent px-4 py-3 text-left text-xs font-black uppercase tracking-[0.24em] text-rose-100 shadow-[0_18px_50px_rgba(244,63,94,0.18)] transition-colors hover:border-rose-400/40 hover:from-rose-500/26 disabled:cursor-not-allowed disabled:opacity-55"
-                    >
-                      <span className="relative flex items-center justify-between gap-3">
-                        <span>{logoutBusy ? "Logging out…" : "Log Out"}</span>
-                        <span className="rounded-full border border-rose-200/15 bg-rose-950/30 px-2.5 py-1 text-[10px] font-bold tracking-[0.22em] text-rose-100/90">
-                          Exit
+                        <span className="relative flex items-center justify-between gap-3">
+                          <span>{logoutBusy ? "Logging out…" : "Log Out"}</span>
+                          <span className="rounded-full border border-rose-200/15 bg-rose-950/30 px-2.5 py-1 text-[10px] font-bold tracking-[0.22em] text-rose-100/90">
+                            Exit
+                          </span>
                         </span>
-                      </span>
-                    </button>
-                  </>
-                )}
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           )}

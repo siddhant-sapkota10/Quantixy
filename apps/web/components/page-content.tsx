@@ -11,19 +11,19 @@ type PageContentProps = {
 const SIZE_CLASS: Record<NonNullable<PageContentProps["size"]>, string> = {
   md: "max-w-3xl",
   lg: "max-w-5xl",
-  xl: "max-w-6xl",
+  xl: "max-w-5xl",
 };
 
 export function PageContent({
   children,
   className,
-  size = "xl",
+  size = "lg",
   variant = "panel",
 }: PageContentProps) {
   return (
     <div
       className={cn(
-        "mx-auto w-full min-w-0 max-w-full shrink-0",
+        "mx-auto w-full min-w-0 shrink-0 px-4 sm:px-6",
         SIZE_CLASS[size],
         variant === "panel"
           ? "relative rounded-2xl border border-white/10 bg-slate-950/45 p-4 shadow-[0_18px_60px_rgba(0,0,0,0.45)] ring-1 ring-white/10 backdrop-blur-md sm:rounded-[2.25rem] sm:p-6"
