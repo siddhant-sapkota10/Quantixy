@@ -13,7 +13,7 @@
     "passive": "Overclock: each correct answer adds bonus damage and stacks a multiplier; a wrong answer resets the stack.",
     "ultimateId": "rapid_fire",
     "ultimateName": "Overclock",
-    "ultimateDescription": "For ~30 seconds, every correct answer deals bonus damage and builds a stacking damage multiplier. One mistake resets the snowball.",
+    "ultimateDescription": "For ~10 seconds, every correct answer deals bonus damage and builds a stacking damage multiplier. One mistake resets the snowball.",
     "ultimateMeta": {
       "effectType": "stacking_damage_snowball",
       "chargeMultiplier": 1.0
@@ -30,10 +30,10 @@
       "glow": "rgba(167,139,250,0.42)"
     },
     "description": "You can't answer what you can't read.",
-    "passive": "Neural Jam: on each of your questions, the opponent's inputs lock briefly, their timer is tighter, and wrong answers while jammed hurt more.",
+    "passive": "Neural Jam: for a timed window, the opponent's inputs are jammed, their timer is tighter, and wrong answers while jammed hurt more.",
     "ultimateId": "system_corrupt",
     "ultimateName": "Neural Jam",
-    "ultimateDescription": "For ~30 seconds, each new question for your opponent starts with a short input lock and less time to think. Wrong answers during the jam take extra damage. Two choices may stay hidden under glitch static.",
+    "ultimateDescription": "For ~10 seconds, jam your opponent's inputs so they cannot press multiple choice answers or type. Their answer timer is tighter, and wrong answers during the jam take extra damage.",
     "ultimateMeta": {
       "effectType": "visibility_modifier",
       "chargeMultiplier": 1.0
@@ -53,7 +53,7 @@
     "passive": "Reflect Bastion: incoming damage is reduced; prevented damage is stored and released in one burst at the end of the ultimate.",
     "ultimateId": "shield",
     "ultimateName": "Reflect Bastion",
-    "ultimateDescription": "For ~32 seconds, reduce incoming damage. Prevented damage builds in storage, then fires back at your opponent in a single shockwave when the ultimate ends.",
+    "ultimateDescription": "For ~10 seconds, reduce incoming damage. Prevented damage builds in storage, then fires back at your opponent in a single shockwave when the ultimate ends.",
     "ultimateMeta": {
       "effectType": "domain_reflect",
       "chargeMultiplier": 1.0
@@ -73,7 +73,7 @@
     "passive": "Blaze Surge: each correct answer applies stacking burn damage over time that keeps ticking even when the opponent answers correctly.",
     "ultimateId": "double",
     "ultimateName": "Blaze Surge",
-    "ultimateDescription": "For ~30 seconds, each correct answer adds burn stacks. Burn ticks down their HP over time; stacks grow with more hits.",
+    "ultimateDescription": "For ~10 seconds, each correct answer adds burn stacks. Burn ticks down their HP over time; stacks grow with more hits.",
     "ultimateMeta": {
       "effectType": "stacking_burn_dot",
       "tickEveryMs": 950,
@@ -100,10 +100,10 @@
     "passive": "Perfect Sequence: build stacks on correct answers; at a threshold, unleash a huge burst and reset. Wrong answers break the chain.",
     "ultimateId": "perfect_sequence",
     "ultimateName": "Perfect Sequence",
-    "ultimateDescription": "For ~38 seconds, each correct stacks toward a precision burst. Miss to lose the stack. Premium: faster ultimate charge, stronger burst, and better mitigation while active.",
+    "ultimateDescription": "For ~20 seconds, each correct stacks toward a precision burst. Miss to lose the stack. Premium: slightly faster ultimate charge, a stronger burst, and light mitigation while active.",
     "ultimateMeta": {
       "effectType": "premium_sequence_overload",
-      "chargeMultiplier": 1.07
+      "chargeMultiplier": 1.03
     }
   },
   {
@@ -126,10 +126,10 @@
     "passive": "Overpower: increased damage on correct answers, lifesteal from damage dealt, and hits bypass the opponent's damage reduction while active.",
     "ultimateId": "overpower",
     "ultimateName": "Overpower",
-    "ultimateDescription": "For ~38 seconds, deal more damage on correct answers, heal based on damage dealt, and ignore damage reduction on your strikes. Wrong answers do not self-damage. Premium: faster ultimate charge and heavier hits.",
+    "ultimateDescription": "For ~20 seconds, deal more damage on correct answers, heal based on damage dealt, and ignore damage reduction on your strikes. Wrong answers do not self-damage. Premium: slightly faster ultimate charge and heavier hits.",
     "ultimateMeta": {
       "effectType": "premium_juggernaut_burst",
-      "chargeMultiplier": 1.07
+      "chargeMultiplier": 1.03
     }
   }
 ]

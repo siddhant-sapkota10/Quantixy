@@ -77,17 +77,16 @@ const HP_STREAK_5_BONUS = 4;
 const HP_WRONG_ANSWER_PENALTY = 0;
 const HP_TIMEOUT_PENALTY = 0;
 /**
- * Time-based ultimates (wall-clock). Free roster ~30s; premium ~38s + faster charge in avatars.json.
+ * Time-based ultimates (wall-clock). Free roster shares a 10s baseline; premium gets a modest edge.
  */
 const ULTIMATE_DURATION_MS = Object.freeze({
-  rapid_fire: 30_000,
-  system_corrupt: 30_000,
-  shield: 32_000,
-  double: 30_000,
-  perfect_sequence: 38_000,
-  overpower: 38_000
+  rapid_fire: 10_000,
+  system_corrupt: 10_000,
+  shield: 10_000,
+  double: 10_000,
+  perfect_sequence: 20_000,
+  overpower: 20_000
 });
-const SHADOW_HIDDEN_CHOICES = 2;
 /** Inferno: per-correct chip + stacks; wrong answers shave a stack (applyFailureUltimateConsequences). */
 const WILDFIRE_MAX_STACKS = 6;
 const WILDFIRE_TICK_BASE = 2;
@@ -99,9 +98,9 @@ const INFERNO_BURN_TICK_MS = INFERNO_DOT_TICK_MS;
 const GUARDIAN_REDUCTION_MULTIPLIER = 0.55;
 const GUARDIAN_REFLECT_MULTIPLIER = 0.32;
 /** Titan: outgoing hit amplifier + flat spike; resist shaves incoming while ultimate is up. */
-const TITAN_DAMAGE_MULTIPLIER = 1.46;
-const TITAN_BONUS_DAMAGE = 3;
-const TITAN_RESIST_MULTIPLIER = 0.82;
+const TITAN_DAMAGE_MULTIPLIER = 1.22;
+const TITAN_BONUS_DAMAGE = 2;
+const TITAN_RESIST_MULTIPLIER = 0.9;
 /** Flash — Overclock: each correct stacks this count; wrong clears. Bonus = base * stacks * rate (stacks before increment). */
 const FLASH_OVERCLOCK_STACK_CAP = 8;
 const FLASH_STACK_DAMAGE_RATE = 0.08;
@@ -115,11 +114,11 @@ const NEURAL_WRONG_EXTRA_HP = 6;
 const GUARDIAN_BURST_DAMAGE_CAP = 32;
 /** Architect — Perfect Sequence: offensive burst after N corrects while ultimate is up. */
 const ARCHITECT_BURST_STACK_THRESHOLD = 3;
-const ARCHITECT_BURST_DAMAGE = 22;
+const ARCHITECT_BURST_DAMAGE = 16;
 /** Light defensive mitigation while Architect ultimate is active (separate from burst). */
-const ARCHITECT_DEFENSE_MULT = 0.88;
+const ARCHITECT_DEFENSE_MULT = 0.92;
 /** Titan — Overpower: heal fraction of damage dealt on correct hits. */
-const TITAN_LIFESTEAL_RATIO = 0.27;
+const TITAN_LIFESTEAL_RATIO = 0.18;
 const ROOM_CODE_LENGTH = 6;
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -712,7 +711,7 @@ function getOpponent(game, socketId) {
 }
 
 function getUltimateDurationMs(ultimateType) {
-  return ULTIMATE_DURATION_MS[ultimateType] ?? 30_000;
+  return ULTIMATE_DURATION_MS[ultimateType] ?? 10_000;
 }
 
 function clearUltimateDurationTimeout(game, socketId) {
@@ -761,6 +760,7 @@ function expireAvatarUltimateDuration(roomId, casterSocketId) {
       target: "you",
       type: ultimateType,
       effect: "duration_complete",
+      secondsRemaining: 0,
       questionsLeft: 0
     },
     {
@@ -768,6 +768,7 @@ function expireAvatarUltimateDuration(roomId, casterSocketId) {
       target: "opponent",
       type: ultimateType,
       effect: "duration_complete",
+      secondsRemaining: 0,
       questionsLeft: 0
     }
   );
@@ -917,12 +918,15 @@ function buildPlayerUltimateState(game, socketId) {
     ultimateReady: !!game.ultimateReady[socketId],
     ultimateUsed: !!game.ultimateUsed[socketId],
     ultimateImplemented: isUltimateImplemented(yourUltimateType),
+    ultimateSecondsLeft: yourSecondsLeft,
     opponentUltimateType,
     opponentUltimateName: opponentId ? getUltimateDisplayNameForPlayer(game, opponentId) : "Unknown",
     opponentUltimateCharge: opponentId ? game.ultimateCharge[opponentId] ?? 0 : 0,
     opponentUltimateReady: opponentId ? !!game.ultimateReady[opponentId] : false,
     opponentUltimateUsed: opponentId ? !!game.ultimateUsed[opponentId] : false,
     opponentUltimateImplemented: isUltimateImplemented(opponentUltimateType),
+    opponentUltimateSecondsLeft: opponentSecondsLeft,
+    // Backwards-compatible client field; this is seconds, not question count.
     ultimateQuestionsLeft: yourSecondsLeft,
     opponentUltimateQuestionsLeft: opponentSecondsLeft,
     wildfireStacks: yourBurnStacks,
@@ -1589,24 +1593,6 @@ function emitNewQuestionToPlayer(roomId, socketId) {
   game.neuralJamActive[socketId] = false;
 
   const questionData = { ...question };
-  const opponent = getOpponent(game, socketId);
-  if (
-    opponent &&
-    getUltimateTypeForPlayer(game, opponent.socketId) === "system_corrupt" &&
-    isUltimateActiveForPlayer(game, opponent.socketId) &&
-    Array.isArray(questionData.options) &&
-    questionData.options.length >= 4
-  ) {
-    const correctAnswer = String(
-      questionData.correctAnswer ?? questionData.acceptedAnswers?.[0] ?? questionData.answer ?? ""
-    );
-    const wrongIndexes = questionData.options
-      .map((option, idx) => ({ option: String(option), idx }))
-      .filter((entry) => entry.option !== correctAnswer)
-      .map((entry) => entry.idx);
-    const shuffled = wrongIndexes.sort(() => Math.random() - 0.5);
-    questionData.hiddenOptionIndexes = shuffled.slice(0, SHADOW_HIDDEN_CHOICES);
-  }
 
   let inputLockedUntil = 0;
   const jamOpp = getOpponent(game, socketId);
@@ -3048,7 +3034,7 @@ function useAvatarUltimate(roomId, playerSocketId) {
 
   const ultimateType = getUltimateTypeForPlayer(game, playerSocketId);
   const durationMs = getUltimateDurationMs(ultimateType);
-  const questionsLeft = Math.max(1, Math.ceil(durationMs / 1000));
+  const secondsRemaining = Math.max(1, Math.ceil(durationMs / 1000));
 
   game.ultimateUsed[playerSocketId] = true;
   game.ultimateReady[playerSocketId] = false;
@@ -3086,14 +3072,16 @@ function useAvatarUltimate(roomId, playerSocketId) {
       target: ultimateType === "system_corrupt" ? "opponent" : "you",
       type: ultimateType,
       effect: "ultimate_applied",
-      questionsLeft
+      secondsRemaining,
+      questionsLeft: secondsRemaining
     },
     {
       by: "opponent",
       target: ultimateType === "system_corrupt" ? "you" : "opponent",
       type: ultimateType,
       effect: "ultimate_applied",
-      questionsLeft
+      secondsRemaining,
+      questionsLeft: secondsRemaining
     }
   );
 }

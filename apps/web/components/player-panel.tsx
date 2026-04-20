@@ -183,6 +183,7 @@ export function PlayerPanel({
   const rapidActive = overclockUntil > now;
   const jammedActive = blackoutUntil > now;
   const corruptActive = shadowCorruptUntil > now;
+  const corruptSecondsLeft = corruptActive ? Math.max(0, Math.ceil((shadowCorruptUntil - now) / 1000)) : 0;
   const architectActive = architectUntil > now;
   const architectThreatening = opponentArchitectUntil > now;
   const titanActive = (titanOverpowerUntil ?? 0) > now;
@@ -550,9 +551,9 @@ export function PlayerPanel({
                   mixBlendMode: "screen" as const
                 }}
               />
-              {shadowCorruptStacks > 0 ? (
+              {corruptSecondsLeft > 0 ? (
                 <div className="pointer-events-none absolute -right-1 -top-3 rounded-full border border-violet-300/35 bg-slate-950/90 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.18em] text-violet-200 shadow-[0_0_18px_rgba(167,139,250,0.16)]">
-                  CORRUPT x{Math.max(0, shadowCorruptStacks)}
+                  JAM {corruptSecondsLeft}s
                 </div>
               ) : null}
             </>

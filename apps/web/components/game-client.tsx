@@ -107,6 +107,8 @@ type UltimateState = {
   opponentImplemented: boolean;
   ultimateQuestionsLeft: number;
   opponentUltimateQuestionsLeft: number;
+  ultimateSecondsLeft: number;
+  opponentUltimateSecondsLeft: number;
   wildfireStacks: number;
   opponentWildfireStacks: number;
   visibilityMaskActive: boolean;
@@ -206,6 +208,8 @@ const initialUltimate: UltimateState = {
   opponentImplemented: true,
   ultimateQuestionsLeft: 0,
   opponentUltimateQuestionsLeft: 0,
+  ultimateSecondsLeft: 0,
+  opponentUltimateSecondsLeft: 0,
   wildfireStacks: 0,
   opponentWildfireStacks: 0,
   visibilityMaskActive: false,
@@ -911,13 +915,29 @@ export function GameClient({
             ? payload.opponentUltimateImplemented
             : previous.opponentImplemented,
         ultimateQuestionsLeft:
-          typeof payload.ultimateQuestionsLeft === "number"
+          typeof (payload as { ultimateSecondsLeft?: number }).ultimateSecondsLeft === "number"
+            ? (payload as { ultimateSecondsLeft: number }).ultimateSecondsLeft
+            : typeof payload.ultimateQuestionsLeft === "number"
             ? payload.ultimateQuestionsLeft
             : previous.ultimateQuestionsLeft,
         opponentUltimateQuestionsLeft:
-          typeof payload.opponentUltimateQuestionsLeft === "number"
+          typeof (payload as { opponentUltimateSecondsLeft?: number }).opponentUltimateSecondsLeft === "number"
+            ? (payload as { opponentUltimateSecondsLeft: number }).opponentUltimateSecondsLeft
+            : typeof payload.opponentUltimateQuestionsLeft === "number"
             ? payload.opponentUltimateQuestionsLeft
             : previous.opponentUltimateQuestionsLeft,
+        ultimateSecondsLeft:
+          typeof (payload as { ultimateSecondsLeft?: number }).ultimateSecondsLeft === "number"
+            ? (payload as { ultimateSecondsLeft: number }).ultimateSecondsLeft
+            : typeof payload.ultimateQuestionsLeft === "number"
+              ? payload.ultimateQuestionsLeft
+              : previous.ultimateSecondsLeft,
+        opponentUltimateSecondsLeft:
+          typeof (payload as { opponentUltimateSecondsLeft?: number }).opponentUltimateSecondsLeft === "number"
+            ? (payload as { opponentUltimateSecondsLeft: number }).opponentUltimateSecondsLeft
+            : typeof payload.opponentUltimateQuestionsLeft === "number"
+              ? payload.opponentUltimateQuestionsLeft
+              : previous.opponentUltimateSecondsLeft,
         wildfireStacks:
           typeof payload.wildfireStacks === "number" ? payload.wildfireStacks : previous.wildfireStacks,
         opponentWildfireStacks:
@@ -1897,6 +1917,7 @@ export function GameClient({
       effect: string;
       durationMs?: number;
       jamDurationMs?: number;
+      secondsRemaining?: number;
       questionsRemaining?: number;
       damage?: number;
       marksConsumed?: number;
@@ -3274,13 +3295,13 @@ export function GameClient({
 
     if (normalizedType === "system_corrupt") {
       const until = side === "you" ? ultimate.opponentShadowCorruptUntil : ultimate.shadowCorruptUntil;
-      const stacks = side === "you" ? ultimate.opponentShadowCorruptStacks : ultimate.shadowCorruptStacks;
       const active = until > now;
       const total = vfx.durationMs ?? 5000;
+      const seconds = active ? Math.max(0, Math.ceil((until - now) / 1000)) : 0;
       const progress = active ? Math.max(0, Math.min(1, (until - now) / total)) : 0;
       return {
-        label: active ? "🟣 Opponent Corrupted" : "System Corrupt",
-        sublabel: active ? `Corruption stacks x${Math.max(0, stacks)}` : "Stand by",
+        label: active ? "🟣 Neural Jam Active" : "Neural Jam",
+        sublabel: active ? `${seconds}s remaining` : "Stand by",
         progress: active ? progress : null,
         accent: "bg-violet-400"
       };
@@ -3592,31 +3613,19 @@ export function GameClient({
                 {Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0 ? (
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     {currentQuestionData.options.map((option, idx) => (
-                      (() => {
-                        const hidden =
-                          Array.isArray(currentQuestionData.hiddenOptionIndexes) &&
-                          currentQuestionData.hiddenOptionIndexes.includes(idx);
-                        return (
                       <Button
                         key={`${option}-${idx}`}
                         type="button"
                         variant="secondary"
-                        className={`relative min-h-[2.75rem] w-full justify-start text-left text-sm ${
-                          hidden ? "overflow-hidden border-violet-400/40 bg-violet-950/35 text-violet-100" : ""
-                        }`}
+                        className="relative min-h-[2.75rem] w-full justify-start text-left text-sm"
                         disabled={inputsLocked || youEliminated || feedback.youAnsweredCurrent}
                         onClick={() => handleOptionSubmit(option)}
                       >
-                        {hidden ? "██ HIDDEN ███" : option}
-                        {hidden ? (
-                          <span className="pointer-events-none absolute inset-0 animate-pulse bg-[repeating-linear-gradient(90deg,rgba(167,139,250,0.08)_0px,rgba(167,139,250,0.08)_6px,rgba(34,211,238,0.08)_6px,rgba(34,211,238,0.08)_12px)]" />
-                        ) : null}
+                        {option}
                         {isNeuralJamSilenced && !isJamActive ? (
                           <span className="pointer-events-none absolute inset-0 bg-violet-950/55 bg-[repeating-linear-gradient(0deg,transparent_0px,transparent_2px,rgba(167,139,250,0.07)_2px,rgba(167,139,250,0.07)_4px)]" />
                         ) : null}
                       </Button>
-                        );
-                      })()
                     ))}
                   </div>
                 ) : null}

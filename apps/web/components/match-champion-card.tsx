@@ -33,7 +33,7 @@ export type MatchChampionCardModel = {
   infernoStacks?: number;
   /** Flash Overclock: consecutive-correct damage stacks (server-synced). */
   flashOverclockStacks?: number;
-  /** Seconds remaining for your active ultimate (server field name unchanged). */
+  /** Seconds remaining for your active ultimate. */
   ultimateQuestionsLeft?: number;
   /** Battle HUD: floating damage on this card when this player was just hit. */
   damageFloat?: { hitKey: number; amount: number; flashTier: number } | null;
@@ -116,9 +116,7 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
         flashStacks > 0 ? ` - x${flashStacks}` : ""
       }`
     : isActiveCorrupt
-      ? `NEURAL JAM - ${questionsLeft || secondsLeft(model.shadowCorruptUntil ?? 0, now)}s${
-          (model.shadowCorruptStacks ?? 0) > 0 ? ` - x${model.shadowCorruptStacks}` : ""
-        }`
+      ? `NEURAL JAM - ${questionsLeft || secondsLeft(model.shadowCorruptUntil ?? 0, now)}s`
       : isActiveArchitect
         ? `PERFECT SEQUENCE - ${questionsLeft || secondsLeft(model.architectUntil ?? 0, now)}s${
             (model.architectMarks ?? 0) > 0 ? ` - MARKS x${model.architectMarks}` : ""

@@ -52,6 +52,8 @@ type UltimateStatePayload = {
   opponentUltimateReady?: boolean;
   opponentUltimateUsed?: boolean;
   opponentUltimateImplemented?: boolean;
+  ultimateSecondsLeft?: number;
+  opponentUltimateSecondsLeft?: number;
   titanUntil?: number;
   opponentTitanUntil?: number;
   blackoutUntil?: number;
@@ -241,6 +243,7 @@ export type ServerToClientEvents = {
     type: string;
     effect: string;
     durationMs?: number;
+    secondsRemaining?: number;
     questionsRemaining?: number;
     damage?: number;
     marksConsumed?: number;

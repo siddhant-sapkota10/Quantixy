@@ -148,7 +148,6 @@ export type DuelQuestion = {
   correctAnswer?: string;
   wrongAnswers?: string[];
   options?: string[];
-  hiddenOptionIndexes?: number[];
   explanation?: string;
   estimatedSolveTime?: number;
   difficultyScore?: number;

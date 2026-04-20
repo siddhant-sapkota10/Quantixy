@@ -26,7 +26,7 @@ const abilities = [
       for (const ok of correctPattern) {
         if (ok) stacks = Math.min(6, stacks + 1);
         else stacks = Math.max(0, stacks - 1);
-        const burnDamage = stacks > 0 ? 2 + (stacks - 1) : 0;
+        const burnDamage = stacks > 0 ? Math.min(4, Math.max(1, Math.ceil(stacks / 2))) : 0;
         ticks.push({ ok, stacks, burnDamage });
       }
       return { correctPattern, ticks };
@@ -41,8 +41,7 @@ const abilities = [
       return incoming.map((value) => {
         const reduced = Math.max(1, Math.round(value * 0.55));
         const prevented = Math.max(0, value - reduced);
-        const reflected = Math.max(0, Math.round(prevented * 0.32));
-        return { incoming: value, reduced, reflected };
+        return { incoming: value, reduced, storedForBurst: prevented };
       });
     }
   },
@@ -66,7 +65,7 @@ const abilities = [
       const opponentCorrectBase = [10, 12, 9, 11, 10, 13];
       return opponentCorrectBase.map((base) => ({
         base,
-        reduced: Math.max(1, Math.round(base * 0.52))
+        reduced: Math.max(1, Math.round(base * 0.92))
       }));
     }
   },
@@ -76,11 +75,11 @@ const abilities = [
     questions: 7,
     simulate() {
       const correctBase = [9, 11, 10, 12, 8, 10];
-      const boosted = correctBase.map((base) => Math.max(1, Math.round(base * 1.42)) + 2);
+      const boosted = correctBase.map((base) => Math.max(1, Math.round(base * 1.22)) + 2);
       return {
         boosted,
         wrongAnswerSelfDamage: 0,
-        incomingMitigationMultiplier: 0.82
+        incomingMitigationMultiplier: 0.9
       };
     }
   }
