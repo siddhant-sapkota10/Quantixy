@@ -78,7 +78,7 @@ export function ProfileCharacterSelector({
 
   return (
     <div
-      className="rounded-3xl border border-slate-800 bg-slate-900/70 p-4 sm:p-6"
+      className="min-w-0 rounded-3xl border border-slate-800 bg-slate-900/70 p-4 sm:p-6"
       onMouseLeave={() => {
         onPreviewChange(selectedId);
       }}
@@ -110,9 +110,9 @@ export function ProfileCharacterSelector({
         >
           <div className="pointer-events-none absolute inset-0 opacity-60 [background:radial-gradient(600px_circle_at_20%_15%,rgba(255,255,255,0.08),transparent_40%),radial-gradient(520px_circle_at_70%_10%,rgba(255,255,255,0.05),transparent_46%)]" />
 
-          <div className="relative grid gap-4 md:grid-cols-[320px_1fr] md:items-start">
+          <div className="relative grid min-w-0 gap-4 md:grid-cols-[minmax(0,280px)_minmax(0,1fr)] md:items-start">
             <div
-              className={`relative overflow-hidden rounded-2xl border border-white/10 bg-slate-950/50 ring-1 ${theme.ring} aspect-[4/5] md:aspect-[3/4] md:h-[426px]`}
+              className={`relative mx-auto w-full max-w-[min(100%,320px)] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/50 ring-1 ${theme.ring} aspect-[4/5] md:mx-0 md:aspect-[3/4] md:max-h-[min(70vh,426px)] md:max-w-none md:min-h-[280px]`}
             >
               <Image
                 src={getAvatarImageSrc(previewAvatar.id)}
@@ -147,8 +147,8 @@ export function ProfileCharacterSelector({
               </div>
             </div>
 
-            <div className="relative space-y-4 md:flex md:h-[426px] md:flex-col md:space-y-3">
-              <div className="space-y-4 md:flex-1 md:overflow-y-auto md:pr-1 [scrollbar-width:thin]">
+            <div className="relative min-w-0 space-y-4 md:flex md:max-h-[min(70vh,426px)] md:flex-col md:space-y-3">
+              <div className="min-w-0 space-y-4 md:flex-1 md:overflow-y-auto md:pr-1 [scrollbar-width:thin]">
                 {previewAvatar.premiumTagline ? (
                   <div className="rounded-2xl border border-amber-400/15 bg-amber-500/[0.06] px-4 py-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">

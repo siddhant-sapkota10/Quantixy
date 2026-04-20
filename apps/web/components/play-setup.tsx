@@ -268,7 +268,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
   const showLoadout = !(mode === "pvp" && matchMode === "join-room");
 
   return (
-    <PageContent size="md">
+    <PageContent size="md" className="w-full min-w-0">
       {/* ── Header ── */}
       <div className="space-y-3 text-center sm:space-y-4">
         <span
@@ -295,7 +295,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
         {mode === "pvp" ? (
           <div className="space-y-2.5">
             <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-500">Mode</p>
-            <div className="neon-panel-soft grid grid-cols-3 gap-1.5 rounded-2xl p-1">
+            <div className="neon-panel-soft grid grid-cols-1 gap-1.5 rounded-2xl p-1 min-[420px]:grid-cols-3">
               {(["quick", "create-room", "join-room"] as const).map((m) => (
                 <button
                   key={m}

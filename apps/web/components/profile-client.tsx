@@ -858,7 +858,7 @@ export function ProfileClient() {
   };
 
   return (
-    <PageContent className="space-y-6 sm:space-y-8 md:space-y-10">
+    <PageContent className="w-full min-w-0 space-y-6 sm:space-y-8 md:space-y-10">
       <PurchaseSuccessModal
         open={purchaseModalOpen}
         item={purchaseItem}
@@ -882,13 +882,13 @@ export function ProfileClient() {
             : undefined
         }
       />
-      <div className="flex flex-col gap-8">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div className="space-y-3">
+      <div className="flex min-w-0 flex-col gap-8">
+        <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-end md:justify-between md:gap-6">
+          <div className="min-w-0 flex-1 space-y-3">
             <span className="inline-flex rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-sky-200">
               Player Profile
             </span>
-            <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl md:text-5xl">
+            <h1 className="break-words text-3xl font-black tracking-tight text-white sm:text-4xl md:text-5xl">
               {loading ? "Loading..." : currentDisplayName}
             </h1>
             <p className="text-slate-300">
@@ -898,6 +898,7 @@ export function ProfileClient() {
 
           <Button
             variant="secondary"
+            className="w-full shrink-0 md:w-auto"
             onClick={() => {
               setNavPending(true);
               router.push("/");

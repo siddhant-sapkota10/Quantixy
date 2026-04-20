@@ -1168,7 +1168,7 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
   }
 
   return (
-    <section className="neon-panel-strong relative w-full max-w-4xl rounded-[2rem] p-4 sm:p-6 md:p-10">
+    <section className="neon-panel-strong relative mx-auto w-full min-w-0 max-w-4xl rounded-2xl p-4 sm:rounded-[2rem] sm:p-6 md:p-10">
       <GameOverOverlay result={isFinished ? (gameResult?.result ?? null) : null} />
       <motion.div
         aria-hidden="true"

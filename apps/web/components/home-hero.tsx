@@ -60,8 +60,8 @@ function DisplayNameOnboardingModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm sm:px-6">
-      <div className="w-full max-w-lg rounded-[2rem] border border-white/10 bg-slate-950/80 p-5 shadow-glow backdrop-blur sm:p-6 md:p-8">
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-950/70 px-4 pb-6 pt-10 backdrop-blur-sm sm:items-center sm:px-6 sm:pb-0 sm:pt-0">
+      <div className="max-h-[min(92dvh,720px)] w-full min-w-0 max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-slate-950/80 p-5 shadow-glow backdrop-blur sm:rounded-[2rem] sm:p-6 md:p-8">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm uppercase tracking-[0.2em] text-slate-400">Welcome</p>
@@ -359,11 +359,11 @@ function AuthModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm sm:px-6">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/70 px-4 pb-6 pt-10 backdrop-blur-sm sm:items-center sm:px-6 sm:pb-0 sm:pt-0">
       <PageContent
         size="md"
         variant="plain"
-        className="max-w-lg max-h-[90dvh] overflow-y-auto rounded-[2rem] bg-slate-950/70 p-5 shadow-glow backdrop-blur sm:p-6 md:p-8"
+        className="max-h-[min(92dvh,720px)] w-full min-w-0 max-w-lg overflow-y-auto overscroll-contain rounded-2xl bg-slate-950/70 p-5 shadow-glow backdrop-blur sm:rounded-[2rem] sm:p-6 md:p-8"
       >
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -848,7 +848,7 @@ export function HomeHero() {
         onSave={handleOnboardingSave}
         onLogout={() => void handleLogout()}
       />
-      <PageContent size="md" className="max-w-2xl">
+      <PageContent size="md" className="w-full min-w-0 max-w-2xl">
         <motion.section
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}

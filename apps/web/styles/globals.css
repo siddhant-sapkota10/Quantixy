@@ -26,6 +26,9 @@
 
 html {
   scroll-behavior: smooth;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -117,5 +120,15 @@ button {
     background: linear-gradient(140deg, rgba(0, 212, 255, 0.14), rgba(138, 46, 255, 0.16));
     color: #d9ecff;
     box-shadow: 0 6px 20px rgba(13, 16, 40, 0.55);
+  }
+}
+
+/* Prevent media / legacy markup from forcing horizontal scroll */
+@layer base {
+  img,
+  video,
+  canvas {
+    max-width: 100%;
+    height: auto;
   }
 }

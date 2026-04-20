@@ -119,10 +119,10 @@ export function LeaderboardClient() {
   const showMyRankCard = Boolean(myRank && !visiblePlayerIds.has(myRank.playerId));
 
   return (
-    <PageContent size="lg">
-      <div className="flex flex-col gap-4 sm:gap-6 md:gap-8">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div className="space-y-3">
+    <PageContent size="lg" className="w-full min-w-0">
+      <div className="flex min-w-0 flex-col gap-4 sm:gap-6 md:gap-8">
+        <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-end md:justify-between md:gap-6">
+          <div className="min-w-0 flex-1 space-y-3">
             <span className="neon-badge inline-flex rounded-full px-4 py-1 text-xs font-medium uppercase tracking-[0.3em]">
               Competitive Rankings
             </span>
@@ -130,7 +130,7 @@ export function LeaderboardClient() {
             <p className="text-textSecondary">Live standings for named accounts. Guest practice accounts are hidden.</p>
           </div>
 
-          <div className="w-full max-w-xs space-y-2">
+          <div className="w-full min-w-0 max-w-full space-y-2 md:max-w-xs">
             <span className="text-sm font-medium uppercase tracking-[0.2em] text-textSecondary">Filter Topic</span>
             <Dropdown
               aria-label="Filter leaderboard by topic"
@@ -226,9 +226,13 @@ export function LeaderboardClient() {
           </div>
         ) : null}
 
-        <div className="flex justify-start gap-3">
-          <Button variant="secondary" onClick={() => router.push("/")}>Back to Home</Button>
-          <Button variant="secondary" onClick={() => router.push("/profile")}>Profile</Button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-start sm:gap-3">
+          <Button variant="secondary" className="w-full sm:w-auto" onClick={() => router.push("/")}>
+            Back to Home
+          </Button>
+          <Button variant="secondary" className="w-full sm:w-auto" onClick={() => router.push("/profile")}>
+            Profile
+          </Button>
         </div>
       </div>
     </PageContent>

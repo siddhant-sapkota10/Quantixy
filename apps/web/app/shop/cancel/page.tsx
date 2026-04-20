@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { Button } from "@/components/button";
 import { PageContent } from "@/components/page-content";
+import { PageShell } from "@/components/page-shell";
 
 export default function ShopCancelPage() {
   return (
-    <PageContent size="md" className="max-w-3xl text-center">
+    <PageShell className="flex items-start justify-center sm:items-center">
+      <PageContent size="md" className="max-w-3xl text-center">
       <p className="text-xs font-bold uppercase tracking-[0.28em] text-amber-300">Payment Cancelled</p>
       <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">Checkout cancelled</h1>
       <p className="mt-3 text-sm text-slate-300">No charges were made. You can try again anytime.</p>
@@ -21,5 +23,6 @@ export default function ShopCancelPage() {
         </Link>
       </div>
     </PageContent>
+    </PageShell>
   );
 }

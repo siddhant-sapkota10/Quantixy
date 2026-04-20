@@ -17,14 +17,24 @@ export const metadata = {
   },
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#070b18",
+};
+
 export default function RootLayout({
   children
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={inter.className}>{children}</body>
+    <html lang="en" className="h-full overflow-x-hidden">
+      <body
+        className={`${inter.className} min-h-[100dvh] min-h-screen touch-manipulation antialiased`}
+      >
+        {children}
+      </body>
     </html>
   );
 }

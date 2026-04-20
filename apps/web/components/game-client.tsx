@@ -3750,7 +3750,7 @@ export function GameClient({
   }
 
   return (
-    <section className="neon-panel-strong relative w-full max-w-5xl rounded-[2rem] p-3 sm:p-5 md:p-7 lg:p-8">
+    <section className="neon-panel-strong relative mx-auto w-full min-w-0 max-w-5xl rounded-2xl p-3 sm:rounded-[2rem] sm:p-5 md:p-7 lg:p-8">
       {/* Game-over overlays (win glow / lose vignette) */}
       <GameOverOverlay result={isFinished ? (gameResult?.result ?? null) : null} />
       <UltimateActivationOverlay cue={ultimateCue} />
