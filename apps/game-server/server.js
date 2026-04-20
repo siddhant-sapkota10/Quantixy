@@ -68,14 +68,14 @@ const ULTIMATE_CORRECT_CHARGE = 18;
 const ULTIMATE_STREAK_BONUS_CHARGE = 6;
 const ULTIMATE_DEFAULT_DURATION_MS = 6000;
 // Health (HP) win condition — server authoritative.
-const MAX_HP = 100;
+const MAX_HP = 150;
 const HP_BASE_PER_POINT = 8;
 const HP_FAST_BONUS = 4;
 const HP_STREAK_3_BONUS = 2;
 const HP_STREAK_5_BONUS = 4;
 // HP penalty for mistakes (replaces strikes system).
 const HP_WRONG_ANSWER_PENALTY = 0;
-const HP_TIMEOUT_PENALTY = 0;
+const HP_TIMEOUT_PENALTY = 12;
 /**
  * Time-based ultimates (wall-clock). Free roster shares a 10s baseline; premium gets a modest edge.
  */

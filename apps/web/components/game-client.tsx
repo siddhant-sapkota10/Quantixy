@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/button";
@@ -27,8 +27,6 @@ import { MatchChampionCard } from "@/components/match-champion-card";
 // Feature flag — set to true to re-enable the powerup system in live matches.
 // While false, powerup UI is hidden and powerup socket events are no-ops.
 const POWERUPS_ENABLED = false;
-/** Per-question timeout UI: skip only after this many seconds (animated fill on the button). */
-const SKIP_QUESTION_CHARGE_SEC = 5;
 import { useGameAnimations } from "@/hooks/useGameAnimations";
 import { FrostBurst } from "@/components/animations/FrostBurst";
 import { FloatingLabel } from "@/components/animations/FloatingLabel";
@@ -393,8 +391,6 @@ export function GameClient({
     open: false,
     token: 0
   });
-  /** True only after the skip-question fill animation finishes for the current timeout prompt. */
-  const [skipQuestionReady, setSkipQuestionReady] = useState(false);
   const answerInputRef = useRef<HTMLInputElement | null>(null);
   const [focusPulseKey, setFocusPulseKey] = useState(0);
   const [yourName, setYourName] = useState("You");
@@ -466,7 +462,8 @@ export function GameClient({
   const [yourEmotePack, setYourEmotePack] = useState<EmotePackId>("starter");
 
   // Health bar system — client-side only, derived from pointScored events
-  const MAX_HP = 100;
+  const MAX_HP = 150;
+  const DISPLAY_MAX_HP = 100;
   const HP_BASE_PER_POINT = 8;
   const HP_FAST_BONUS = 4;
   const HP_STREAK_3_BONUS = 2;
@@ -2759,9 +2756,6 @@ export function GameClient({
 
   const handleSkipQuestionTimeout = () => {
     if (!socket || !timeoutDecisionPrompt.open) return;
-    if (!skipQuestionReady) {
-      return;
-    }
     if (isNeuralBurstLocked) {
       return;
     }
@@ -2987,6 +2981,15 @@ export function GameClient({
   // Derived HP values — client-side health bar visualization
   const youHP = Math.max(0, MAX_HP - youDamageTaken);
   const opponentHP = Math.max(0, MAX_HP - opponentDamageTaken);
+  const toDisplayHp = (value: number) => Math.max(0, Math.min(DISPLAY_MAX_HP, (value / MAX_HP) * DISPLAY_MAX_HP));
+  const toDisplayDamage = (value: number | null) => {
+    if (value === null || value <= 0) return value;
+    return Math.max(1, Math.round((value / MAX_HP) * DISPLAY_MAX_HP));
+  };
+  const youDisplayHP = toDisplayHp(youHP);
+  const opponentDisplayHP = toDisplayHp(opponentHP);
+  const latestYouDisplayDamage = toDisplayDamage(latestYouDamage);
+  const latestOpponentDisplayDamage = toDisplayDamage(latestOpponentDamage);
   const showHP = isActiveGameplay || isFinished;
   const emoteCoolingDown = emoteCooldownUntil > Date.now();
   const isJamActive = ultimate.blackoutUntil > Date.now();
@@ -2994,6 +2997,23 @@ export function GameClient({
   const inputsLocked = isJamActive || isNeuralJamSilenced;
   /** Timeout UI: only burst + blackout — full Shadow window still allows "stay" so the strip cannot deadlock. */
   const timeoutNeuralBurstLocked = isJamActive || isNeuralBurstLocked;
+  const canSkipQuestion =
+    timeoutDecisionPrompt.open && !timeoutNeuralBurstLocked && !youEliminated && !feedback.youAnsweredCurrent;
+  const skipQuestionButton = timeoutDecisionPrompt.open ? (
+    <Button
+      type="button"
+      variant="secondary"
+      className="h-10 w-fit self-end rounded-xl border-amber-300/35 bg-amber-400/10 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-amber-100 hover:border-amber-200/60 hover:bg-amber-400/15"
+      disabled={!canSkipQuestion}
+      aria-label="Skip question and lose HP"
+      onClick={handleSkipQuestionTimeout}
+    >
+      Skip question
+      {isNeuralBurstLocked && !isJamActive ? (
+        <span className="pointer-events-none absolute inset-0 rounded-xl bg-violet-950/55 bg-[repeating-linear-gradient(0deg,transparent_0px,transparent_2px,rgba(167,139,250,0.07)_2px,rgba(167,139,250,0.07)_4px)]" />
+      ) : null}
+    </Button>
+  ) : null;
   const isSystemCorruptActive =
     ultimate.shadowCorruptUntil > Date.now() || ultimate.opponentShadowCorruptUntil > Date.now();
   const isTitanOverpowerActive = ultimate.titanOverpowerUntil > Date.now();
@@ -3040,17 +3060,6 @@ export function GameClient({
     const id = window.setTimeout(() => setNeuralInputUnlockAt(0), ms + 30);
     return () => clearTimeout(id);
   }, [neuralInputUnlockAt]);
-
-  useLayoutEffect(() => {
-    if (!timeoutDecisionPrompt.open) {
-      setSkipQuestionReady(false);
-      return;
-    }
-    setSkipQuestionReady(false);
-    const ms = Math.round(SKIP_QUESTION_CHARGE_SEC * 1000);
-    const id = window.setTimeout(() => setSkipQuestionReady(true), ms);
-    return () => clearTimeout(id);
-  }, [timeoutDecisionPrompt.open, timeoutDecisionPrompt.token]);
 
   const roomPlayerCount = roomLobby?.players.length ?? 0;
   const roomReady = roomPlayerCount === 2;
@@ -3426,8 +3435,8 @@ export function GameClient({
               <div className="relative grid items-stretch gap-2 md:grid-cols-[minmax(0,1fr)_8.5rem_minmax(0,1fr)] md:gap-3">
                 <MatchChampionCard
                   variant="battle"
-                  hp={youHP}
-                  maxHp={MAX_HP}
+                  hp={youDisplayHP}
+                  maxHp={DISPLAY_MAX_HP}
                   model={{
                     side: "you",
                     playerName: yourName,
@@ -3451,10 +3460,10 @@ export function GameClient({
                     flashOverclockStacks: ultimate.flashOverclockStacks,
                     ultimateQuestionsLeft: ultimate.ultimateQuestionsLeft,
                     damageFloat:
-                      typeof latestYouDamage === "number" &&
-                      latestYouDamage > 0 &&
+                      typeof latestYouDisplayDamage === "number" &&
+                      latestYouDisplayDamage > 0 &&
                       youHitKey > 0
-                        ? { hitKey: youHitKey, amount: latestYouDamage, flashTier: youDamageFlashTier }
+                        ? { hitKey: youHitKey, amount: latestYouDisplayDamage, flashTier: youDamageFlashTier }
                         : null,
                   }}
                 />
@@ -3475,8 +3484,8 @@ export function GameClient({
 
                 <MatchChampionCard
                   variant="battle"
-                  hp={opponentHP}
-                  maxHp={MAX_HP}
+                  hp={opponentDisplayHP}
+                  maxHp={DISPLAY_MAX_HP}
                   model={{
                     side: "opponent",
                     playerName: opponentName,
@@ -3500,12 +3509,12 @@ export function GameClient({
                     flashOverclockStacks: ultimate.opponentFlashOverclockStacks,
                     ultimateQuestionsLeft: ultimate.opponentUltimateQuestionsLeft,
                     damageFloat:
-                      typeof latestOpponentDamage === "number" &&
-                      latestOpponentDamage > 0 &&
+                      typeof latestOpponentDisplayDamage === "number" &&
+                      latestOpponentDisplayDamage > 0 &&
                       opponentHitKey > 0
                         ? {
                             hitKey: opponentHitKey,
-                            amount: latestOpponentDamage,
+                            amount: latestOpponentDisplayDamage,
                             flashTier: opponentDamageFlashTier
                           }
                         : null,
@@ -3549,50 +3558,6 @@ export function GameClient({
               </div>
             </motion.div>
           </div>
-
-          {timeoutDecisionPrompt.open ? (
-            <div className="shrink-0 border-t border-amber-500/20 bg-slate-950/95 px-3 py-2.5 backdrop-blur sm:px-5">
-              <div className="mx-auto w-full max-w-3xl rounded-2xl border border-amber-500/25 bg-slate-900/80 px-3 py-2.5 sm:px-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-300/95">Question timer</p>
-                <p className="mt-0.5 text-sm font-semibold leading-snug text-slate-100">
-                  Question time is up — keep solving below, or skip after the bar fills. Skipping counts as a timeout
-                  penalty and moves you to the next card.
-                </p>
-                <div className="mt-2.5">
-                  <Button
-                    type="button"
-                    className={`relative w-full overflow-hidden py-3 text-sm ${timeoutNeuralBurstLocked || !skipQuestionReady ? "opacity-95" : ""}`}
-                    disabled={timeoutNeuralBurstLocked || !skipQuestionReady}
-                    aria-label={
-                      skipQuestionReady
-                        ? "Skip question (counts as timeout)"
-                        : `Skip question — charging, ${SKIP_QUESTION_CHARGE_SEC} second fill`
-                    }
-                    onClick={handleSkipQuestionTimeout}
-                  >
-                    <motion.div
-                      key={timeoutDecisionPrompt.token}
-                      aria-hidden
-                      className="pointer-events-none absolute inset-0 z-0 bg-[linear-gradient(105deg,rgba(34,211,238,0.5),rgba(167,139,250,0.48))]"
-                      initial={{ scaleX: 0 }}
-                      animate={{ scaleX: 1 }}
-                      transition={{ duration: SKIP_QUESTION_CHARGE_SEC, ease: "linear" }}
-                      style={{ transformOrigin: "left" }}
-                    />
-                    <span className="relative z-10 flex min-h-[2.25rem] flex-col items-center justify-center gap-0.5">
-                      <span className="font-semibold">Skip question</span>
-                      <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-950/80">
-                        {skipQuestionReady ? "Ready · counts as timeout" : `Charging ${SKIP_QUESTION_CHARGE_SEC}s…`}
-                      </span>
-                    </span>
-                    {isNeuralBurstLocked && !isJamActive ? (
-                      <span className="pointer-events-none absolute inset-0 z-[5] rounded-xl bg-violet-950/55 bg-[repeating-linear-gradient(0deg,transparent_0px,transparent_2px,rgba(167,139,250,0.07)_2px,rgba(167,139,250,0.07)_4px)]" />
-                    ) : null}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ) : null}
 
           {/* Bottom: Sticky action bar */}
           <div className="shrink-0 border-t border-white/10 bg-slate-950/90 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 backdrop-blur sm:px-5">
@@ -3669,6 +3634,8 @@ export function GameClient({
                     </Button>
                   </div>
                 ) : null}
+
+                {skipQuestionButton}
 
                 {/* Abilities row: keep things orderly (no empty placeholder box). */}
                 <div className={`grid gap-2 ${POWERUPS_ENABLED ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-2"}`}>
@@ -4005,10 +3972,10 @@ export function GameClient({
                 powerUpGlowKey={animState.youPowerUpGlowKey}
                 ultimateFxKey={youUltimateFxKey}
                 ultimateFxType={youUltimateFxType}
-                hp={showHP ? youHP : undefined}
-                maxHp={MAX_HP}
+                hp={showHP ? youDisplayHP : undefined}
+                maxHp={DISPLAY_MAX_HP}
                 hitKey={youHitKey}
-                latestDamage={latestYouDamage}
+                latestDamage={latestYouDisplayDamage}
                 hitType={youHitType}
                 hitIntensity={youHitIntensity}
                 damageFlashTier={youDamageFlashTier}
@@ -4131,10 +4098,10 @@ export function GameClient({
                 powerUpGlowKey={animState.opponentPowerUpGlowKey}
                 ultimateFxKey={opponentUltimateFxKey}
                 ultimateFxType={opponentUltimateFxType}
-                hp={showHP ? opponentHP : undefined}
-                maxHp={MAX_HP}
+                hp={showHP ? opponentDisplayHP : undefined}
+                maxHp={DISPLAY_MAX_HP}
                 hitKey={opponentHitKey}
-                latestDamage={latestOpponentDamage}
+                latestDamage={latestOpponentDisplayDamage}
                 hitType={opponentHitType}
                 hitIntensity={opponentHitIntensity}
                 damageFlashTier={opponentDamageFlashTier}
