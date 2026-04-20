@@ -1623,15 +1623,16 @@ export function GameClient({
       if (newOpponentScore > prevScores.opponent) triggerScoreGlow("opponent");
 
       const rawHp = payload.hp;
-      const hasAuthoritativeHp =
-        rawHp != null &&
-        typeof rawHp.you === "number" &&
-        typeof rawHp.opponent === "number";
+      // Narrow to a typed object so TS knows `you` / `opponent` are numbers (not only when inlined).
+      const authoritativeHp =
+        rawHp != null && typeof rawHp.you === "number" && typeof rawHp.opponent === "number"
+          ? { you: rawHp.you, opponent: rawHp.opponent }
+          : null;
       // Server applies ultimates, bursts, mitigation, etc.; local calcDamage() only
       // approximates one slice — sync bars from authoritative HP whenever present.
-      if (hasAuthoritativeHp) {
-        setYouDamageTaken(Math.max(0, MAX_HP - rawHp.you));
-        setOpponentDamageTaken(Math.max(0, MAX_HP - rawHp.opponent));
+      if (authoritativeHp) {
+        setYouDamageTaken(Math.max(0, MAX_HP - authoritativeHp.you));
+        setOpponentDamageTaken(Math.max(0, MAX_HP - authoritativeHp.opponent));
       }
 
       // HP damage tracking — apply damage when either player scores
@@ -1680,7 +1681,7 @@ export function GameClient({
           const t = setTimeout(() => {
             setOpponentHitType(type);
             setOpponentHitIntensity(intensity);
-            if (!hasAuthoritativeHp) {
+            if (!authoritativeHp) {
               setOpponentDamageTaken((prev) => prev + dmgDealt);
             }
             setLatestOpponentDamage(dmgDealt);
@@ -1737,7 +1738,7 @@ export function GameClient({
           const t = setTimeout(() => {
             setYouHitType(type);
             setYouHitIntensity(intensity);
-            if (!hasAuthoritativeHp) {
+            if (!authoritativeHp) {
               setYouDamageTaken((prev) => prev + dmgTaken);
             }
             setLatestYouDamage(dmgTaken);
