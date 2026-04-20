@@ -1602,6 +1602,7 @@ export function GameClient({
       opponentInfernoPending?: boolean;
       youAnswered?: boolean;
       opponentAnswered?: boolean;
+      hp?: { you?: number | null; opponent?: number | null };
     }) => {
       console.log("[client] pointScored received", payload);
       const nextScores = payload.scores ?? payload.playerScores;
@@ -1620,6 +1621,18 @@ export function GameClient({
       const opponentScored = newOpponentScore > prevScores.opponent;
       if (newYouScore > prevScores.you) triggerScoreGlow("you");
       if (newOpponentScore > prevScores.opponent) triggerScoreGlow("opponent");
+
+      const rawHp = payload.hp;
+      const hasAuthoritativeHp =
+        rawHp != null &&
+        typeof rawHp.you === "number" &&
+        typeof rawHp.opponent === "number";
+      // Server applies ultimates, bursts, mitigation, etc.; local calcDamage() only
+      // approximates one slice — sync bars from authoritative HP whenever present.
+      if (hasAuthoritativeHp) {
+        setYouDamageTaken(Math.max(0, MAX_HP - rawHp.you));
+        setOpponentDamageTaken(Math.max(0, MAX_HP - rawHp.opponent));
+      }
 
       // HP damage tracking — apply damage when either player scores
       if (youScored) {
@@ -1667,7 +1680,9 @@ export function GameClient({
           const t = setTimeout(() => {
             setOpponentHitType(type);
             setOpponentHitIntensity(intensity);
-            setOpponentDamageTaken((prev) => prev + dmgDealt);
+            if (!hasAuthoritativeHp) {
+              setOpponentDamageTaken((prev) => prev + dmgDealt);
+            }
             setLatestOpponentDamage(dmgDealt);
             setOpponentHitKey((prev) => prev + 1);
             playHitSound(type, intensity);
@@ -1722,7 +1737,9 @@ export function GameClient({
           const t = setTimeout(() => {
             setYouHitType(type);
             setYouHitIntensity(intensity);
-            setYouDamageTaken((prev) => prev + dmgTaken);
+            if (!hasAuthoritativeHp) {
+              setYouDamageTaken((prev) => prev + dmgTaken);
+            }
             setLatestYouDamage(dmgTaken);
             setYouHitKey((prev) => prev + 1);
             playHitSound(type, intensity);

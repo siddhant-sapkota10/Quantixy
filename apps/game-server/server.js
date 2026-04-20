@@ -76,49 +76,47 @@ const HP_STREAK_5_BONUS = 4;
 // HP penalty for mistakes (replaces strikes system).
 const HP_WRONG_ANSWER_PENALTY = 0;
 const HP_TIMEOUT_PENALTY = 12;
-/**
- * Time-based ultimates (wall-clock). Free roster shares a 10s baseline; premium gets a modest edge.
- */
+// Free roster: equal 10s windows. Premium: slightly longer + tuned kits below.
 const ULTIMATE_DURATION_MS = Object.freeze({
   rapid_fire: 10_000,
   system_corrupt: 10_000,
   shield: 10_000,
   double: 10_000,
-  perfect_sequence: 20_000,
-  overpower: 20_000
+  perfect_sequence: 13_000,
+  overpower: 13_000
 });
 /** Inferno: per-correct chip + stacks; wrong answers shave a stack (applyFailureUltimateConsequences). */
 const WILDFIRE_MAX_STACKS = 6;
 const WILDFIRE_TICK_BASE = 2;
 const WILDFIRE_TICK_PER_STACK = 1;
-const INFERNO_DOT_TICK_MS = 880;
+const INFERNO_DOT_TICK_MS = 900;
 const INFERNO_MAX_TICK_DAMAGE = 4;
 const INFERNO_BURN_TICK_MS = INFERNO_DOT_TICK_MS;
 /** Guardian: fraction of raw damage that still connects; reflect uses prevented portion. */
-const GUARDIAN_REDUCTION_MULTIPLIER = 0.55;
-const GUARDIAN_REFLECT_MULTIPLIER = 0.32;
+const GUARDIAN_REDUCTION_MULTIPLIER = 0.52;
+const GUARDIAN_REFLECT_MULTIPLIER = 0.3;
 /** Titan: outgoing hit amplifier + flat spike; resist shaves incoming while ultimate is up. */
-const TITAN_DAMAGE_MULTIPLIER = 1.22;
+const TITAN_DAMAGE_MULTIPLIER = 1.24;
 const TITAN_BONUS_DAMAGE = 2;
-const TITAN_RESIST_MULTIPLIER = 0.9;
-/** Flash — Overclock: each correct stacks this count; wrong clears. Bonus = base * stacks * rate (stacks before increment). */
-const FLASH_OVERCLOCK_STACK_CAP = 8;
-const FLASH_STACK_DAMAGE_RATE = 0.08;
+const TITAN_RESIST_MULTIPLIER = 0.88;
+/** Flash — Overclock: each correct adds a stack; each stack adds flat chip damage; wrong drops 2 stacks. */
+const FLASH_OVERCLOCK_STACK_CAP = 5;
+const FLASH_POWER_FLAT_PER_STACK = 4;
 /** Shadow — Neural Jam: input lock + shorter question clock for the victim. */
-const NEURAL_INPUT_LOCK_MS = 780;
+const NEURAL_INPUT_LOCK_MS = 720;
 /** Extra lock applied to the opponent the moment Shadow pops Neural Jam (mid-card). */
-const NEURAL_ULT_ACTIVATION_LOCK_MS = 2100;
-const NEURAL_QUESTION_TIMER_MULT = 0.7;
-const NEURAL_WRONG_EXTRA_HP = 6;
+const NEURAL_ULT_ACTIVATION_LOCK_MS = 1800;
+const NEURAL_QUESTION_TIMER_MULT = 0.78;
+const NEURAL_WRONG_EXTRA_HP = 5;
 /** Guardian — Reflect Bastion: store prevented damage; burst cap when ultimate ends. */
-const GUARDIAN_BURST_DAMAGE_CAP = 32;
+const GUARDIAN_BURST_DAMAGE_CAP = 30;
 /** Architect — Perfect Sequence: offensive burst after N corrects while ultimate is up. */
 const ARCHITECT_BURST_STACK_THRESHOLD = 3;
-const ARCHITECT_BURST_DAMAGE = 16;
+const ARCHITECT_BURST_DAMAGE = 17;
 /** Light defensive mitigation while Architect ultimate is active (separate from burst). */
-const ARCHITECT_DEFENSE_MULT = 0.92;
+const ARCHITECT_DEFENSE_MULT = 0.9;
 /** Titan — Overpower: heal fraction of damage dealt on correct hits. */
-const TITAN_LIFESTEAL_RATIO = 0.18;
+const TITAN_LIFESTEAL_RATIO = 0.2;
 const ROOM_CODE_LENGTH = 6;
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -1126,7 +1124,8 @@ function applyFailureUltimateConsequences(game, playerSocketId, reason = "wrong"
     ultimateType === "rapid_fire" &&
     isUltimateActiveForPlayer(game, playerSocketId)
   ) {
-    game.flashOverclockStacks[playerSocketId] = 0;
+    const cur = game.flashOverclockStacks[playerSocketId] ?? 0;
+    game.flashOverclockStacks[playerSocketId] = Math.max(0, cur - 2);
   }
   if (
     reason === "wrong" &&
@@ -2017,7 +2016,7 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
 
     if (ultimateType === "rapid_fire" && ultimateActive) {
       const stack = Math.min(FLASH_OVERCLOCK_STACK_CAP, game.flashOverclockStacks[playerSocketId] ?? 0);
-      overclockBonusDamage = Math.max(0, Math.round(baseDamage * stack * FLASH_STACK_DAMAGE_RATE));
+      overclockBonusDamage = stack * FLASH_POWER_FLAT_PER_STACK;
       damage += overclockBonusDamage;
       overclockCombo = (stack + 1) * 100;
       game.flashOverclockStacks[playerSocketId] = Math.min(FLASH_OVERCLOCK_STACK_CAP, stack + 1);
@@ -2435,7 +2434,7 @@ async function resolveSocketPlayer(socket, topic, accessToken) {
     playerId: player.id,
     name: player.display_name ?? player.username,
     rating: rating.rating,
-    avatar: normalizeAvatarId(player.avatar_id),
+    avatar: normalizeAvatarId(player.avatar),
     // Cosmetics — visual only, no gameplay effect
     streakEffect: cosmetics.streakEffect,
     emotePack: cosmetics.emotePack
@@ -3442,3 +3441,4 @@ httpServer.listen(PORT, HOST, () => {
   console.log(`[server] leaderboard endpoint available at /leaderboard`);
   console.log(`[server] default rating = ${DEFAULT_RATING}`);
 });
+

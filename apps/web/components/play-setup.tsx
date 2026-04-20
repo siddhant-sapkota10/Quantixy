@@ -175,6 +175,7 @@ type PlaySetupProps = {
 };
 
 type MatchMode = "quick" | "create-room" | "join-room";
+type AiBattleMode = "practice" | "duel";
 
 const CARD_TRANSITION = { type: "spring", stiffness: 420, damping: 28, mass: 0.6 } as const;
 
@@ -184,6 +185,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
   const [selectedTopic, setSelectedTopic] = useState<Topic>("arithmetic");
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>("easy");
   const [matchMode, setMatchMode] = useState<MatchMode>("quick");
+  const [aiBattleMode, setAiBattleMode] = useState<AiBattleMode>("practice");
   const [roomCode, setRoomCode] = useState("");
   const [startPending, setStartPending] = useState(false);
 
@@ -209,6 +211,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
 
       if (mode === "ai") {
         params.set("mode", "ai");
+        params.set("aiMode", aiBattleMode);
         params.set("topic", selectedTopic);
         params.set("difficulty", selectedDifficulty);
         router.push(`/game?${params.toString()}`);
@@ -240,7 +243,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
 
   const actionLabel =
     mode === "ai"
-      ? "⚡ Play vs AI"
+      ? aiBattleMode === "practice" ? "Start Practice" : "Start AI Duel"
       : matchMode === "quick"
       ? "⚡ Find Match"
       : matchMode === "create-room"
@@ -316,6 +319,46 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
                 ? "Create a private room and share the code with a friend."
                 : "Enter a 6-character room code to join a private room."}
             </p>
+          </div>
+        ) : null}
+
+        {/* AI mode picker */}
+        {mode === "ai" ? (
+          <div className="space-y-2.5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-500">AI Mode</p>
+            <div className="neon-panel-soft grid grid-cols-2 gap-1.5 rounded-2xl p-1">
+              {([
+                {
+                  id: "practice",
+                  title: "Practice",
+                  body: "No avatars. 60 seconds. Highest score wins."
+                },
+                {
+                  id: "duel",
+                  title: "Duel",
+                  body: "PvP-style AI with HP, emotes, skip, and ultimates."
+                }
+              ] as const).map((option) => {
+                const selected = aiBattleMode === option.id;
+
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setAiBattleMode(option.id)}
+                    disabled={startPending}
+                    className={`rounded-xl px-3 py-3 text-left transition-all duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
+                      selected
+                        ? "bg-[linear-gradient(120deg,rgba(0,212,255,0.2),rgba(138,46,255,0.2))] text-cyan-100 shadow-[0_0_18px_rgba(0,212,255,0.2)]"
+                        : "text-slate-400 hover:bg-indigo-500/12 hover:text-slate-200"
+                    } ${startPending ? "cursor-not-allowed opacity-55" : "active:scale-[0.975]"}`}
+                  >
+                    <span className="block text-xs font-black uppercase tracking-[0.18em]">{option.title}</span>
+                    <span className="mt-1 block text-[11px] leading-snug text-slate-400">{option.body}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         ) : null}
 

@@ -59,22 +59,6 @@ function getAvatarImageSrc(id: AvatarId) {
   return `/assets/avatarCards/${id}.png`;
 }
 
-function firstSentence(text: string) {
-  const trimmed = text.trim();
-  if (!trimmed) return "";
-  const dot = trimmed.indexOf(".");
-  if (dot === -1) return trimmed;
-  return trimmed.slice(0, dot + 1);
-}
-
-function clampHeightClass(lines: "2" | "3" | "4") {
-  // Avoid relying on the Tailwind line-clamp plugin; use a fixed max-height instead.
-  // 2 lines ≈ 2.75rem, 3 lines ≈ 4.1rem, 4 lines ≈ 5.45rem at text-sm leading-relaxed.
-  if (lines === "2") return "max-h-[2.75rem]";
-  if (lines === "3") return "max-h-[4.1rem]";
-  return "max-h-[5.45rem]";
-}
-
 export function ProfileCharacterSelector({
   selectedId,
   previewId,
@@ -190,13 +174,11 @@ export function ProfileCharacterSelector({
                     </span>
                   </div>
                   <p className="mt-2 text-sm font-semibold text-slate-200">Identity</p>
-                  <p
-                    className={`mt-1 overflow-hidden text-sm leading-relaxed text-slate-300 ${clampHeightClass("3")}`}
-                  >
+                  <p className="mt-1 text-sm leading-relaxed text-slate-300">
                     {previewAvatar.description}
                   </p>
                   <p className="mt-3 text-sm font-semibold text-slate-200">Playstyle</p>
-                  <p className={`mt-1 overflow-hidden text-sm leading-relaxed text-slate-300 ${clampHeightClass("2")}`}>
+                  <p className="mt-1 text-sm leading-relaxed text-slate-300">
                     {previewAvatar.passive}
                   </p>
                 </div>
@@ -211,7 +193,7 @@ export function ProfileCharacterSelector({
                     </span>
                   </div>
                   <p className="mt-2 text-base font-bold text-white">{previewAvatar.ultimateName}</p>
-                  <p className={`mt-1 overflow-hidden text-sm leading-relaxed text-slate-300 ${clampHeightClass("3")}`}>
+                  <p className="mt-1 text-sm leading-relaxed text-slate-300">
                     {previewAvatar.ultimateDescription}
                   </p>
                 </div>
@@ -360,4 +342,3 @@ export function ProfileCharacterSelector({
     </div>
   );
 }
-

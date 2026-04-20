@@ -127,7 +127,7 @@ export function LeaderboardClient() {
               Competitive Rankings
             </span>
             <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl md:text-5xl">Leaderboard</h1>
-            <p className="text-textSecondary">Live standings from persisted player ratings.</p>
+            <p className="text-textSecondary">Live standings for named accounts. Guest practice accounts are hidden.</p>
           </div>
 
           <div className="w-full max-w-xs space-y-2">

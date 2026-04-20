@@ -22,7 +22,7 @@ type PlayerProfile = {
 type PlayerRow = {
   id: string;
   username: string;
-  avatar_id: string;
+  avatar: string;
 };
 
 type RatingQueryRow = {
@@ -50,7 +50,7 @@ export function usePlayerProfile(user?: User | null) {
 
         const { data: player, error: playerError } = await supabase
           .from("players")
-          .select("id, username, avatar_id")
+          .select("id, username, avatar")
           .eq("auth_user_id", user.id)
           .maybeSingle();
 
@@ -70,7 +70,7 @@ export function usePlayerProfile(user?: User | null) {
                 username: fallbackUsername
               } as never
             )
-            .select("id, username, avatar_id")
+            .select("id, username, avatar")
             .single();
 
           if (insertError && insertError.code !== "23505") {
@@ -80,7 +80,7 @@ export function usePlayerProfile(user?: User | null) {
           if (insertError?.code === "23505") {
             const { data: retryPlayer, error: retryError } = await supabase
               .from("players")
-              .select("id, username, avatar_id")
+              .select("id, username, avatar")
               .eq("auth_user_id", user.id)
               .maybeSingle();
 
@@ -114,7 +114,7 @@ export function usePlayerProfile(user?: User | null) {
         setProfile({
           id: currentPlayer.id,
           username: currentPlayer.username,
-          avatarId: normalizeAvatarId(currentPlayer.avatar_id),
+          avatarId: normalizeAvatarId(currentPlayer.avatar),
           ratings: TOPICS.map((topic) => ({
             topic,
             rating: ratingMap.get(topic) ?? 1000
@@ -141,3 +141,4 @@ export function usePlayerProfile(user?: User | null) {
     loading
   };
 }
+

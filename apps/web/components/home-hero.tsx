@@ -33,7 +33,7 @@ type HomeIdentityRow = {
   id: string;
   display_name: string | null;
   username: string | null;
-  avatar_id: string | null;
+  avatar: string | null;
 };
 
 function getAvatarCardSrc(id: AvatarId) {
@@ -668,7 +668,7 @@ export function HomeHero() {
         const supabase = getSupabaseClient();
         const { data, error } = await supabase
           .from("players")
-          .select("id, display_name, username, avatar_id")
+          .select("id, display_name, username, avatar")
           .eq("auth_user_id", user.id)
           .maybeSingle();
 
@@ -696,7 +696,7 @@ export function HomeHero() {
 
           setAccountIdentity({
             displayName: row.display_name ?? row.username ?? "Player",
-            avatarId: row.avatar_id ?? null,
+            avatarId: row.avatar ?? null,
             highestRating,
           });
 
@@ -1187,4 +1187,6 @@ export function HomeHero() {
     </>
   );
 }
+
+
 

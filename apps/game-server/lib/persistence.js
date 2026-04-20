@@ -6,6 +6,7 @@ const DEFAULT_RATING = 1000;
 const VALID_AVATAR_IDS = new Set((AVATARS ?? []).map((avatar) => avatar.id));
 const VALID_STREAK_EFFECT_IDS = new Set((COSMETICS.streakEffects ?? []).map((e) => e.id));
 const VALID_EMOTE_PACK_IDS = new Set((COSMETICS.emotePacks ?? []).map((p) => p.id));
+const GUEST_NAME_PATTERN = /^Guest-[A-F0-9]{4,}$/i;
 
 function deriveResultFromScores(yourScore, opponentScore) {
   if (yourScore > opponentScore) return "win";
@@ -219,7 +220,7 @@ function buildCandidateUsername(authUser) {
 async function findPlayerByAuthUserId(authUserId) {
   const { data, error } = await supabaseAdmin
     .from("players")
-    .select("id, username, display_name, auth_user_id, avatar_id")
+    .select("id, username, display_name, auth_user_id, avatar")
     .eq("auth_user_id", authUserId)
     .maybeSingle();
 
@@ -233,7 +234,7 @@ async function findPlayerByAuthUserId(authUserId) {
 async function findPlayerByUsername(username) {
   const { data, error } = await supabaseAdmin
     .from("players")
-    .select("id, username, display_name, auth_user_id, avatar_id")
+    .select("id, username, display_name, auth_user_id, avatar")
     .eq("display_name", username)
     .maybeSingle();
 
@@ -275,7 +276,7 @@ async function findOrCreatePlayerFromAuthUser(authUser) {
       username: desiredUsername,
       display_name: desiredUsername
     })
-    .select("id, username, display_name, auth_user_id, avatar_id")
+    .select("id, username, display_name, auth_user_id, avatar")
     .single();
 
   if (!error) {
@@ -365,6 +366,12 @@ function buildRankedRows(rows) {
   });
 }
 
+function isGuestLeaderboardPlayer(player) {
+  const displayName = String(player?.display_name ?? "").trim();
+  const username = String(player?.username ?? "").trim();
+  return GUEST_NAME_PATTERN.test(displayName) || GUEST_NAME_PATTERN.test(username);
+}
+
 async function getLeaderboard(options = {}) {
   const topic = options.topic;
   const authUserId = options.authUserId ?? null;
@@ -416,7 +423,7 @@ async function getLeaderboard(options = {}) {
   const playerIds = [...new Set(uniqueRatings.map((entry) => entry.player_id))];
   const { data: players, error: playersError } = await supabaseAdmin
     .from("players")
-    .select("id, username, display_name, avatar_id")
+    .select("id, username, display_name, avatar")
     .in("id", playerIds);
 
   if (playersError) {
@@ -426,17 +433,32 @@ async function getLeaderboard(options = {}) {
   const playerMap = new Map(
     (players ?? []).map((player) => [
       player.id,
-      { username: player.display_name ?? player.username, avatarId: normalizeAvatarId(player.avatar_id) }
+      {
+        username: player.display_name ?? player.username,
+        avatarId: normalizeAvatarId(player.avatar),
+        isGuest: isGuestLeaderboardPlayer(player)
+      }
     ])
   );
 
-  const rankedRows = buildRankedRows(uniqueRatings.map((entry) => ({
-    playerId: entry.player_id,
-    name: playerMap.get(entry.player_id)?.username ?? "Unknown Player",
-    avatarId: playerMap.get(entry.player_id)?.avatarId ?? "flash",
-    rating: entry.rating,
-    topic: entry.topic
-  })));
+  const rankedRows = buildRankedRows(
+    uniqueRatings
+      .map((entry) => {
+        const player = playerMap.get(entry.player_id);
+        if (!player || player.isGuest) {
+          return null;
+        }
+
+        return {
+          playerId: entry.player_id,
+          name: player.username,
+          avatarId: player.avatarId,
+          rating: entry.rating,
+          topic: entry.topic
+        };
+      })
+      .filter(Boolean)
+  );
 
   let myRank = null;
   if (authUserId) {
@@ -531,7 +553,7 @@ async function getProfileSummary(authUserId) {
   return {
     username: player.display_name ?? player.username,
     displayName: player.display_name ?? player.username,
-    avatarId: normalizeAvatarId(player.avatar_id),
+    avatarId: normalizeAvatarId(player.avatar),
     streakEffect: cosmetics.streakEffect,
     emotePack: cosmetics.emotePack,
     summary: {
@@ -583,3 +605,5 @@ module.exports = {
   normalizeStreakEffectId,
   normalizeEmotePackId
 };
+
+

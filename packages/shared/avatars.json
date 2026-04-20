@@ -9,11 +9,11 @@
       "accent": "#38BDF8",
       "glow": "rgba(56,189,248,0.45)"
     },
-    "description": "Too fast to punish.",
-    "passive": "Overclock: each correct answer adds bonus damage and stacks a multiplier; a wrong answer resets the stack.",
+    "description": "A high-tempo striker who turns clean answers into steady pressure.",
+    "passive": "Overclock: while your ultimate is active, each correct adds a Power stack (max 5). Every stack adds a flat damage chip on your next hits; a wrong answer removes two stacks instead of wiping you clean.",
     "ultimateId": "rapid_fire",
     "ultimateName": "Overclock",
-    "ultimateDescription": "For ~10 seconds, every correct answer deals bonus damage and builds a stacking damage multiplier. One mistake resets the snowball.",
+    "ultimateDescription": "10 seconds. Each correct adds Power (up to 5). Each Power stack adds flat bonus damage on your attacks. Wrong answers strip 2 stacks.",
     "ultimateMeta": {
       "effectType": "stacking_damage_snowball",
       "chargeMultiplier": 1.0
@@ -29,11 +29,11 @@
       "accent": "#A78BFA",
       "glow": "rgba(167,139,250,0.42)"
     },
-    "description": "You can't answer what you can't read.",
-    "passive": "Neural Jam: for a timed window, the opponent's inputs are jammed, their timer is tighter, and wrong answers while jammed hurt more.",
+    "description": "A disruptor that shrinks the opponent's decision space.",
+    "passive": "Neural Jam: on ult, the opponent gets a shorter question timer, periodic input locks, and extra HP pain if they answer wrong while jammed.",
     "ultimateId": "system_corrupt",
     "ultimateName": "Neural Jam",
-    "ultimateDescription": "For ~10 seconds, jam your opponent's inputs so they cannot press multiple choice answers or type. Their answer timer is tighter, and wrong answers during the jam take extra damage.",
+    "ultimateDescription": "10 seconds. Opponent questions run faster, they get brief input locks, and wrong answers during the jam take extra HP damage.",
     "ultimateMeta": {
       "effectType": "visibility_modifier",
       "chargeMultiplier": 1.0
@@ -49,11 +49,11 @@
       "accent": "#34D399",
       "glow": "rgba(52,211,153,0.4)"
     },
-    "description": "Everything you throw at me comes right back.",
-    "passive": "Reflect Bastion: incoming damage is reduced; prevented damage is stored and released in one burst at the end of the ultimate.",
+    "description": "A defensive specialist that turns absorbed pressure into a finishing burst.",
+    "passive": "Reflect Bastion: while your ultimate is up you take less damage, bank part of what you prevent, and fire it back when Bastion ends (capped burst).",
     "ultimateId": "shield",
     "ultimateName": "Reflect Bastion",
-    "ultimateDescription": "For ~10 seconds, reduce incoming damage. Prevented damage builds in storage, then fires back at your opponent in a single shockwave when the ultimate ends.",
+    "ultimateDescription": "10 seconds. You mitigate incoming hits, store prevented damage, then release it as one shockwave when Bastion ends (damage capped).",
     "ultimateMeta": {
       "effectType": "domain_reflect",
       "chargeMultiplier": 1.0
@@ -69,14 +69,14 @@
       "accent": "#FB7185",
       "glow": "rgba(251,113,133,0.43)"
     },
-    "description": "The longer you survive, the hotter it gets.",
-    "passive": "Blaze Surge: each correct answer applies stacking burn damage over time that keeps ticking even when the opponent answers correctly.",
+    "description": "A burn specialist that ramps damage over the ultimate window.",
+    "passive": "Blaze Surge: correct answers add burn stacks while your ultimate is active. Burn ticks chip the opponent; wrong answers shave one stack.",
     "ultimateId": "double",
     "ultimateName": "Blaze Surge",
-    "ultimateDescription": "For ~10 seconds, each correct answer adds burn stacks. Burn ticks down their HP over time; stacks grow with more hits.",
+    "ultimateDescription": "10 seconds. Correct answers add burn stacks; burn ticks every ~0.9s. Wrong answers remove one stack.",
     "ultimateMeta": {
       "effectType": "stacking_burn_dot",
-      "tickEveryMs": 950,
+      "tickEveryMs": 900,
       "chargeMultiplier": 1.0
     }
   },
@@ -94,16 +94,16 @@
     "priceUsd": 4.99,
     "storeSku": "avatar_architect",
     "roleLabel": "Precision / Combo Burst",
-    "premiumTagline": "I don’t fight your game. I rewrite it.",
-    "howItPlays": "Perfect Sequence rewards precision: stack correct answers for a massive burst; miss and the sequence breaks. You also mitigate damage while the ultimate runs.",
-    "description": "Dimensional Engineer.",
-    "passive": "Perfect Sequence: build stacks on correct answers; at a threshold, unleash a huge burst and reset. Wrong answers break the chain.",
+    "premiumTagline": "I don't fight your game. I rewrite it.",
+    "howItPlays": "Perfect Sequence: chain correct answers; every third correct detonates a precision burst. Wrong answers reset the chain. You take slightly less damage while it is active.",
+    "description": "A precision combo engineer built around clean sequences.",
+    "passive": "Perfect Sequence builds toward a burst on every third correct answer during your ultimate; wrong answers reset the chain; light damage mitigation while active.",
     "ultimateId": "perfect_sequence",
     "ultimateName": "Perfect Sequence",
-    "ultimateDescription": "For ~20 seconds, each correct stacks toward a precision burst. Miss to lose the stack. Premium: slightly faster ultimate charge, a stronger burst, and light mitigation while active.",
+    "ultimateDescription": "13 seconds (premium). Every third correct in the window deals a big burst; wrong answers reset the combo counter; you take slightly less damage while active.",
     "ultimateMeta": {
       "effectType": "premium_sequence_overload",
-      "chargeMultiplier": 1.03
+      "chargeMultiplier": 1.06
     }
   },
   {
@@ -120,16 +120,16 @@
     "priceUsd": 4.99,
     "storeSku": "avatar_titan",
     "roleLabel": "Heavy Hitter / Defense Breaker",
-    "premiumTagline": "I don’t lose trades. I win them.",
-    "howItPlays": "Overpower: harder hits, heal from damage dealt, and wrong answers do not self-damage while the ultimate is up.",
-    "description": "Unstoppable Force.",
-    "passive": "Overpower: increased damage on correct answers, lifesteal from damage dealt, and hits bypass the opponent's damage reduction while active.",
+    "premiumTagline": "I don't lose trades. I win them.",
+    "howItPlays": "Overpower: heavier hits, heal from damage dealt, tougher against incoming hits, and no self-HP penalty on wrong answers while the ultimate runs.",
+    "description": "A bruiser that wins trades through heavy damage and sustain.",
+    "passive": "Overpower: while your ultimate is active, your correct-answer hits deal more damage, you heal from part of the damage dealt, you resist more incoming damage, and wrong answers do not cost self-HP.",
     "ultimateId": "overpower",
     "ultimateName": "Overpower",
-    "ultimateDescription": "For ~20 seconds, deal more damage on correct answers, heal based on damage dealt, and ignore damage reduction on your strikes. Wrong answers do not self-damage. Premium: slightly faster ultimate charge and heavier hits.",
+    "ultimateDescription": "13 seconds (premium). Your correct-answer damage is amplified, you heal from damage dealt, you resist incoming hits, and wrong answers do not deal self-damage.",
     "ultimateMeta": {
       "effectType": "premium_juggernaut_burst",
-      "chargeMultiplier": 1.03
+      "chargeMultiplier": 1.06
     }
   }
 ]

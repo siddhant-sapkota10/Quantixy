@@ -60,7 +60,7 @@ type PlayerQueryRow = {
   id: string;
   username: string;
   display_name: string | null;
-  avatar_id: string | null;
+  avatar: string | null;
 };
 
 type CosmeticQueryRow = {
@@ -104,7 +104,7 @@ async function loadProfileFromSupabase(authUserId: string): Promise<ProfileRespo
   console.log("[profile] querying players by auth_user_id", { authUserId });
   const { data: playerData, error: playerError } = await supabase
     .from("players")
-    .select("id, username, display_name, avatar_id")
+    .select("id, username, display_name, avatar")
     .eq("auth_user_id", authUserId)
     .maybeSingle();
 
@@ -150,17 +150,28 @@ async function loadProfileFromSupabase(authUserId: string): Promise<ProfileRespo
     // If table/migration not applied yet, fall back to starter-only.
   }
 
-  // Owned avatars (premium) are sourced from user_avatars.
-  // Free avatars are always considered owned.
+  // Owned avatars (premium) are sourced from user_avatars (auth user id, lowercase avatar_id).
+  // Free avatars are always considered owned in the UI.
+  const premiumAvatarIds = new Set<string>(["architect", "titan"]);
   let ownedAvatars: string[] = [];
   try {
     const { data: ownedRows, error: ownedError } = await supabase
       .from("user_avatars")
       .select("avatar_id")
       .eq("user_id", authUserId);
-    if (!ownedError && Array.isArray(ownedRows)) {
+    if (ownedError) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[profile] user_avatars query failed (check RLS and table):", ownedError.message);
+      }
+    } else if (Array.isArray(ownedRows)) {
       const rows = ownedRows as Array<{ avatar_id: string }>;
-      ownedAvatars = rows.map((r) => r.avatar_id);
+      ownedAvatars = Array.from(
+        new Set(
+          rows
+            .map((r) => normalizeAvatarId(r.avatar_id))
+            .filter((id) => premiumAvatarIds.has(id))
+        )
+      );
     }
   } catch {
     // If table/migration not applied yet, fall back to free-only.
@@ -234,7 +245,7 @@ async function loadProfileFromSupabase(authUserId: string): Promise<ProfileRespo
   return {
     username: player.username,
     displayName: player.display_name ?? player.username,
-    avatarId: normalizeAvatarId(player.avatar_id),
+    avatarId: normalizeAvatarId(player.avatar),
     streakEffect,
     emotePack,
     ownedEmotePacks,
@@ -301,6 +312,8 @@ export function ProfileClient() {
   const [buyingPack, setBuyingPack] = useState<EmotePackId | null>(null);
   const [emoteShopError, setEmoteShopError] = useState<string | null>(null);
   const [navPending, setNavPending] = useState(false);
+  const [selectedRatingTopic, setSelectedRatingTopic] = useState<string | null>(null);
+  const [selectedMatchTopic, setSelectedMatchTopic] = useState<"all" | string>("all");
 
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
   const [purchaseConfirming, setPurchaseConfirming] = useState(false);
@@ -409,15 +422,19 @@ export function ProfileClient() {
           ratings: nextData.ratings.length,
           matches: nextData.matches.length
         });
-        // Source of truth for paid ownership is Supabase `user_emote_packs`.
-        // The game server "enriched profile" payload doesn't always include ownership,
-        // so preserve it from the initial Supabase load to avoid UI flicker back to Locked.
+        // Source of truth for paid ownership is Supabase (`user_emote_packs`, `user_avatars`).
+        // The game server "enriched profile" payload does not include those lists, so preserve
+        // them from the initial Supabase load to avoid UI flicker back to Locked.
         setData({
           ...nextData,
           ownedEmotePacks:
             Array.isArray(nextData.ownedEmotePacks) && nextData.ownedEmotePacks.length > 0
               ? nextData.ownedEmotePacks
               : fallbackData.ownedEmotePacks,
+          ownedAvatars:
+            Array.isArray(nextData.ownedAvatars) && nextData.ownedAvatars.length > 0
+              ? nextData.ownedAvatars
+              : (fallbackData.ownedAvatars ?? []),
         });
       } catch (fetchError) {
         if (controller.signal.aborted) {
@@ -537,6 +554,63 @@ export function ProfileClient() {
 
     return formatTopicLabel(data.summary.highestRatedTopic as Topic);
   }, [data?.summary.highestRatedTopic]);
+  const ratingsList = data?.ratings ?? [];
+  const selectedRatingEntry = useMemo(() => {
+    if (ratingsList.length === 0) {
+      return null;
+    }
+
+    return ratingsList.find((entry) => entry.topic === selectedRatingTopic) ?? ratingsList[0];
+  }, [ratingsList, selectedRatingTopic]);
+  const selectedRatingLabel = selectedRatingEntry
+    ? formatTopicLabel(selectedRatingEntry.topic as Topic)
+    : "No topic selected";
+  const selectedRatingValue = selectedRatingEntry?.rating ?? data?.summary.highestRating ?? 1000;
+
+  useEffect(() => {
+    if (ratingsList.length === 0) {
+      setSelectedRatingTopic(null);
+      return;
+    }
+
+    const hasSelectedTopic = selectedRatingTopic
+      ? ratingsList.some((entry) => entry.topic === selectedRatingTopic)
+      : false;
+
+    if (!hasSelectedTopic) {
+      setSelectedRatingTopic(data?.summary.highestRatedTopic ?? ratingsList[0].topic);
+    }
+  }, [data?.summary.highestRatedTopic, ratingsList, selectedRatingTopic]);
+
+  const matchTopicOptions = useMemo(() => {
+    const seen = new Set<string>();
+    for (const match of data?.matches ?? []) {
+      seen.add(match.topic);
+    }
+
+    return [...seen].sort((left, right) =>
+      formatTopicLabel(left as Topic).localeCompare(formatTopicLabel(right as Topic))
+    );
+  }, [data?.matches]);
+  const filteredMatches = useMemo(() => {
+    const matches = data?.matches ?? [];
+    if (selectedMatchTopic === "all") {
+      return matches;
+    }
+
+    return matches.filter((match) => match.topic === selectedMatchTopic);
+  }, [data?.matches, selectedMatchTopic]);
+
+  useEffect(() => {
+    if (selectedMatchTopic === "all") {
+      return;
+    }
+
+    if (!matchTopicOptions.includes(selectedMatchTopic)) {
+      setSelectedMatchTopic("all");
+    }
+  }, [matchTopicOptions, selectedMatchTopic]);
+
   const selectedAvatarId = normalizeAvatarId(data?.avatarId);
   useEffect(() => {
     setPreviewAvatarId(selectedAvatarId);
@@ -570,7 +644,7 @@ export function ProfileClient() {
       console.log("[profile] updating avatar", { authUserId, avatarId });
       const { error: updateError } = await supabase
         .from("players")
-        .update({ avatar_id: avatarId } as never)
+        .update({ avatar: avatarId } as never)
         .eq("auth_user_id", authUserId);
 
       if (updateError) {
@@ -911,70 +985,71 @@ export function ProfileClient() {
           {avatarError ? <p className="mt-4 text-sm text-rose-300">{avatarError}</p> : null}
         </div>
 
-        {/* ── Cosmetics ─────────────────────────────────────────── */}
+        {/* Cosmetics */}
         <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-4 sm:p-6">
-          <div className="space-y-1">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1">
               <span className="inline-flex rounded-full border border-violet-400/30 bg-violet-400/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.3em] text-violet-300">
                 Cosmetics
               </span>
+              <h2 className="text-2xl font-bold text-white">Emote Packs</h2>
+              <p className="max-w-2xl text-sm text-slate-400">
+                Pick the quick-send messages you want in matches. Starter is free; premium packs can be bought and equipped here.
+              </p>
             </div>
-            <h2 className="text-2xl font-bold text-white">Cosmetics</h2>
-            <p className="text-sm text-slate-400">
-              Personalise how you look and feel in matches. Equip what you own, and buy premium packs when you want.
-            </p>
+            <span className="w-fit rounded-full border border-amber-400/25 bg-amber-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-200">
+              Stripe Checkout
+            </span>
           </div>
 
-          {/* Emote Pack */}
-          <div className="mt-6">
-            <p className="text-sm uppercase tracking-[0.25em] text-slate-400">Emote Pack</p>
-            <p className="mt-1 text-xs text-slate-500">
-              Quick messages you can send to your opponent during a match.
-            </p>
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {EMOTE_PACKS.map((pack) => {
-                const isSelected = selectedEmotePack === pack.id;
-                const isSaving = savingEmotePack === pack.id;
-                const unlocked = pack.unlockedByDefault || isPackOwned(pack.id as EmotePackId);
-                return (
-                  <button
-                    key={pack.id}
-                    type="button"
-                    onClick={() => void handleEmotePackSelect(pack.id as EmotePackId)}
-                    disabled={loading || Boolean(savingEmotePack) || isSelected || !unlocked}
-                    className={`relative flex flex-col items-start rounded-2xl border px-4 py-4 text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
-                      isSelected
-                        ? "border-sky-400/60 bg-sky-500/10 shadow-[0_0_12px_rgba(56,189,248,0.10)]"
-                        : unlocked
-                          ? "border-slate-700 bg-slate-950/60 hover:border-slate-600 hover:bg-slate-900 active:scale-[0.98]"
-                          : "border-slate-800 bg-slate-950/40 opacity-60 saturate-75"
-                    } ${isSaving ? "opacity-60" : ""}`}
-                  >
-                    <div className="flex w-full items-start justify-between gap-2">
-                      <p className={`text-sm font-semibold ${isSelected ? "text-white" : "text-slate-300"}`}>
-                        {pack.name}
-                      </p>
-                      {isSelected ? (
-                        <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.2em] text-sky-300">
-                          Equipped
-                        </span>
-                      ) : !unlocked ? (
-                        <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">
-                          Locked
-                        </span>
-                      ) : null}
+          <div className="mt-5 grid gap-3 lg:grid-cols-3">
+            {EMOTE_PACKS.map((pack) => {
+              const packId = pack.id as EmotePackId;
+              const selected = selectedEmotePack === packId;
+              const owned = pack.unlockedByDefault || isPackOwned(packId);
+              const locked = !owned;
+              const buying = buyingPack === packId;
+              const saving = savingEmotePack === packId;
+
+              return (
+                <div
+                  key={pack.id}
+                  className={`relative flex min-h-[15rem] flex-col rounded-2xl border p-4 transition ${
+                    selected
+                      ? "border-cyan-300/45 bg-cyan-400/[0.10] shadow-[0_0_26px_rgba(34,211,238,0.10)]"
+                      : locked
+                        ? "border-slate-800 bg-slate-950/45"
+                        : "border-slate-700 bg-slate-950/60"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-white">{pack.name}</p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-slate-400">{pack.description}</p>
                     </div>
-                    <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
-                      {pack.description}
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-1.5">
+                    <span
+                      className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ${
+                        selected
+                          ? "border-cyan-300/40 bg-cyan-400/10 text-cyan-200"
+                          : owned
+                            ? "border-emerald-400/25 bg-emerald-500/10 text-emerald-200"
+                            : "border-amber-400/25 bg-amber-500/10 text-amber-200"
+                      }`}
+                    >
+                      {selected ? "Equipped" : owned ? "Owned" : "Locked"}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500">Preview</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
                       {pack.emoteIds.map((emoteId) => {
                         const emote = EMOTES.find((e) => e.id === emoteId);
                         return emote ? (
                           <span
-                            key={emoteId}
+                            key={`${pack.id}-${emoteId}`}
                             title={emote.label}
-                            className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-300"
+                            className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900/80 px-3 py-1.5 text-xs font-semibold text-slate-200"
                           >
                             <span>{emote.icon}</span>
                             <span>{emote.label}</span>
@@ -982,105 +1057,40 @@ export function ProfileClient() {
                         ) : null;
                       })}
                     </div>
-                  </button>
-                );
-              })}
-            </div>
-            {emotePackError ? (
-              <p className="mt-3 text-sm text-rose-300">{emotePackError}</p>
-            ) : null}
-          </div>
+                  </div>
 
-          {/* Emote Packs (preview + buy + equip live here) */}
-          <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.28em] text-slate-400">Emote Packs</p>
-                <p className="mt-1 text-sm text-slate-300">
-                  Fun quick-send messages used during matches. Preview how they look in-game, then buy or equip.
-                </p>
-              </div>
-              <span className="rounded-full border border-amber-400/25 bg-amber-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-200">
-                Stripe Checkout
-              </span>
-            </div>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {EMOTE_PACKS.filter((p) => p.id !== "starter").map((pack) => {
-                const packId = pack.id as EmotePackId;
-                const owned = isPackOwned(packId);
-                const busy = buyingPack === packId;
-                const selected = selectedEmotePack === packId;
-                return (
-                  <div
-                    key={`pack-preview-${pack.id}`}
-                    className={`rounded-2xl border p-4 ${
-                      selected ? "border-sky-400/35 bg-sky-500/10" : "border-slate-800 bg-slate-950/60"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-bold text-white">{pack.name}</p>
-                        <p className="mt-1 text-[11px] text-slate-400">{pack.description}</p>
-                      </div>
-                      <span
-                        className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.22em] ${
-                          owned
-                            ? "border-emerald-400/25 bg-emerald-500/10 text-emerald-200"
-                            : "border-amber-400/25 bg-amber-500/10 text-amber-200"
-                        }`}
-                      >
-                        {owned ? (selected ? "Equipped" : "Owned") : "Locked"}
-                      </span>
-                    </div>
-
-                    {/* In-match mock preview */}
-                    <div className="mt-3 rounded-2xl border border-slate-800 bg-slate-950/65 p-3">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500">
-                        In-match preview
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {pack.emoteIds.slice(0, 4).map((emoteId) => {
-                          const emote = EMOTES.find((e) => e.id === emoteId);
-                          return emote ? (
-                            <span
-                              key={`preview-${pack.id}-${emoteId}`}
-                              className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1.5 text-xs text-slate-200"
-                            >
-                              <span>{emote.icon}</span>
-                              <span className="font-semibold">{emote.label}</span>
-                            </span>
-                          ) : null;
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  <div className="mt-auto pt-4">
+                    {locked ? (
                       <Button
-                        variant={owned ? "primary" : "primary"}
-                        disabled={loading || busy || owned}
-                        loading={busy}
+                        className="w-full"
+                        disabled={loading || buying}
+                        loading={buying}
                         loadingText="Starting..."
                         onClick={() => void handleBuyEmotePack(packId)}
                       >
-                        {owned ? "Owned" : "Buy"}
+                        Buy
                       </Button>
+                    ) : (
                       <Button
-                        variant="secondary"
-                        disabled={loading || Boolean(savingEmotePack) || !owned || selected}
+                        className="w-full"
+                        variant={selected ? "secondary" : "primary"}
+                        disabled={loading || Boolean(savingEmotePack) || selected}
+                        loading={saving}
+                        loadingText="Equipping..."
                         onClick={() => void handleEmotePackSelect(packId)}
                       >
-                        {selected ? "Equipped" : "Equip now"}
+                        {selected ? "Equipped" : "Equip"}
                       </Button>
-                    </div>
+                    )}
                   </div>
-                );
-              })}
-            </div>
-            {emoteShopError ? <p className="mt-3 text-sm text-rose-300">{emoteShopError}</p> : null}
+                </div>
+              );
+            })}
           </div>
-        </div>
 
+          {emotePackError ? <p className="mt-3 text-sm text-rose-300">{emotePackError}</p> : null}
+          {emoteShopError ? <p className="mt-3 text-sm text-rose-300">{emoteShopError}</p> : null}
+        </div>
         <div className="grid gap-6 lg:grid-cols-[1.1fr_1.6fr]">
           <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-4 sm:p-6">
             <div className="flex items-start justify-between gap-4">
@@ -1088,24 +1098,27 @@ export function ProfileClient() {
                 <p className="text-sm uppercase tracking-[0.25em] text-slate-400">Ratings</p>
                 <h2 className="mt-2 text-2xl font-bold text-white">Current Ratings</h2>
                 <div className="mt-1 flex items-center gap-2">
-                  <RankBadge rating={data?.summary.highestRating ?? 1000} size="md" />
+                  <RankBadge rating={selectedRatingValue} size="md" />
                   <p className="text-sm text-slate-400">
-                    Peak <span className="font-semibold text-white">{data?.summary.highestRating ?? 1000}</span>
+                    Viewing <span className="font-semibold text-white">{selectedRatingValue}</span>
                   </p>
                 </div>
               </div>
 
               <div className="text-right">
-                <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Best Topic</p>
-                <p className="mt-1 text-sm font-semibold text-sky-300">{bestTopicLabel}</p>
+                <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Selected Topic</p>
+                <p className="mt-1 text-sm font-semibold text-sky-300">{selectedRatingLabel}</p>
+                <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Best: {bestTopicLabel}
+                </p>
               </div>
             </div>
 
             {/* Rank progress toward next tier */}
             {(() => {
-              const peakRating = data?.summary.highestRating ?? 1000;
-              const { nextRank, progress, pointsNeeded } = getNextRankInfo(peakRating);
-              const currentRank = getRankFromRating(peakRating);
+              const topicRating = selectedRatingValue;
+              const { nextRank, progress, pointsNeeded } = getNextRankInfo(topicRating);
+              const currentRank = getRankFromRating(topicRating);
               if (!nextRank) {
                 return (
                   <div className="mt-4 flex items-center gap-2.5 rounded-2xl border border-pink-500/20 bg-pink-500/[0.08] px-4 py-3">
@@ -1117,69 +1130,117 @@ export function ProfileClient() {
                 );
               }
               return (
-                <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <RankBadge rank={currentRank} size="sm" />
-                      <span className="text-[10px] text-slate-500">current</span>
+                <div className="mt-4 rounded-3xl border border-slate-800 bg-slate-950/65 px-4 py-4 sm:px-5">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Current Rank</p>
+                      <div className="flex items-center gap-2">
+                        <RankBadge rank={currentRank} size="sm" />
+                        <span className="text-sm font-black tabular-nums text-white">{topicRating}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-slate-500">{pointsNeeded} pts away</span>
-                      <RankBadge rank={nextRank} size="sm" />
+                    <div className="space-y-1 text-left sm:text-right">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Next Rank</p>
+                      <div className="flex items-center gap-2 sm:justify-end">
+                        <span className="text-xs font-semibold tabular-nums text-cyan-200">{pointsNeeded} pts away</span>
+                        <RankBadge rank={nextRank} size="sm" />
+                      </div>
                     </div>
                   </div>
                   {/* Progress track */}
-                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800">
+                  <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-slate-800">
                     <div
                       className={`h-full rounded-full transition-all duration-700 ${nextRank.progressClass}`}
                       style={{ width: `${Math.round(progress * 100)}%` }}
                     />
                   </div>
-                  <p className="mt-1.5 text-right text-[10px] tabular-nums text-slate-500">
-                    {Math.round(progress * 100)}%
-                  </p>
+                  <div className="mt-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    <span>{currentRank.name}</span>
+                    <span className="tabular-nums">{Math.round(progress * 100)}%</span>
+                    <span>{nextRank.name}</span>
+                  </div>
                 </div>
               );
             })()}
 
             <div className="mt-6 space-y-3">
-              {(data?.ratings ?? []).map((entry, index) => {
+              {ratingsList.map((entry, index) => {
                 const isBest = index === 0 && totalMatches > 0;
+                const isSelected = selectedRatingEntry?.topic === entry.topic;
                 const entryRank = getRankFromRating(entry.rating);
 
                 return (
-                  <div
+                  <button
                     key={entry.topic}
-                    className={`flex items-center justify-between rounded-2xl border px-4 py-4 ${
-                      isBest
-                        ? "border-sky-400/30 bg-sky-500/10"
-                        : "border-slate-800 bg-slate-950/70"
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => setSelectedRatingTopic(entry.topic)}
+                    className={`flex w-full items-center justify-between rounded-2xl border px-4 py-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
+                      isSelected
+                        ? "border-cyan-300/45 bg-cyan-400/[0.12] shadow-[0_0_24px_rgba(34,211,238,0.1)]"
+                        : isBest
+                          ? "border-sky-400/30 bg-sky-500/10 hover:border-sky-300/45 hover:bg-sky-500/[0.14]"
+                          : "border-slate-800 bg-slate-950/70 hover:border-slate-600 hover:bg-slate-900/65"
                     }`}
                   >
                     <div>
                       <p className="text-sm font-semibold text-white">
                         {formatTopicLabel(entry.topic as Topic)}
                       </p>
-                      {isBest ? (
-                        <p className="mt-1 text-xs uppercase tracking-[0.2em] text-sky-300">
-                          Highest Rated Topic
-                        </p>
-                      ) : null}
+                      <p
+                        className={`mt-1 text-xs uppercase tracking-[0.2em] ${
+                          isSelected ? "text-cyan-200" : isBest ? "text-sky-300" : "text-slate-500"
+                        }`}
+                      >
+                        {isSelected ? "Viewing Rank Progress" : isBest ? "Highest Rated Topic" : "Select Topic"}
+                      </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <RankBadge rank={entryRank} size="md" />
                       <p className="text-xl font-black text-white">{entry.rating}</p>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
           </div>
 
           <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-4 sm:p-6">
-            <div className="space-y-2">
-              <p className="text-sm uppercase tracking-[0.25em] text-slate-400">Match History</p>
-              <h2 className="text-2xl font-bold text-white">Recent Matches</h2>
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+              <div className="space-y-2">
+                <p className="text-sm uppercase tracking-[0.25em] text-slate-400">Match History</p>
+                <h2 className="text-2xl font-bold text-white">Recent Matches</h2>
+              </div>
+
+              <div className="flex flex-wrap gap-2 xl:justify-end">
+                <button
+                  type="button"
+                  aria-pressed={selectedMatchTopic === "all"}
+                  onClick={() => setSelectedMatchTopic("all")}
+                  className={`rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
+                    selectedMatchTopic === "all"
+                      ? "border-cyan-300/45 bg-cyan-400/15 text-cyan-100"
+                      : "border-slate-700 bg-slate-950/55 text-slate-400 hover:border-slate-500 hover:text-slate-200"
+                  }`}
+                >
+                  All
+                </button>
+                {matchTopicOptions.map((topic) => (
+                  <button
+                    key={topic}
+                    type="button"
+                    aria-pressed={selectedMatchTopic === topic}
+                    onClick={() => setSelectedMatchTopic(topic)}
+                    className={`rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
+                      selectedMatchTopic === topic
+                        ? "border-cyan-300/45 bg-cyan-400/15 text-cyan-100"
+                        : "border-slate-700 bg-slate-950/55 text-slate-400 hover:border-slate-500 hover:text-slate-200"
+                    }`}
+                  >
+                    {formatTopicLabel(topic as Topic)}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="mt-6 overflow-x-auto rounded-3xl border border-slate-800 bg-slate-950/60">
@@ -1194,8 +1255,8 @@ export function ProfileClient() {
 
                 {loading ? (
                   <div className="px-5 py-10 text-center text-slate-300">Loading profile...</div>
-                ) : data && data.matches.length > 0 ? (
-                  data.matches.map((match) => (
+                ) : data && filteredMatches.length > 0 ? (
+                  filteredMatches.map((match) => (
                     <div
                       key={match.id}
                       className="grid grid-cols-[1.1fr_1fr_110px_110px_1fr] gap-3 border-b border-slate-800/80 px-5 py-4 text-sm last:border-b-0"
@@ -1239,7 +1300,9 @@ export function ProfileClient() {
                   ))
                 ) : (
                   <div className="px-5 py-10 text-center text-slate-300">
-                    No completed matches yet. Jump into a game and your history will show up here.
+                    {selectedMatchTopic === "all"
+                      ? "No completed matches yet. Jump into a game and your history will show up here."
+                      : `No ${formatTopicLabel(selectedMatchTopic as Topic)} matches yet.`}
                   </div>
                 )}
               </div>
@@ -1250,3 +1313,5 @@ export function ProfileClient() {
     </PageContent>
   );
 }
+
+

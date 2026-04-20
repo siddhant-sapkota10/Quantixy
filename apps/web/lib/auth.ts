@@ -127,7 +127,7 @@ export async function createPlayerProfileForUser(user: User, displayName: string
 
   const { data: existingPlayer, error: existingPlayerError } = await supabase
     .from("players")
-    .select("id, username, display_name, avatar_id")
+    .select("id, username, display_name, avatar")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
@@ -166,10 +166,10 @@ export async function createPlayerProfileForUser(user: User, displayName: string
         auth_user_id: user.id,
         username: cleanDisplayName,
         display_name: cleanDisplayName,
-        avatar_id: DEFAULT_AVATAR_ID
+        avatar: DEFAULT_AVATAR_ID
       } as never
     )
-    .select("id, username, display_name, avatar_id")
+    .select("id, username, display_name, avatar")
     .single();
 
   if (createError) {
@@ -424,3 +424,5 @@ export function getReadableAuthError(message: string) {
 
   return "We couldn't complete that request right now.";
 }
+
+
