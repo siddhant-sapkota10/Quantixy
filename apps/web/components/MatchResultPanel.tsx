@@ -61,25 +61,25 @@ const RESULT_CONFIG = {
     word: "VICTORY",
     wordClass: "text-emerald-300",
     glow: { textShadow: "0 0 56px rgba(52,211,153,0.6), 0 0 120px rgba(52,211,153,0.2)" },
-    panelBorder: "border-emerald-500/20",
-    winnerCard: "border-emerald-400/50 bg-emerald-950/20 shadow-[0_0_36px_rgba(52,211,153,0.18)]",
-    loserCard: "border-slate-700/30 bg-slate-900/30 opacity-70",
+    panelBorder: "",
+    winnerCard: "",
+    loserCard: "opacity-60",
   },
   loss: {
     word: "DEFEATED",
     wordClass: "text-rose-300",
     glow: { textShadow: "0 0 56px rgba(248,113,113,0.5), 0 0 120px rgba(248,113,113,0.15)" },
-    panelBorder: "border-rose-500/15",
-    winnerCard: "border-rose-400/40 bg-rose-950/15 shadow-[0_0_28px_rgba(248,113,113,0.16)]",
-    loserCard: "border-slate-700/30 bg-slate-900/30 opacity-70",
+    panelBorder: "",
+    winnerCard: "",
+    loserCard: "opacity-60",
   },
   draw: {
     word: "DRAW",
     wordClass: "text-amber-300",
     glow: { textShadow: "0 0 56px rgba(251,191,36,0.5), 0 0 120px rgba(251,191,36,0.15)" },
-    panelBorder: "border-amber-500/15",
-    winnerCard: "border-amber-400/35 bg-amber-950/10",
-    loserCard: "border-amber-400/35 bg-amber-950/10",
+    panelBorder: "",
+    winnerCard: "",
+    loserCard: "",
   },
 } as const;
 
@@ -167,7 +167,7 @@ function AvatarCard({
 
 function StatPill({ icon, label, value }: { icon: string; label: string; value: string }) {
   return (
-    <div className="flex items-center gap-1.5 rounded-full border border-slate-700/60 bg-slate-800/60 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em]">
+    <div className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em]">
       <span>{icon}</span>
       <span className="text-slate-400">{label}</span>
       <span className="text-white">{value}</span>
@@ -224,7 +224,7 @@ export function MatchResultPanel({
       initial={{ opacity: 0, y: 20, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.35, ease: "easeOut" }}
-      className={`relative overflow-hidden rounded-[1.75rem] border p-5 sm:p-7 ${cfg.panelBorder}`}
+      className="relative overflow-hidden rounded-[1.75rem] p-5 sm:p-7"
     >
       {/* Win confetti overlay */}
       {result === "win" && <Confetti />}

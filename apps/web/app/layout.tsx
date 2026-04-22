@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "@/styles/globals.css";
+import { GlobalBackground } from "@/components/global-background";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -20,7 +21,7 @@ export const metadata = {
 export const viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#070b18",
+  themeColor: "#000000",
 };
 
 export default function RootLayout({
@@ -33,7 +34,10 @@ export default function RootLayout({
       <body
         className={`${inter.className} min-h-[100dvh] min-h-screen touch-manipulation antialiased`}
       >
-        {children}
+        <GlobalBackground />
+        <div className="relative z-10 min-h-[100dvh] min-h-screen">
+          {children}
+        </div>
       </body>
     </html>
   );

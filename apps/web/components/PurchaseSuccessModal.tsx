@@ -31,7 +31,7 @@ export function PurchaseSuccessModal({
         >
           {/* Backdrop */}
           <motion.div
-            className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/80"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -40,7 +40,7 @@ export function PurchaseSuccessModal({
 
           {/* Modal */}
           <motion.div
-            className="relative w-full max-w-lg overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950/85 shadow-[0_30px_90px_rgba(0,0,0,0.55)]"
+            className="relative w-full max-w-lg overflow-hidden rounded-[2rem] bg-black"
             initial={{ opacity: 0, y: 24, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 18, scale: 0.98 }}
@@ -79,13 +79,13 @@ export function PurchaseSuccessModal({
 
               {/* Item reveal */}
               <motion.div
-                className="mt-6 rounded-[1.6rem] border border-white/10 bg-slate-950/55 p-4"
+                className="mt-6 rounded-[1.6rem] p-4"
                 initial={{ opacity: 0, y: 14, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 transition={{ delay: 0.12, duration: 0.35, ease: "easeOut" }}
               >
                 <div className="flex items-center gap-4">
-                  <div className="relative h-20 w-20 overflow-hidden rounded-2xl border border-white/10 bg-slate-900/60">
+                  <div className="relative h-20 w-20 overflow-hidden rounded-2xl">
                     {item?.imageSrc ? (
                       <Image
                         src={item.imageSrc}

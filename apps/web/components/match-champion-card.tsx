@@ -153,9 +153,7 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
   if (variant === "battle") {
     return (
       <div
-        className={`relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/78 p-2.5 sm:p-3.5 ${
-          theme.glow
-        } ${showReadyPulse ? theme.readyGlow : ""}`}
+        className={`relative overflow-hidden rounded-[1.5rem] p-2.5 sm:p-3.5`}
       >
         <div
           className="pointer-events-none absolute inset-0 opacity-85"

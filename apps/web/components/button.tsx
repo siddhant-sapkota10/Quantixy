@@ -13,9 +13,9 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary:
-    "border border-cyan-300/35 bg-[linear-gradient(120deg,rgba(0,212,255,0.94),rgba(138,46,255,0.9))] text-slate-950 shadow-[0_0_0_1px_rgba(110,170,255,0.35),0_14px_34px_rgba(7,12,31,0.62),0_0_24px_rgba(0,212,255,0.28)] hover:brightness-110 hover:shadow-[0_0_0_1px_rgba(136,180,255,0.5),0_18px_40px_rgba(7,12,31,0.72),0_0_32px_rgba(138,46,255,0.36)]",
+    "border border-cyan-200/28 bg-[linear-gradient(120deg,rgba(56,199,232,0.86),rgba(124,92,255,0.82))] text-slate-950 shadow-[0_0_0_1px_rgba(136,170,220,0.22),0_12px_30px_rgba(7,12,31,0.46),0_0_18px_rgba(56,199,232,0.16)] hover:brightness-105 hover:shadow-[0_0_0_1px_rgba(150,180,230,0.3),0_16px_36px_rgba(7,12,31,0.54),0_0_24px_rgba(124,92,255,0.2)]",
   secondary:
-    "border border-indigo-300/30 bg-slate-900/65 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_10px_26px_rgba(3,7,20,0.58)] hover:border-cyan-300/55 hover:bg-slate-900/85 hover:shadow-[0_0_22px_rgba(0,212,255,0.2)]",
+    "border border-indigo-200/22 bg-slate-900/45 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_10px_24px_rgba(3,7,20,0.38)] hover:border-cyan-200/36 hover:bg-slate-900/58 hover:shadow-[0_0_18px_rgba(56,199,232,0.12)]",
   ghost:
     "border border-transparent bg-transparent text-slate-300 hover:border-indigo-300/30 hover:bg-indigo-400/10 hover:text-cyan-200"
 };
@@ -31,12 +31,15 @@ export function Button({
   children,
   ...props
 }: ButtonProps) {
-  const shouldFillWidth = className?.includes("w-full");
+  const wrapperWidthClasses = className
+    ?.split(/\s+/)
+    .filter((token) => /^(?:(?:sm|md|lg|xl|2xl):)?w-(?:auto|fit|full|max|min)$/.test(token))
+    .join(" ");
   const isDisabled = Boolean(disabled || loading);
 
   return (
     <motion.span
-      className={cn("inline-flex", shouldFillWidth && "w-full")}
+      className={cn("inline-flex", wrapperWidthClasses)}
       whileHover={isDisabled ? undefined : { scale: 1.015, y: -1 }}
       whileTap={isDisabled ? undefined : { scale: 0.975, y: 0 }}
       transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}

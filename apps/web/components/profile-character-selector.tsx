@@ -16,42 +16,36 @@ type ProfileCharacterSelectorProps = {
   onSelect: (avatarId: AvatarId) => void;
 };
 
-const THEME: Record<AvatarId, { ring: string; glow: string; badge: string; subtleBg: string }> = {
+const THEME: Record<AvatarId, { ring: string; glow: string; badge: string }> = {
   flash: {
     ring: "ring-amber-300/40",
-    glow: "shadow-[0_0_40px_rgba(250,204,21,0.18)]",
+    glow: "shadow-[0_18px_48px_rgba(0,0,0,0.22)]",
     badge: "border-amber-300/30 bg-amber-500/10 text-amber-200",
-    subtleBg: "from-amber-500/15 via-amber-500/5",
   },
   guardian: {
     ring: "ring-sky-300/40",
-    glow: "shadow-[0_0_40px_rgba(56,189,248,0.18)]",
+    glow: "shadow-[0_18px_48px_rgba(0,0,0,0.22)]",
     badge: "border-sky-300/30 bg-sky-500/10 text-sky-200",
-    subtleBg: "from-sky-500/15 via-sky-500/5",
   },
   inferno: {
     ring: "ring-rose-300/35",
-    glow: "shadow-[0_0_40px_rgba(251,113,133,0.18)]",
+    glow: "shadow-[0_18px_48px_rgba(0,0,0,0.22)]",
     badge: "border-rose-300/30 bg-rose-500/10 text-rose-200",
-    subtleBg: "from-rose-500/15 via-rose-500/5",
   },
   shadow: {
     ring: "ring-violet-300/35",
-    glow: "shadow-[0_0_40px_rgba(167,139,250,0.18)]",
+    glow: "shadow-[0_18px_48px_rgba(0,0,0,0.22)]",
     badge: "border-violet-300/30 bg-violet-500/10 text-violet-200",
-    subtleBg: "from-violet-500/15 via-violet-500/5",
   },
   architect: {
     ring: "ring-amber-300/40",
-    glow: "shadow-[0_0_44px_rgba(251,191,36,0.20)]",
+    glow: "shadow-[0_18px_48px_rgba(0,0,0,0.22)]",
     badge: "border-amber-300/30 bg-amber-500/10 text-amber-200",
-    subtleBg: "from-amber-500/15 via-amber-500/5",
   },
   titan: {
     ring: "ring-amber-300/45",
-    glow: "shadow-[0_0_46px_rgba(245,158,11,0.22)]",
+    glow: "shadow-[0_18px_48px_rgba(0,0,0,0.22)]",
     badge: "border-amber-300/35 bg-amber-500/10 text-amber-200",
-    subtleBg: "from-amber-500/15 via-amber-500/5",
   },
 };
 
@@ -78,7 +72,7 @@ export function ProfileCharacterSelector({
 
   return (
     <div
-      className="min-w-0 rounded-3xl border border-slate-800 bg-slate-900/70 p-4 sm:p-6"
+      className="q-card-strong min-w-0 rounded-3xl p-4 sm:p-6"
       onMouseLeave={() => {
         onPreviewChange(selectedId);
       }}
@@ -90,7 +84,7 @@ export function ProfileCharacterSelector({
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-2">
-          <span className="inline-flex rounded-full border border-white/10 bg-slate-950/40 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-300">
+          <span className="inline-flex rounded-full border border-white/[0.07] bg-slate-950/35 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-300/80">
             Character Loadout
           </span>
           <p className="text-sm text-slate-400">
@@ -106,10 +100,8 @@ export function ProfileCharacterSelector({
       <div className="mt-5 grid gap-5 lg:grid-cols-[1.35fr_0.65fr] lg:items-stretch">
         {/* Selected / preview hero card */}
         <div
-          className={`relative overflow-hidden rounded-[1.8rem] border border-slate-800 bg-gradient-to-b ${theme.subtleBg} to-slate-950/60 p-4 sm:p-5 ${theme.glow}`}
+          className={`q-card relative overflow-hidden rounded-[1.8rem] p-4 sm:p-5 ${theme.glow}`}
         >
-          <div className="pointer-events-none absolute inset-0 opacity-60 [background:radial-gradient(600px_circle_at_20%_15%,rgba(255,255,255,0.08),transparent_40%),radial-gradient(520px_circle_at_70%_10%,rgba(255,255,255,0.05),transparent_46%)]" />
-
           <div className="relative grid min-w-0 gap-4 md:grid-cols-[minmax(0,280px)_minmax(0,1fr)] md:items-start">
             <div
               className={`relative mx-auto w-full max-w-[min(100%,320px)] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/50 ring-1 ${theme.ring} aspect-[4/5] md:mx-0 md:aspect-[3/4] md:max-h-[min(70vh,426px)] md:max-w-none md:min-h-[280px]`}
@@ -150,7 +142,7 @@ export function ProfileCharacterSelector({
             <div className="relative min-w-0 space-y-4 md:flex md:max-h-[min(70vh,426px)] md:flex-col md:space-y-3">
               <div className="min-w-0 space-y-4 md:flex-1 md:overflow-y-auto md:pr-1 [scrollbar-width:thin]">
                 {previewAvatar.premiumTagline ? (
-                  <div className="rounded-2xl border border-amber-400/15 bg-amber-500/[0.06] px-4 py-3">
+                  <div className="rounded-2xl border border-amber-400/[0.12] bg-amber-500/[0.05] px-4 py-3 shadow-[inset_0_1px_0_rgba(251,191,36,0.06)]">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-amber-200/90">
                         Premium
@@ -166,9 +158,9 @@ export function ProfileCharacterSelector({
                   </div>
                 ) : null}
 
-                <div className="rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-4">
+                <div className="q-card-subtle rounded-2xl px-4 py-4">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-400">Overview</p>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-400/65">Overview</p>
                     <span className="rounded-full border border-white/10 bg-slate-950/50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-300">
                       {previewAvatar.roleLabel ?? previewAvatar.role}
                     </span>
@@ -183,9 +175,9 @@ export function ProfileCharacterSelector({
                   </p>
                 </div>
 
-                <div className="rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-4">
+                <div className="q-card-subtle rounded-2xl px-4 py-4">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-400">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-400/65">
                       Ultimate (included)
                     </p>
                     <span className="rounded-full border border-white/10 bg-slate-950/50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-300">
@@ -200,7 +192,7 @@ export function ProfileCharacterSelector({
               </div>
 
               {/* Contextual CTA (pinned so Buy is always visible) */}
-              <div className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-4 md:mt-auto">
+              <div className="q-card-subtle rounded-2xl px-4 py-4 md:mt-auto">
                 {isPremiumLocked ? (
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -248,9 +240,9 @@ export function ProfileCharacterSelector({
 
         {/* Compact selector */}
         <div
-          className="rounded-[1.8rem] border border-slate-800 bg-slate-950/40 p-3 sm:p-4"
+          className="q-card rounded-[1.8rem] p-3 sm:p-4"
         >
-          <p className="px-2 pb-2 text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">
+          <p className="px-2 pb-2 text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500/70">
             Select Character
           </p>
 
@@ -281,15 +273,13 @@ export function ProfileCharacterSelector({
                   }}
                   className={`group relative flex min-h-[74px] w-full items-center gap-3 overflow-hidden rounded-2xl border px-3 py-3 text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
                     isSelected
-                      ? `border-white/15 bg-slate-900/70 ring-1 ${cardTheme.ring}`
+                      ? `border-white/[0.12] bg-slate-900/50 shadow-[0_0_0_1px_rgba(255,255,255,0.06),inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ${cardTheme.ring}`
                       : isPreview
-                        ? "border-slate-600/80 bg-slate-900/55"
-                        : "border-slate-800 bg-slate-950/55 hover:border-slate-600 hover:bg-slate-900/50"
+                        ? "border-white/[0.10] bg-slate-900/38"
+                        : "border-slate-500/20 bg-slate-950/48 hover:border-slate-400/35 hover:bg-slate-900/62"
                   } ${disabled ? "cursor-not-allowed opacity-60" : "active:scale-[0.99]"}`}
                 >
-                  <div className={`pointer-events-none absolute inset-0 opacity-70 bg-gradient-to-r ${cardTheme.subtleBg} to-transparent`} />
-
-                  <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-950/60">
+                  <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-white/[0.07] bg-slate-950/50">
                     <Image
                       src={getAvatarImageSrc(avatar.id)}
                       alt={`${avatar.name} avatar`}

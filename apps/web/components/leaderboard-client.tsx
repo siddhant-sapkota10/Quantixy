@@ -142,7 +142,7 @@ export function LeaderboardClient() {
         </div>
 
         <div className="neon-panel-soft overflow-x-auto rounded-3xl">
-          <div className="grid min-w-[300px] grid-cols-[44px_1fr_68px] gap-2 border-b border-indigo-300/20 px-3 py-3 text-xs font-semibold uppercase tracking-[0.25em] text-textSecondary sm:grid-cols-[68px_1fr_96px_1fr] sm:gap-4 sm:px-6 sm:py-4">
+          <div className="grid min-w-[300px] grid-cols-[44px_1fr_68px] gap-2 border-b border-white/[0.06] px-3 py-3 text-xs font-semibold uppercase tracking-[0.25em] text-textSecondary/65 sm:grid-cols-[68px_1fr_96px_1fr] sm:gap-4 sm:px-6 sm:py-4">
             <span>#</span>
             <span>Player</span>
             <span>Rating</span>
@@ -164,11 +164,11 @@ export function LeaderboardClient() {
                 return (
                   <div
                     key={entry.playerId}
-                    className={`grid min-w-[300px] grid-cols-[44px_1fr_68px] items-center gap-2 border-b border-indigo-300/15 px-3 py-3 text-sm last:border-b-0 sm:grid-cols-[68px_1fr_96px_1fr] sm:gap-4 sm:px-6 sm:py-4 ${
+                    className={`q-row-hover grid min-w-[300px] grid-cols-[44px_1fr_68px] items-center gap-2 border-b border-white/[0.045] px-3 py-3 text-sm last:border-b-0 sm:grid-cols-[68px_1fr_96px_1fr] sm:gap-4 sm:px-6 sm:py-4 ${
                       isCurrentUser
-                        ? "bg-cyan-400/[0.09]"
+                        ? "bg-cyan-400/[0.06]"
                         : isTopThree
-                          ? "bg-indigo-400/[0.08]"
+                          ? "bg-indigo-400/[0.055]"
                           : ""
                     }`}
                   >
@@ -207,7 +207,7 @@ export function LeaderboardClient() {
         </div>
 
         {showMyRankCard && myRank ? (
-          <div className="rounded-2xl border border-cyan-300/28 bg-[linear-gradient(150deg,rgba(0,212,255,0.14),rgba(138,46,255,0.12))] px-4 py-4 sm:px-5">
+          <div className="rounded-2xl px-4 py-4 sm:px-5">
             <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-cyan-200">Your Standing</p>
             <div className="mt-2 flex items-center gap-3">
               <span className="text-2xl font-black tabular-nums text-cyan-100">#{myRank.rank}</span>

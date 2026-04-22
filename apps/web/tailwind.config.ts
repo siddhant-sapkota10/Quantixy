@@ -9,27 +9,22 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "#0a0f1c",
-        surface: "#0f1630",
-        surfaceElevated: "#141e3d",
-        accent: "#00d4ff",
-        accentSoft: "#55e9ff",
-        accentPurple: "#8a2eff",
-        textPrimary: "#f5f9ff",
-        textSecondary: "#8fa4c5"
+        background: "#000000",
+        surface: "#000000",
+        surfaceElevated: "#000000",
+        accent: "#38c7e8",
+        accentSoft: "#7dd8ee",
+        accentPurple: "#7c5cff",
+        textPrimary: "#eef5ff",
+        textSecondary: "#9aa9bf"
       },
       boxShadow: {
-        glow: "0 0 0 1px rgba(76,111,255,0.28), 0 20px 60px rgba(6,10,24,0.72), 0 0 28px rgba(0,212,255,0.22)",
-        "glow-sm": "0 0 0 1px rgba(90,125,255,0.24), 0 8px 24px rgba(4,8,20,0.55)",
-        "glow-lg": "0 0 0 1px rgba(101,135,255,0.4), 0 28px 80px rgba(4,8,20,0.78), 0 0 40px rgba(138,46,255,0.25)"
+        glow: "0 0 0 1px rgba(118,145,210,0.18), 0 20px 58px rgba(4,8,20,0.56), 0 0 22px rgba(56,199,232,0.12)",
+        "glow-sm": "0 0 0 1px rgba(118,145,210,0.16), 0 8px 24px rgba(4,8,20,0.42)",
+        "glow-lg": "0 0 0 1px rgba(118,145,210,0.22), 0 28px 78px rgba(4,8,20,0.62), 0 0 32px rgba(124,92,255,0.14)"
       },
       backgroundImage: {
-        "hero-grid":
-          "radial-gradient(circle at 20% -10%, rgba(0,212,255,0.24), transparent 28%), radial-gradient(circle at 80% -10%, rgba(138,46,255,0.22), transparent 26%), linear-gradient(rgba(100,126,190,0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(100,126,190,0.12) 1px, transparent 1px)",
-        "neon-line": "linear-gradient(120deg, rgba(0,212,255,0.85), rgba(138,46,255,0.85))"
-      },
-      backgroundSize: {
-        "hero-grid": "auto, auto, 44px 44px, 44px 44px"
+        "neon-line": "linear-gradient(120deg, rgba(56,199,232,0.78), rgba(124,92,255,0.76))"
       },
       borderRadius: {
         panel: "1.75rem"

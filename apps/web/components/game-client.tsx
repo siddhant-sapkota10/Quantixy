@@ -3253,8 +3253,8 @@ export function GameClient({
     tone: "you" | "opponent";
     onUse?: (id: PowerUpId) => void;
   }) => (
-    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-2">
-      <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+    <div className="q-card-subtle rounded-xl p-2">
+      <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400/70">
         Powerups
       </div>
       <div className="grid grid-cols-2 gap-2">
@@ -3279,7 +3279,7 @@ export function GameClient({
                   ? readyClass
                   : used
                   ? "border-indigo-300/20 bg-slate-900/70 text-textSecondary"
-                  : "border-slate-800 bg-slate-950/70 text-slate-400"
+                  : "border-slate-500/20 bg-slate-950/48 text-slate-400/70"
               } ${clickable ? "active:scale-[0.975]" : "cursor-default opacity-70 saturate-50"} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60`}
             >
               <p className={`truncate font-semibold ${used ? "line-through decoration-slate-600" : ""}`}>
@@ -3398,7 +3398,7 @@ export function GameClient({
   // Dedicated in-match layout (competitive HUD + sticky action bar).
   if (isActiveGameplay) {
     return (
-      <section className="fixed inset-0 z-10 bg-slate-950 text-white">
+      <section className="fixed inset-0 z-10 bg-black text-white">
         {/* Overlays */}
         <GameOverOverlay result={null} />
         <UltimateActivationOverlay cue={ultimateCue} />
@@ -3435,8 +3435,8 @@ export function GameClient({
 
         <div className="flex h-[100dvh] flex-col overflow-hidden">
           {/* Top HUD */}
-          <div className="shrink-0 border-b border-white/10 bg-slate-950/90 px-3 pb-2 pt-2.5 backdrop-blur sm:px-5 sm:pb-2.5 sm:pt-3">
-            <div className="relative rounded-[1.55rem] border border-white/10 bg-slate-950/72 p-2 shadow-[0_18px_44px_rgba(2,6,23,0.5)] sm:p-3">
+          <div className="shrink-0 px-3 pb-2 pt-2.5 sm:px-5 sm:pb-2.5 sm:pt-3">
+            <div className="q-card relative rounded-[1.55rem] p-2 sm:p-3">
               <div
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-0 rounded-[1.55rem] opacity-70"
@@ -3487,14 +3487,14 @@ export function GameClient({
                 />
 
                 <div className="flex min-h-[3.1rem] items-center justify-center md:min-h-full">
-                  <div className="w-full rounded-2xl border border-slate-800 bg-slate-950/88 px-2.5 py-1.5 text-center sm:px-3 sm:py-2">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-textSecondary">Duel</p>
+                  <div className="q-card-subtle w-full rounded-2xl px-2.5 py-1.5 text-center sm:px-3 sm:py-2">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-textSecondary/70">Duel</p>
                     <div className="mt-1 flex items-baseline justify-center gap-2">
                       <span className="text-xl font-black tabular-nums text-sky-200 sm:text-3xl">{scores.you}</span>
-                      <span className="text-[10px] font-black uppercase tracking-[0.34em] text-textSecondary sm:text-xs">VS</span>
+                      <span className="text-[10px] font-black uppercase tracking-[0.34em] text-textSecondary/60 sm:text-xs">VS</span>
                       <span className="text-xl font-black tabular-nums text-rose-200 sm:text-3xl">{scores.opponent}</span>
                     </div>
-                    <div className="mt-1 inline-flex rounded-full border border-slate-800 bg-slate-900/85 px-3 py-1 text-[10px] font-black tracking-[0.24em] text-sky-200 sm:mt-1.5 sm:text-xs">
+                    <div className="mt-1 inline-flex rounded-full border border-sky-300/18 bg-sky-500/10 px-3 py-1 text-[10px] font-black tracking-[0.24em] text-sky-200 sm:mt-1.5 sm:text-xs">
                       {timerLabel}
                     </div>
                   </div>
@@ -3545,8 +3545,8 @@ export function GameClient({
           {/* Middle: Question zone */}
           <div className="flex min-h-0 flex-1 flex-col items-stretch justify-start px-3 py-3 sm:px-5 sm:py-4 md:justify-center md:py-10">
             <motion.div animate={animState.questionShakeControls} className="mx-auto w-full max-w-3xl md:max-w-4xl lg:max-w-5xl">
-              <div className="relative rounded-[1.5rem] border border-slate-800 bg-slate-900/70 p-3 text-center sm:p-6 md:p-8">
-                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-textSecondary">
+              <div className="q-card-strong relative rounded-[1.5rem] p-3 text-center sm:p-6 md:p-8">
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-textSecondary/70">
                   Question
                 </p>
                 <div className="mt-3 flex items-center justify-center">
@@ -3578,7 +3578,7 @@ export function GameClient({
           </div>
 
           {/* Bottom: Sticky action bar */}
-          <div className="shrink-0 border-t border-white/10 bg-slate-950/90 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 backdrop-blur sm:px-5">
+          <div className="shrink-0 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 sm:px-5">
             <div className="mx-auto w-full max-w-3xl">
               <div className="mb-2 flex items-center justify-start sm:justify-center">
                 <EmoteBar
@@ -3675,8 +3675,8 @@ export function GameClient({
                         feedback.youPowerUpAvailable && !feedback.youPowerUpUsed
                           ? "border-sky-300/35 bg-sky-500/10 text-sky-100 hover:border-sky-300/55 active:scale-[0.99]"
                           : feedback.youPowerUpUsed
-                            ? "border-slate-800 bg-slate-950/50 text-slate-500"
-                            : "border-slate-800 bg-slate-950/40 text-slate-500"
+                            ? "border-white/[0.05] bg-slate-950/38 text-slate-500"
+                            : "border-white/[0.05] bg-slate-950/30 text-slate-500"
                       }`}
                       aria-label="Power-up"
                     >
@@ -3799,7 +3799,7 @@ export function GameClient({
         {animState.streakBrokenVisible && (
           <motion.div
             key="streak-broken"
-            className="pointer-events-none absolute left-1/2 top-6 z-20 -translate-x-1/2 whitespace-nowrap rounded-full border border-rose-500/30 bg-rose-950/90 px-4 py-2 text-sm font-bold text-rose-300"
+            className="pointer-events-none absolute left-1/2 top-6 z-20 -translate-x-1/2 whitespace-nowrap rounded-full px-4 py-2 text-sm font-bold text-rose-300"
             initial={{ opacity: 0, y: -10, scale: 0.88 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.94 }}
@@ -3888,8 +3888,8 @@ export function GameClient({
                 </span>
               </div>
 
-              <div className="rounded-2xl border border-slate-800 bg-slate-950/55 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-textSecondary">Matchmaking</p>
+              <div className="q-card-subtle rounded-2xl p-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-textSecondary/70">Matchmaking</p>
                 <p className="mt-2 text-sm text-slate-200">Searching for an opponent…</p>
                 <motion.p
                   className="mt-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400"
@@ -3926,12 +3926,12 @@ export function GameClient({
               animate={{ opacity: [0.55, 0.85, 0.55] }}
               transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
             >
-              <div className="relative w-full min-h-[11.5rem] rounded-2xl border border-slate-800 bg-slate-950/80 p-3 text-center sm:min-h-[12.25rem] sm:p-4">
-                <p className="truncate px-1 text-xs uppercase tracking-[0.2em] text-slate-400">
+              <div className="q-card-subtle relative w-full min-h-[11.5rem] rounded-2xl p-3 text-center sm:min-h-[12.25rem] sm:p-4">
+                <p className="truncate px-1 text-xs uppercase tracking-[0.2em] text-slate-400/70">
                   Searching for opponent…
                 </p>
                 <div className="mt-3 flex items-center justify-center">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-700 bg-slate-900/60 text-3xl text-slate-200 shadow-[0_0_24px_rgba(56,189,248,0.12)]">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-500/20 bg-slate-950/55 text-3xl text-slate-200">
                     ?
                   </div>
                 </div>
@@ -3951,8 +3951,8 @@ export function GameClient({
               </div>
 
               <div className="min-h-[2.5rem]" aria-hidden="true" />
-              <div className="rounded-2xl border border-slate-800 bg-slate-950/55 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-textSecondary">Opponent</p>
+              <div className="q-card-subtle rounded-2xl p-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-textSecondary/70">Opponent</p>
                 <p className="mt-2 text-sm text-slate-300">Searching…</p>
               </div>
             </motion.div>
@@ -4212,10 +4212,10 @@ export function GameClient({
         )}
 
         {isRoomLobby && roomLobby ? (
-          <div className="rounded-[1.75rem] border border-slate-700 bg-slate-900/70 p-4 sm:p-6">
+          <div className="q-card-strong rounded-[1.75rem] p-4 sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-[0.24em] text-slate-400">Room Code</p>
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-400/70">Room Code</p>
                 <p className="mt-1 font-mono text-2xl font-black tracking-[0.28em] text-sky-200 sm:text-3xl">
                   {formatRoomCode(roomLobby.roomCode)}
                 </p>
@@ -4236,7 +4236,7 @@ export function GameClient({
               <p>Difficulty: <span className="font-semibold text-white">{roomLobby.difficulty}</span></p>
             </div>
 
-            <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2.5 text-sm text-slate-300">
+            <div className="q-card-subtle mt-4 rounded-xl px-3 py-2.5 text-sm text-slate-300">
               <span
                 className={`mr-2 inline-block h-2 w-2 rounded-full ${
                   roomReady ? "bg-emerald-400" : "bg-amber-400 animate-pulse"
@@ -4247,7 +4247,7 @@ export function GameClient({
 
             <div className="mt-4 space-y-2">
               {roomLobby.players.map((player) => (
-                <div key={player.socketId} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2.5">
+                <div key={player.socketId} className="q-card-subtle flex items-center justify-between rounded-xl px-3 py-2.5">
                   <p className="flex items-center gap-2 text-sm text-slate-100">
                     <span>{getAvatar(player.avatar).emoji}</span>
                     <span>{player.name}</span>
@@ -4359,7 +4359,7 @@ export function GameClient({
                     className={`absolute right-3 top-3 rounded-full border px-2 py-1 text-sm font-black tracking-[0.15em] sm:right-5 sm:top-5 sm:px-4 sm:py-2 sm:text-lg sm:tracking-[0.2em] ${
                       showFinalPhase
                         ? "border-rose-400/70 bg-rose-950/70 text-rose-100 shadow-[0_0_18px_rgba(248,113,113,0.35)]"
-                        : "border-indigo-300/30 bg-slate-950/82 text-cyan-100"
+                        : "border-indigo-300/20 bg-slate-950/30 text-cyan-100"
                     }`}
                     animate={
                       showFinalPhase

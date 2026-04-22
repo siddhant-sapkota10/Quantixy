@@ -286,8 +286,8 @@ async function loadProfileFromSupabase(authUserId: string): Promise<ProfileRespo
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/70 px-4 py-4">
-      <p className="text-xs uppercase tracking-[0.25em] text-slate-400">{label}</p>
+    <div className="q-card rounded-2xl px-4 py-4">
+      <p className="text-xs uppercase tracking-[0.25em] text-slate-400/70">{label}</p>
       <p className="mt-3 text-2xl font-black text-white">{value}</p>
     </div>
   );
@@ -858,7 +858,7 @@ export function ProfileClient() {
   };
 
   return (
-    <PageContent className="w-full min-w-0 space-y-6 sm:space-y-8 md:space-y-10">
+    <PageContent size="xl" variant="plain" className="w-full min-w-0 space-y-6 sm:space-y-8 md:space-y-10">
       <PurchaseSuccessModal
         open={purchaseModalOpen}
         item={purchaseItem}
@@ -911,13 +911,13 @@ export function ProfileClient() {
         </div>
 
         {error ? (
-          <div className="rounded-3xl border border-rose-500/30 bg-rose-500/10 px-6 py-10 text-center text-rose-200">
+          <div className="q-card rounded-3xl px-6 py-10 text-center text-rose-200">
             {error}
           </div>
         ) : null}
 
         {warning ? (
-          <div className="rounded-3xl border border-amber-400/20 bg-amber-400/10 px-6 py-5 text-center text-amber-100">
+          <div className="q-card rounded-3xl px-6 py-5 text-center text-amber-100">
             {warning}
           </div>
         ) : null}
@@ -929,10 +929,10 @@ export function ProfileClient() {
           <StatCard label="Win Rate" value={loading ? "..." : `${data?.summary.winRate ?? 0}%`} />
         </div>
 
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-4 sm:p-6">
+        <div className="q-card-strong rounded-3xl p-4 sm:p-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="text-sm uppercase tracking-[0.25em] text-slate-400">Display Name</p>
+              <p className="text-sm uppercase tracking-[0.25em] text-slate-400/70">Display Name</p>
               <h2 className="mt-2 text-2xl font-bold text-white">{currentDisplayName}</h2>
               <p className="mt-1 text-sm text-slate-300">
                 This is the name shown in matches, your profile, and the leaderboard.
@@ -950,7 +950,7 @@ export function ProfileClient() {
                   setDisplayNameError(null);
                 }}
                 placeholder="Update your display name"
-                className="w-full rounded-2xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-slate-100 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/35"
+                className="w-full neon-input rounded-2xl px-4 py-3 text-slate-100"
               />
               <Button
                 className="w-full"
@@ -987,7 +987,7 @@ export function ProfileClient() {
         </div>
 
         {/* Cosmetics */}
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-4 sm:p-6">
+        <div className="q-card-strong rounded-3xl p-4 sm:p-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-1">
               <span className="inline-flex rounded-full border border-violet-400/30 bg-violet-400/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.3em] text-violet-300">
@@ -1017,10 +1017,10 @@ export function ProfileClient() {
                   key={pack.id}
                   className={`relative flex min-h-[15rem] flex-col rounded-2xl border p-4 transition ${
                     selected
-                      ? "border-cyan-300/45 bg-cyan-400/[0.10] shadow-[0_0_26px_rgba(34,211,238,0.10)]"
+                      ? "border-cyan-300/35 bg-cyan-400/[0.08] shadow-[0_0_28px_rgba(34,211,238,0.10),inset_0_1px_0_rgba(34,211,238,0.08)]"
                       : locked
-                        ? "border-slate-800 bg-slate-950/45"
-                        : "border-slate-700 bg-slate-950/60"
+                        ? "q-card-subtle"
+                        : "q-card-subtle"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -1041,8 +1041,8 @@ export function ProfileClient() {
                     </span>
                   </div>
 
-                  <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500">Preview</p>
+                  <div className="q-card-subtle mt-4 rounded-2xl p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500/70">Preview</p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {pack.emoteIds.map((emoteId) => {
                         const emote = EMOTES.find((e) => e.id === emoteId);
@@ -1050,7 +1050,7 @@ export function ProfileClient() {
                           <span
                             key={`${pack.id}-${emoteId}`}
                             title={emote.label}
-                            className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900/80 px-3 py-1.5 text-xs font-semibold text-slate-200"
+                            className="inline-flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-slate-200/85"
                           >
                             <span>{emote.icon}</span>
                             <span>{emote.label}</span>
@@ -1093,10 +1093,10 @@ export function ProfileClient() {
           {emoteShopError ? <p className="mt-3 text-sm text-rose-300">{emoteShopError}</p> : null}
         </div>
         <div className="grid gap-6 lg:grid-cols-[1.1fr_1.6fr]">
-          <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-4 sm:p-6">
+          <div className="q-card-strong rounded-3xl p-4 sm:p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm uppercase tracking-[0.25em] text-slate-400">Ratings</p>
+                <p className="text-sm uppercase tracking-[0.25em] text-slate-400/70">Ratings</p>
                 <h2 className="mt-2 text-2xl font-bold text-white">Current Ratings</h2>
                 <div className="mt-1 flex items-center gap-2">
                   <RankBadge rating={selectedRatingValue} size="md" />
@@ -1122,7 +1122,7 @@ export function ProfileClient() {
               const currentRank = getRankFromRating(topicRating);
               if (!nextRank) {
                 return (
-                  <div className="mt-4 flex items-center gap-2.5 rounded-2xl border border-pink-500/20 bg-pink-500/[0.08] px-4 py-3">
+                  <div className="q-card-subtle mt-4 flex items-center gap-2.5 rounded-2xl px-4 py-3">
                     <RankBadge rank={currentRank} size="md" />
                     <p className="text-xs font-semibold text-pink-200">
                       Max rank — you&apos;ve reached the top.
@@ -1131,7 +1131,7 @@ export function ProfileClient() {
                 );
               }
               return (
-                <div className="mt-4 rounded-3xl border border-slate-800 bg-slate-950/65 px-4 py-4 sm:px-5">
+                <div className="q-card-subtle mt-4 rounded-3xl px-4 py-4 sm:px-5">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="space-y-1">
                       <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Current Rank</p>
@@ -1149,7 +1149,7 @@ export function ProfileClient() {
                     </div>
                   </div>
                   {/* Progress track */}
-                  <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-slate-800">
+                  <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-slate-950/70 shadow-[inset_0_1px_3px_rgba(0,0,0,0.5)]">
                     <div
                       className={`h-full rounded-full transition-all duration-700 ${nextRank.progressClass}`}
                       style={{ width: `${Math.round(progress * 100)}%` }}
@@ -1178,10 +1178,10 @@ export function ProfileClient() {
                     onClick={() => setSelectedRatingTopic(entry.topic)}
                     className={`flex w-full items-center justify-between rounded-2xl border px-4 py-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
                       isSelected
-                        ? "border-cyan-300/45 bg-cyan-400/[0.12] shadow-[0_0_24px_rgba(34,211,238,0.1)]"
+                        ? "border-cyan-300/35 bg-cyan-400/[0.09] shadow-[0_0_24px_rgba(34,211,238,0.09),inset_0_1px_0_rgba(34,211,238,0.07)]"
                         : isBest
-                          ? "border-sky-400/30 bg-sky-500/10 hover:border-sky-300/45 hover:bg-sky-500/[0.14]"
-                          : "border-slate-800 bg-slate-950/70 hover:border-slate-600 hover:bg-slate-900/65"
+                          ? "border-sky-400/25 bg-sky-500/[0.07] hover:border-sky-300/35 hover:bg-sky-500/[0.10]"
+                          : "border-slate-500/20 bg-slate-950/45 hover:border-slate-400/35 hover:bg-slate-900/60"
                     }`}
                   >
                     <div>
@@ -1206,10 +1206,10 @@ export function ProfileClient() {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-4 sm:p-6">
+          <div className="q-card-strong rounded-3xl p-4 sm:p-6">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div className="space-y-2">
-                <p className="text-sm uppercase tracking-[0.25em] text-slate-400">Match History</p>
+                <p className="text-sm uppercase tracking-[0.25em] text-slate-400/70">Match History</p>
                 <h2 className="text-2xl font-bold text-white">Recent Matches</h2>
               </div>
 
@@ -1220,8 +1220,8 @@ export function ProfileClient() {
                   onClick={() => setSelectedMatchTopic("all")}
                   className={`rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
                     selectedMatchTopic === "all"
-                      ? "border-cyan-300/45 bg-cyan-400/15 text-cyan-100"
-                      : "border-slate-700 bg-slate-950/55 text-slate-400 hover:border-slate-500 hover:text-slate-200"
+                      ? "border-cyan-300/35 bg-cyan-400/[0.10] text-cyan-100"
+                      : "border-slate-500/20 bg-slate-950/45 text-slate-400/80 hover:border-slate-400/35 hover:text-slate-200"
                   }`}
                 >
                   All
@@ -1235,7 +1235,7 @@ export function ProfileClient() {
                     className={`rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
                       selectedMatchTopic === topic
                         ? "border-cyan-300/45 bg-cyan-400/15 text-cyan-100"
-                        : "border-slate-700 bg-slate-950/55 text-slate-400 hover:border-slate-500 hover:text-slate-200"
+                        : "border-slate-500/20 bg-slate-950/45 text-slate-400 hover:border-slate-400/35 hover:text-slate-200"
                     }`}
                   >
                     {formatTopicLabel(topic as Topic)}
@@ -1244,9 +1244,9 @@ export function ProfileClient() {
               </div>
             </div>
 
-            <div className="mt-6 overflow-x-auto rounded-3xl border border-slate-800 bg-slate-950/60">
+            <div className="q-card-subtle mt-6 overflow-x-auto rounded-3xl">
               <div className="min-w-[700px]">
-                <div className="grid grid-cols-[1.1fr_1fr_110px_110px_1fr] gap-3 border-b border-slate-800 px-5 py-4 text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+                <div className="grid grid-cols-[1.1fr_1fr_110px_110px_1fr] gap-3 border-b border-white/[0.06] px-5 py-4 text-xs font-semibold uppercase tracking-[0.22em] text-slate-400/60">
                   <span>Topic</span>
                   <span>Opponent</span>
                   <span>Score</span>
@@ -1260,7 +1260,7 @@ export function ProfileClient() {
                   filteredMatches.map((match) => (
                     <div
                       key={match.id}
-                      className="grid grid-cols-[1.1fr_1fr_110px_110px_1fr] gap-3 border-b border-slate-800/80 px-5 py-4 text-sm last:border-b-0"
+                      className="q-row-hover grid grid-cols-[1.1fr_1fr_110px_110px_1fr] gap-3 border-b border-white/[0.045] px-5 py-4 text-sm last:border-b-0"
                     >
                       <div>
                         <p className="font-semibold text-white">
@@ -1314,5 +1314,3 @@ export function ProfileClient() {
     </PageContent>
   );
 }
-
-

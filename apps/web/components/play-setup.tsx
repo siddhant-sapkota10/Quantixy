@@ -404,7 +404,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
                     className={`relative flex flex-col items-center gap-2 rounded-2xl border p-3 text-center transition-colors duration-150 sm:p-3.5 ${
                       isSelected
                         ? `${cfg.border} ${cfg.bg} ${cfg.text}`
-                        : "border-indigo-400/22 bg-slate-900/55 text-slate-400 hover:border-indigo-300/45 hover:text-slate-200"
+                        : "border-slate-500/20 bg-slate-950/48 text-slate-400 hover:border-slate-400/35 hover:bg-slate-900/62 hover:text-slate-200"
                     } ${startPending ? "cursor-not-allowed opacity-55" : "cursor-pointer"}`}
                   >
                     {cfg.icon}
@@ -446,7 +446,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
                     className={`relative flex flex-col items-center gap-3 rounded-2xl border p-4 text-center transition-colors duration-150 sm:p-5 ${
                       isSelected
                         ? `${cfg.border} ${cfg.bg} ${cfg.glow}`
-                        : "border-indigo-400/22 bg-slate-900/55 hover:border-indigo-300/45"
+                        : "border-slate-500/20 bg-slate-950/48 hover:border-slate-400/35 hover:bg-slate-900/62"
                     } ${startPending ? "cursor-not-allowed opacity-55" : "cursor-pointer"}`}
                   >
                     <span className={isSelected ? cfg.text : "text-slate-500"}>

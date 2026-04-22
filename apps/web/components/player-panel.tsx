@@ -348,9 +348,9 @@ export function PlayerPanel({
               : "0 0 0 rgba(56, 189, 248, 0)"
           }}
           transition={{ duration: 0.45, ease: "easeOut" }}
-          className="w-full min-h-[11.5rem] rounded-2xl border border-slate-800 bg-slate-950/80 p-3 text-center sm:min-h-[12.25rem] sm:p-4"
+          className="q-card-subtle w-full min-h-[11.5rem] rounded-2xl p-3 text-center sm:min-h-[12.25rem] sm:p-4"
         >
-          <p className="truncate px-1 text-xs uppercase tracking-[0.2em] text-slate-400">{label}</p>
+          <p className="truncate px-1 text-xs uppercase tracking-[0.2em] text-slate-400/70">{label}</p>
           {/* Rank badge */}
           <div className="mt-1.5 flex min-h-[1.25rem] items-center justify-center">
             {typeof rating === "number" ? (

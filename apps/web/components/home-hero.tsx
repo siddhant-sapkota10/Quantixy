@@ -60,8 +60,8 @@ function DisplayNameOnboardingModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-950/70 px-4 pb-6 pt-10 backdrop-blur-sm sm:items-center sm:px-6 sm:pb-0 sm:pt-0">
-      <div className="max-h-[min(92dvh,720px)] w-full min-w-0 max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-slate-950/80 p-5 shadow-glow backdrop-blur sm:rounded-[2rem] sm:p-6 md:p-8">
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 px-4 pb-6 pt-10 sm:items-center sm:px-6 sm:pb-0 sm:pt-0">
+      <div className="max-h-[min(92dvh,720px)] w-full min-w-0 max-w-lg overflow-y-auto overscroll-contain rounded-2xl bg-black p-5 sm:rounded-[2rem] sm:p-6 md:p-8">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm uppercase tracking-[0.2em] text-slate-400">Welcome</p>
@@ -359,11 +359,11 @@ function AuthModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/70 px-4 pb-6 pt-10 backdrop-blur-sm sm:items-center sm:px-6 sm:pb-0 sm:pt-0">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 px-4 pb-6 pt-10 sm:items-center sm:px-6 sm:pb-0 sm:pt-0">
       <PageContent
         size="md"
         variant="plain"
-        className="max-h-[min(92dvh,720px)] w-full min-w-0 max-w-lg overflow-y-auto overscroll-contain rounded-2xl bg-slate-950/70 p-5 shadow-glow backdrop-blur sm:rounded-[2rem] sm:p-6 md:p-8"
+        className="max-h-[min(92dvh,720px)] w-full min-w-0 max-w-lg overflow-y-auto overscroll-contain rounded-2xl bg-black p-5 sm:rounded-[2rem] sm:p-6 md:p-8"
       >
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -394,7 +394,7 @@ function AuthModal({
         </div>
 
         {isGuestSession ? (
-          <div className="mt-4 rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+          <div className="mt-4 rounded-2xl px-4 py-3 text-sm text-amber-100">
             Guest mode is temporary. Creating or logging into an account will start a permanent profile.
             Guest progress is not linked automatically yet.
           </div>
@@ -402,7 +402,7 @@ function AuthModal({
 
         <div className="mt-6 space-y-4">
           {!forgotOpen ? (
-            <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-slate-950/70 p-1">
+            <div className="grid grid-cols-2 gap-2 rounded-2xl p-1">
             <button
               type="button"
               onClick={() => {
@@ -908,9 +908,9 @@ export function HomeHero() {
                   whileHover={{ scale: 1.01, y: -1 }}
                   whileTap={{ scale: 0.99 }}
                   transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                  className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80"
+                  className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-slate-900/45 p-4 text-left transition-colors hover:border-white/[0.15] hover:bg-slate-900/65"
                 >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-slate-900/70 text-slate-300">
                     <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                       <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM19 8v6M22 11h-6" />
                     </svg>
@@ -926,9 +926,9 @@ export function HomeHero() {
                   whileHover={{ scale: 1.01, y: -1 }}
                   whileTap={{ scale: 0.99 }}
                   transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                  className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80"
+                  className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-slate-900/45 p-4 text-left transition-colors hover:border-white/[0.15] hover:bg-slate-900/65"
                 >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-slate-900/70 text-slate-300">
                     <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                       <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3" />
                     </svg>
@@ -986,10 +986,10 @@ export function HomeHero() {
                     whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
                     whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
                     transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                    className="group w-full rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80 disabled:cursor-not-allowed disabled:opacity-55 sm:p-5"
+                    className="group w-full rounded-2xl border border-white/[0.07] bg-slate-900/40 p-4 text-left transition-colors hover:border-white/[0.13] hover:bg-slate-900/60 disabled:cursor-not-allowed disabled:opacity-55 sm:p-5"
                   >
                     <div className="flex items-center gap-4">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-slate-900/70 text-slate-300">
                         <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                           <rect x="3" y="11" width="18" height="10" rx="2" />
                           <path d="M9 11V7a3 3 0 016 0v4M12 15v2M8 15v.01M16 15v.01" />
@@ -1015,7 +1015,7 @@ export function HomeHero() {
               <div className="space-y-5">
                 <div className="space-y-2.5">
                   <p className="text-left text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-500">You</p>
-                  <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-900/50 px-4 py-3">
+                  <div className="flex items-center gap-3 rounded-2xl px-4 py-3">
                     <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-sky-400/20 bg-slate-950/80">
                       <Image
                         src={getAvatarCardSrc(normalizeAvatarId(accountIdentity?.avatarId ?? DEFAULT_AVATAR_ID))}
@@ -1051,7 +1051,7 @@ export function HomeHero() {
 
                   {isGuest ? (
                     <>
-                      <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-200">
+                      <div className="rounded-2xl px-4 py-3 text-sm text-amber-200">
                         Playing as a guest — progress won&apos;t be saved across sessions.
                       </div>
                       <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-1">
@@ -1060,9 +1060,9 @@ export function HomeHero() {
                           whileHover={{ scale: 1.01, y: -1 }}
                           whileTap={{ scale: 0.99 }}
                           transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                          className="group flex flex-col gap-3 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80"
+                          className="group flex flex-col gap-3 rounded-2xl border border-white/[0.07] bg-slate-900/40 p-4 text-left transition-colors hover:border-white/[0.13] hover:bg-slate-900/60"
                         >
-                          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300 transition-colors group-hover:border-sky-500/40 group-hover:bg-sky-500/10 group-hover:text-sky-300">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-slate-900/65 text-slate-300 transition-colors group-hover:border-sky-500/35 group-hover:bg-sky-500/10 group-hover:text-sky-300">
                             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                               <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM19 8v6M22 11h-6" />
                             </svg>
@@ -1079,9 +1079,9 @@ export function HomeHero() {
                           whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
                           whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
                           transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                          className="group flex flex-col gap-3 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80 disabled:opacity-55"
+                          className="group flex flex-col gap-3 rounded-2xl border border-white/[0.07] bg-slate-900/40 p-4 text-left transition-colors hover:border-white/[0.13] hover:bg-slate-900/60 disabled:opacity-55"
                         >
-                          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300 transition-colors group-hover:border-yellow-500/40 group-hover:bg-yellow-500/10 group-hover:text-yellow-300">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-slate-900/65 text-slate-300 transition-colors group-hover:border-yellow-500/35 group-hover:bg-yellow-500/10 group-hover:text-yellow-300">
                             {routeBusy === "leaderboard" ? (
                               <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-500/30 border-t-slate-400" />
                             ) : (
@@ -1113,9 +1113,9 @@ export function HomeHero() {
                           whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
                           whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
                           transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                          className="group flex flex-col gap-3 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80 disabled:opacity-55"
+                          className="group flex flex-col gap-3 rounded-2xl border border-white/[0.07] bg-slate-900/40 p-4 text-left transition-colors hover:border-white/[0.13] hover:bg-slate-900/60 disabled:opacity-55"
                         >
-                          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300 transition-colors group-hover:border-sky-500/40 group-hover:bg-sky-500/10 group-hover:text-sky-300">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-slate-900/65 text-slate-300 transition-colors group-hover:border-sky-500/35 group-hover:bg-sky-500/10 group-hover:text-sky-300">
                             {routeBusy === "profile" ? (
                               <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-500/30 border-t-slate-400" />
                             ) : (
@@ -1143,9 +1143,9 @@ export function HomeHero() {
                           whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
                           whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
                           transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                          className="group flex flex-col gap-3 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900/80 disabled:opacity-55"
+                          className="group flex flex-col gap-3 rounded-2xl border border-white/[0.07] bg-slate-900/40 p-4 text-left transition-colors hover:border-white/[0.13] hover:bg-slate-900/60 disabled:opacity-55"
                         >
-                          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300 transition-colors group-hover:border-yellow-500/40 group-hover:bg-yellow-500/10 group-hover:text-yellow-300">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-slate-900/65 text-slate-300 transition-colors group-hover:border-yellow-500/35 group-hover:bg-yellow-500/10 group-hover:text-yellow-300">
                             {routeBusy === "leaderboard" ? (
                               <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-500/30 border-t-slate-400" />
                             ) : (
