@@ -3449,8 +3449,9 @@ export function GameClient({
   const isOpponentLeft = status === "opponent-left";
   const isWaitingState = status === "connecting" || status === "waiting";
   const isActiveGameplay = status === "playing";
-  const compactGameplay = isActiveGameplay && viewportState.compact;
-  const crampedGameplay = isActiveGameplay && viewportState.cramped;
+  const isInMatchShell = isActiveGameplay || isCountdown;
+  const compactGameplay = isInMatchShell && viewportState.compact;
+  const crampedGameplay = isInMatchShell && viewportState.cramped;
   const keyboardOpenDuringGameplay = isActiveGameplay && viewportState.keyboardOpen;
   const emotesEnabled = status === "playing" || status === "countdown" || status === "finished";
   const youEliminated = eliminated.you;
@@ -3464,7 +3465,7 @@ export function GameClient({
   const opponentDisplayHP = toDisplayHp(opponentHP);
   const latestYouRawDamage = latestYouDamage;
   const latestOpponentRawDamage = latestOpponentDamage;
-  const showHP = isActiveGameplay || isFinished;
+  const showHP = isInMatchShell || isFinished;
   const emoteCoolingDown = emoteCooldownUntil > Date.now();
   const isJamActive = ultimate.blackoutUntil > Date.now();
   const isNeuralJamSilenced = isNeuralBurstLocked || ultimate.jammed;
@@ -3866,7 +3867,7 @@ export function GameClient({
   const youUltimateActivationKey = ultimateCue?.by === "you" ? ultimateCue.id : 0;
 
   // Dedicated in-match layout (competitive HUD + sticky action bar).
-  if (isActiveGameplay) {
+  if (isInMatchShell) {
     return (
       <section className="fixed inset-0 z-10 overflow-hidden text-white">
         {/* Overlays */}
@@ -4086,21 +4087,25 @@ export function GameClient({
             <motion.div animate={animState.questionShakeControls} className="mx-auto w-full max-w-3xl md:max-w-4xl lg:max-w-5xl">
               <div className={cn("q-card-strong relative rounded-[1.5rem] p-3 text-center sm:p-6 md:p-8", compactGameplay && "sm:p-4 md:p-5")}>
                 <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-textSecondary/70">
-                  Question
+                  {isCountdown ? "Countdown" : "Question"}
                 </p>
                 <div className="mt-3 flex items-center justify-center">
-                  <QuestionContent
-                    question={currentQuestionData}
-                    fallbackPrompt={currentQuestion}
-                    compact
-                    promptClassName={
-                      crampedGameplay
-                        ? "text-lg font-black tracking-tight text-white sm:text-2xl md:text-3xl"
-                        : compactGameplay
-                          ? "text-xl font-black tracking-tight text-white sm:text-3xl md:text-4xl"
-                          : "text-xl font-black tracking-tight text-white sm:text-4xl md:text-5xl lg:text-6xl"
-                    }
-                  />
+                  {isCountdown ? (
+                    <CountdownDisplay value={countdownValue} />
+                  ) : (
+                    <QuestionContent
+                      question={currentQuestionData}
+                      fallbackPrompt={currentQuestion}
+                      compact
+                      promptClassName={
+                        crampedGameplay
+                          ? "text-lg font-black tracking-tight text-white sm:text-2xl md:text-3xl"
+                          : compactGameplay
+                            ? "text-xl font-black tracking-tight text-white sm:text-3xl md:text-4xl"
+                            : "text-xl font-black tracking-tight text-white sm:text-4xl md:text-5xl lg:text-6xl"
+                      }
+                    />
+                  )}
                 </div>
 
                 <div className={cn("mt-3 min-h-[2.25rem]", crampedGameplay && "min-h-[1.75rem]")}>
@@ -4123,15 +4128,16 @@ export function GameClient({
           </div>
 
           {/* Bottom: Sticky action bar */}
-          <div
-            className={cn(
-              "shrink-0 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 sm:px-5",
-              compactGameplay && "pt-2",
-              keyboardOpenDuringGameplay && "pb-[calc(env(safe-area-inset-bottom,0px)+8px)]"
-            )}
-          >
-            <div className="mx-auto w-full max-w-3xl">
-              <div className={cn("mb-2 flex items-center justify-start sm:justify-center", crampedGameplay && "mb-1.5")}>
+          {isActiveGameplay ? (
+            <div
+              className={cn(
+                "shrink-0 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 sm:px-5",
+                compactGameplay && "pt-2",
+                keyboardOpenDuringGameplay && "pb-[calc(env(safe-area-inset-bottom,0px)+8px)]"
+              )}
+            >
+              <div className="mx-auto w-full max-w-3xl">
+                <div className={cn("mb-2 flex items-center justify-start sm:justify-center", crampedGameplay && "mb-1.5")}>
                 <EmoteBar
                   emotes={availableEmotes}
                   open={emoteBarOpen && emotesEnabled}
@@ -4142,7 +4148,7 @@ export function GameClient({
                   disabled={!emotesEnabled}
                 />
               </div>
-              <form className={cn("flex w-full flex-col gap-2", crampedGameplay && "gap-1.5")} onSubmit={handleSubmit}>
+                <form className={cn("flex w-full flex-col gap-2", crampedGameplay && "gap-1.5")} onSubmit={handleSubmit}>
                 {isNeuralJamSilenced ? (
                   <div className="flex items-center justify-start sm:justify-center">
                     <span className="rounded-full border border-violet-300/35 bg-violet-500/12 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-violet-100">
@@ -4292,8 +4298,8 @@ export function GameClient({
                       onActivate={handleActivateUltimate}
                       activationBurstKey={youUltimateActivationKey}
                       activeWindow={architectCanRelease}
-                      actionLabel={architectCanRelease ? "Release System" : undefined}
-                      statusOverride={architectCanRelease ? (ultimate.architectReady ? "SYSTEM READY" : "ACTIVE") : undefined}
+                      actionLabel={architectCanRelease ? "Use Perfect System now" : undefined}
+                      statusOverride={architectCanRelease ? (ultimate.architectReady ? "AUTO AT 5" : "FIRE NOW") : undefined}
                       size="compact"
                       className="h-11"
                     />
@@ -4311,15 +4317,16 @@ export function GameClient({
                       onActivate={handleActivateUltimate}
                       activationBurstKey={youUltimateActivationKey}
                       activeWindow={architectCanRelease}
-                      actionLabel={architectCanRelease ? "Release System" : undefined}
-                      statusOverride={architectCanRelease ? (ultimate.architectReady ? "SYSTEM READY" : "ACTIVE") : undefined}
+                      actionLabel={architectCanRelease ? "Use Perfect System now" : undefined}
+                      statusOverride={architectCanRelease ? (ultimate.architectReady ? "AUTO AT 5" : "FIRE NOW") : undefined}
                       size="regular"
                     />
                   </div>
                 </div>
-              </form>
+                </form>
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
       </section>
     );
@@ -4653,8 +4660,8 @@ export function GameClient({
                   onActivate={handleActivateUltimate}
                   activationBurstKey={youUltimateActivationKey}
                   activeWindow={architectCanRelease}
-                  actionLabel={architectCanRelease ? "Release System" : undefined}
-                  statusOverride={architectCanRelease ? (ultimate.architectReady ? "SYSTEM READY" : "ACTIVE") : undefined}
+                  actionLabel={architectCanRelease ? "Use Perfect System now" : undefined}
+                  statusOverride={architectCanRelease ? (ultimate.architectReady ? "AUTO AT 5" : "FIRE NOW") : undefined}
                 />
               </div>
               <FloatingLabel items={youFloatingItems} />

@@ -35,7 +35,7 @@ export function QuestionContent({
     <div className={compact ? "space-y-3" : "space-y-4"}>
       {graphFirst && hasVisual ? (
         <div className="neon-panel-soft mx-auto w-full max-w-[60rem] overflow-hidden rounded-2xl px-2 py-2 sm:px-3 sm:py-3">
-          <QuestionVisual spec={question?.diagramSpec} />
+          <QuestionVisual spec={question?.diagramSpec} compact={compact} />
         </div>
       ) : null}
 
@@ -45,7 +45,7 @@ export function QuestionContent({
 
       {!graphFirst && hasVisual ? (
         <div className="neon-panel-soft mx-auto w-full max-w-[60rem] overflow-hidden rounded-2xl px-2 py-2 sm:px-3 sm:py-3">
-          <QuestionVisual spec={question?.diagramSpec} />
+          <QuestionVisual spec={question?.diagramSpec} compact={compact} />
         </div>
       ) : null}
 

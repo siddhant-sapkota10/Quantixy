@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(./node_modules/.bin/tsc --noEmit)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(node_modules/.bin/tsc --noEmit -p apps/web/tsconfig.json)",
+      "Bash(git check-ignore:*)",
+      "Bash(git rm:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)",
+      "Bash(grep -E \"\\\\.\\(md|txt|env\\)$\")",
+      "Bash(git commit:*)",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); print\\(data[0]['text']\\)\")",
+      "Bash(python3 -c \" import json with open\\(r'C:\\\\Users\\\\siddh\\\\.claude\\\\projects\\\\C--Users-siddh-Desktop-MathApp\\\\85eefb24-5f9b-424e-a371-8c3239065c02\\\\tool-results\\\\toolu_01WiBFdRDyAoAD7oj6f15NBq.json'\\) as f: data = json.load\\(f\\) print\\(data[0]['text']\\) \")",
+      "Bash(findstr /c:\"text-2xl\")",
+      "Bash(xargs grep *)",
+      "Bash(npx --prefix apps/web tsc --noEmit)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(node_modules/.bin/tsc --project apps/web/tsconfig.json --noEmit)",
+      "Bash(grep -v \"^$\")",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(grep -E \"\\\\.tsx$|\\\\.ts$\")",
+      "Bash(node -e \"const c = require\\('./packages/shared/cosmetics.json'\\); console.log\\('streakEffects:', c.streakEffects.map\\(e=>e.id\\)\\); console.log\\('emotePacks:', c.emotePacks.map\\(p=>p.id+':'+JSON.stringify\\(p.emoteIds\\)\\)\\);\")",
+      "Bash(node -e \"const e = require\\('./packages/shared/emotes.json'\\); console.log\\('emotes:', e.map\\(x=>x.id\\)\\);\")",
+      "Bash(node -e ' *)",
+      "Bash(npx next *)",
+      "Bash(node *)",
+      "Bash(npm install *)"
+    ]
+  }
+}

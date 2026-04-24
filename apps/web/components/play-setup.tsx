@@ -11,6 +11,7 @@ import {
   TOPICS,
   type Topic
 } from "@/lib/topics";
+import { AI_DIFFICULTIES, type AiDifficulty } from "@/lib/ai-game-engine";
 import { PageContent } from "@/components/page-content";
 
 // ── Topic display config ───────────────────────────────────────────────────────
@@ -168,6 +169,36 @@ const DIFFICULTY_CONFIG = {
   },
 } satisfies Record<Difficulty, { label: string; description: string; icon: React.ReactNode; border: string; bg: string; text: string; glow: string; ring: string }>;
 
+const AI_DIFFICULTY_CONFIG = {
+  easy: {
+    label: "Easy Bot",
+    description: "Slower answers, more mistakes",
+    border: "border-emerald-500/50",
+    bg: "bg-emerald-500/10",
+    text: "text-emerald-300",
+    glow: "shadow-lg shadow-emerald-500/20",
+    ring: "ring-emerald-500/40",
+  },
+  medium: {
+    label: "Medium Bot",
+    description: "Balanced pace and accuracy",
+    border: "border-cyan-500/50",
+    bg: "bg-cyan-500/10",
+    text: "text-cyan-300",
+    glow: "shadow-lg shadow-cyan-500/20",
+    ring: "ring-cyan-500/40",
+  },
+  hard: {
+    label: "Hard Bot",
+    description: "Fast reactions, high accuracy",
+    border: "border-fuchsia-500/50",
+    bg: "bg-fuchsia-500/10",
+    text: "text-fuchsia-300",
+    glow: "shadow-lg shadow-fuchsia-500/20",
+    ring: "ring-fuchsia-500/40",
+  },
+} satisfies Record<AiDifficulty, { label: string; description: string; border: string; bg: string; text: string; glow: string; ring: string }>;
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 type PlaySetupProps = {
@@ -184,6 +215,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
   const { user, loading } = useSupabaseAuth();
   const [selectedTopic, setSelectedTopic] = useState<Topic>("arithmetic");
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>("easy");
+  const [selectedAiDifficulty, setSelectedAiDifficulty] = useState<AiDifficulty>("medium");
   const [matchMode, setMatchMode] = useState<MatchMode>("quick");
   const [aiBattleMode, setAiBattleMode] = useState<AiBattleMode>("practice");
   const [roomCode, setRoomCode] = useState("");
@@ -214,6 +246,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
         params.set("aiMode", aiBattleMode);
         params.set("topic", selectedTopic);
         params.set("difficulty", selectedDifficulty);
+        params.set("aiDifficulty", selectedAiDifficulty);
         router.push(`/game?${params.toString()}`);
         return;
       }
@@ -475,6 +508,52 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
         ) : null}
 
         {/* ── CTA ── */}
+        {mode === "ai" ? (
+          <div className="space-y-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-textSecondary">AI Difficulty</p>
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+              {AI_DIFFICULTIES.map((aiDifficulty) => {
+                const cfg = AI_DIFFICULTY_CONFIG[aiDifficulty];
+                const isSelected = selectedAiDifficulty === aiDifficulty;
+
+                return (
+                  <motion.button
+                    key={aiDifficulty}
+                    type="button"
+                    onClick={() => setSelectedAiDifficulty(aiDifficulty)}
+                    disabled={startPending}
+                    whileHover={startPending ? undefined : { scale: 1.03, y: -1 }}
+                    whileTap={startPending ? undefined : { scale: 0.97 }}
+                    transition={CARD_TRANSITION}
+                    className={`relative flex flex-col items-start gap-2 rounded-2xl border p-4 text-left transition-colors duration-150 sm:p-5 ${
+                      isSelected
+                        ? `${cfg.border} ${cfg.bg} ${cfg.glow}`
+                        : "border-slate-500/20 bg-slate-950/48 hover:border-slate-400/35 hover:bg-slate-900/62"
+                    } ${startPending ? "cursor-not-allowed opacity-55" : "cursor-pointer"}`}
+                  >
+                    <p className={`text-sm font-bold ${isSelected ? cfg.text : "text-slate-300"}`}>
+                      {cfg.label}
+                    </p>
+                    <p className="text-[11px] leading-tight text-textSecondary">
+                      {cfg.description}
+                    </p>
+                    {isSelected ? (
+                      <motion.span
+                        layoutId="ai-difficulty-selection-ring"
+                        className={`pointer-events-none absolute inset-0 rounded-2xl ring-1 ${cfg.ring}`}
+                        transition={CARD_TRANSITION}
+                      />
+                    ) : null}
+                  </motion.button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-textSecondary">
+              Controls how fast MathBot answers and how often it gets questions right.
+            </p>
+          </div>
+        ) : null}
+
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
           <Button
             className="w-full py-4 text-lg font-black"

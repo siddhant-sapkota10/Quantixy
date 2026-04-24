@@ -20,6 +20,14 @@ import {
 import { getRankFromRating, getNextRankInfo } from "@/lib/ranks";
 import { RankBadge } from "@/components/rank-badge";
 import { EMOTES } from "@/lib/emotes";
+import {
+  PROFILE_ICON_EMOJIS,
+  resolveProfileIcon,
+  sanitizeProfileIconEmoji,
+  sanitizeProfileIconText,
+  type ProfileIconMode,
+} from "@/lib/profile-icon";
+import { ProfileIconBadge } from "@/components/profile-icon-badge";
 
 type ProfileResponse = {
   username?: string;
@@ -27,6 +35,10 @@ type ProfileResponse = {
   avatarId?: string;
   streakEffect?: string;
   emotePack?: string;
+  profileIconMode?: string;
+  profileIconEmoji?: string | null;
+  profileIconText?: string | null;
+  profileIconImageUrl?: string | null;
   ownedEmotePacks?: string[];
   ownedAvatars?: string[];
   summary: {
@@ -61,11 +73,22 @@ type PlayerQueryRow = {
   username: string;
   display_name: string | null;
   avatar: string | null;
+  profile_icon_mode?: string | null;
+  profile_icon_emoji?: string | null;
+  profile_icon_text?: string | null;
+  profile_icon_image_url?: string | null;
 };
 
 type CosmeticQueryRow = {
   streak_effect: string | null;
   emote_pack: string | null;
+};
+
+type ProfileIconQueryRow = {
+  profile_icon_mode?: string | null;
+  profile_icon_emoji?: string | null;
+  profile_icon_text?: string | null;
+  profile_icon_image_url?: string | null;
 };
 
 type RatingQueryRow = {
@@ -124,6 +147,10 @@ async function loadProfileFromSupabase(authUserId: string): Promise<ProfileRespo
   // the DB migration has not been applied yet (columns missing → safe defaults).
   let streakEffect = "none";
   let emotePack = "starter";
+  let profileIconMode: ProfileIconMode = "monogram";
+  let profileIconEmoji = "✨";
+  let profileIconText = sanitizeProfileIconText(player.display_name ?? player.username, player.display_name ?? player.username);
+  let profileIconImageUrl: string | null = null;
   let ownedEmotePacks: string[] = ["starter"];
   const { data: cosmeticData, error: cosmeticError } = await supabase
     .from("players")
@@ -134,6 +161,28 @@ async function loadProfileFromSupabase(authUserId: string): Promise<ProfileRespo
     const cosRow = cosmeticData as CosmeticQueryRow;
     streakEffect = normalizeStreakEffectId(cosRow.streak_effect);
     emotePack = normalizeEmotePackId(cosRow.emote_pack);
+  }
+
+  const { data: profileIconData, error: profileIconError } = await supabase
+    .from("players")
+    .select("profile_icon_mode, profile_icon_emoji, profile_icon_text, profile_icon_image_url")
+    .eq("id", player.id)
+    .maybeSingle();
+  if (!profileIconError && profileIconData) {
+    const iconRow = profileIconData as ProfileIconQueryRow;
+    const resolved = resolveProfileIcon(
+      {
+        profileIconMode: iconRow.profile_icon_mode,
+        profileIconEmoji: iconRow.profile_icon_emoji,
+        profileIconText: iconRow.profile_icon_text,
+        profileIconImageUrl: iconRow.profile_icon_image_url,
+      },
+      player.display_name ?? player.username
+    );
+    profileIconMode = resolved.mode;
+    profileIconEmoji = resolved.emoji;
+    profileIconText = resolved.text;
+    profileIconImageUrl = resolved.imageUrl;
   }
 
   // Owned packs are sourced from user_emote_packs (written by Stripe webhook).
@@ -246,6 +295,10 @@ async function loadProfileFromSupabase(authUserId: string): Promise<ProfileRespo
     username: player.username,
     displayName: player.display_name ?? player.username,
     avatarId: normalizeAvatarId(player.avatar),
+    profileIconMode,
+    profileIconEmoji,
+    profileIconText,
+    profileIconImageUrl,
     streakEffect,
     emotePack,
     ownedEmotePacks,
@@ -304,6 +357,12 @@ export function ProfileClient() {
   const [savingDisplayName, setSavingDisplayName] = useState(false);
   const [displayNameError, setDisplayNameError] = useState<string | null>(null);
   const displayNameInputRef = useRef<HTMLInputElement | null>(null);
+  const [profileIconModeInput, setProfileIconModeInput] = useState<ProfileIconMode>("monogram");
+  const [profileIconEmojiInput, setProfileIconEmojiInput] = useState("✨");
+  const [profileIconTextInput, setProfileIconTextInput] = useState("Q");
+  const [profileIconImageUrlInput, setProfileIconImageUrlInput] = useState<string | null>(null);
+  const [savingProfileIcon, setSavingProfileIcon] = useState(false);
+  const [profileIconError, setProfileIconError] = useState<string | null>(null);
   const [savingAvatarId, setSavingAvatarId] = useState<AvatarId | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [previewAvatarId, setPreviewAvatarId] = useState<AvatarId>(DEFAULT_AVATAR_ID);
@@ -427,6 +486,10 @@ export function ProfileClient() {
         // them from the initial Supabase load to avoid UI flicker back to Locked.
         setData({
           ...nextData,
+          profileIconMode: nextData.profileIconMode ?? fallbackData.profileIconMode,
+          profileIconEmoji: nextData.profileIconEmoji ?? fallbackData.profileIconEmoji,
+          profileIconText: nextData.profileIconText ?? fallbackData.profileIconText,
+          profileIconImageUrl: nextData.profileIconImageUrl ?? fallbackData.profileIconImageUrl,
           ownedEmotePacks:
             Array.isArray(nextData.ownedEmotePacks) && nextData.ownedEmotePacks.length > 0
               ? nextData.ownedEmotePacks
@@ -618,6 +681,111 @@ export function ProfileClient() {
   const currentAvatar = getAvatar(previewAvatarId);
   const totalMatches = data?.summary.totalMatches ?? 0;
   const currentDisplayName = data?.displayName ?? data?.username ?? "Profile";
+  const resolvedProfileIcon = resolveProfileIcon(data, currentDisplayName);
+
+  useEffect(() => {
+    if (!data) return;
+    setProfileIconModeInput(resolvedProfileIcon.mode);
+    setProfileIconEmojiInput(resolvedProfileIcon.emoji);
+    setProfileIconTextInput(resolvedProfileIcon.text);
+    setProfileIconImageUrlInput(resolvedProfileIcon.imageUrl);
+  }, [data, resolvedProfileIcon.emoji, resolvedProfileIcon.imageUrl, resolvedProfileIcon.mode, resolvedProfileIcon.text]);
+
+  const handleProfileIconSave = async (mode: ProfileIconMode, imageUrlOverride?: string | null) => {
+    if (!authUserId || !data) return;
+
+    const nextEmoji = sanitizeProfileIconEmoji(profileIconEmojiInput);
+    const nextText = sanitizeProfileIconText(profileIconTextInput, currentDisplayName);
+    const nextImageUrl = mode === "image" ? (imageUrlOverride ?? profileIconImageUrlInput ?? null) : null;
+
+    if (mode === "image" && !nextImageUrl) {
+      setProfileIconError("Upload an image first.");
+      return;
+    }
+
+    const previous = {
+      profileIconMode: data.profileIconMode ?? "monogram",
+      profileIconEmoji: data.profileIconEmoji ?? "✨",
+      profileIconText: data.profileIconText ?? sanitizeProfileIconText(currentDisplayName, currentDisplayName),
+      profileIconImageUrl: data.profileIconImageUrl ?? null,
+    };
+
+    setSavingProfileIcon(true);
+    setProfileIconError(null);
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            profileIconMode: mode,
+            profileIconEmoji: nextEmoji,
+            profileIconText: nextText,
+            profileIconImageUrl: nextImageUrl,
+          }
+        : current
+    );
+
+    try {
+      const supabase = getSupabaseClient();
+      const { error: updateError } = await supabase
+        .from("players")
+        .update({
+          profile_icon_mode: mode,
+          profile_icon_emoji: nextEmoji,
+          profile_icon_text: nextText,
+          profile_icon_image_url: nextImageUrl,
+        } as never)
+        .eq("auth_user_id", authUserId);
+
+      if (updateError) {
+        throw updateError;
+      }
+    } catch (updateError) {
+      setData((current) => (current ? { ...current, ...previous } : current));
+      setProfileIconError(updateError instanceof Error ? updateError.message : "Unable to update your profile icon.");
+    } finally {
+      setSavingProfileIcon(false);
+    }
+  };
+
+  const handleProfileIconUpload = async (file: File | null) => {
+    if (!file || !authUserId) return;
+
+    const allowedTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+    if (!allowedTypes.has(file.type)) {
+      setProfileIconError("Use a PNG, JPG, WEBP, or GIF image.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setProfileIconError("Profile icons must be 2MB or smaller.");
+      return;
+    }
+
+    setSavingProfileIcon(true);
+    setProfileIconError(null);
+
+    try {
+      const supabase = getSupabaseClient();
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-").toLowerCase();
+      const path = `${authUserId}/${Date.now()}-${safeName}`;
+      const { error: uploadError } = await supabase.storage.from("profile-icons").upload(path, file, {
+        cacheControl: "3600",
+        upsert: true,
+        contentType: file.type,
+      });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const { data: publicData } = supabase.storage.from("profile-icons").getPublicUrl(path);
+      const publicUrl = publicData.publicUrl;
+      setProfileIconImageUrlInput(publicUrl);
+      await handleProfileIconSave("image", publicUrl);
+    } catch (uploadError) {
+      setProfileIconError(uploadError instanceof Error ? uploadError.message : "Unable to upload your profile icon.");
+      setSavingProfileIcon(false);
+    }
+  };
 
   const handleAvatarSelect = async (avatarId: AvatarId) => {
     if (!authUserId || !data || savingAvatarId === avatarId || data.avatarId === avatarId) {
@@ -964,6 +1132,127 @@ export function ProfileClient() {
               {displayNameError ? <p className="text-sm text-rose-300">{displayNameError}</p> : null}
             </div>
           </div>
+        </div>
+
+        <div className="q-card-strong rounded-3xl p-4 sm:p-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-2xl space-y-2">
+              <p className="text-sm uppercase tracking-[0.25em] text-slate-400/70">Leaderboard Icon</p>
+              <h2 className="text-2xl font-bold text-white">Set your public icon</h2>
+              <p className="text-sm text-slate-300">
+                This is the icon shown on the leaderboard. It is now separate from your equipped gameplay avatar.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-4 rounded-3xl border border-white/10 bg-white/[0.03] px-4 py-4">
+              <ProfileIconBadge
+                icon={{
+                  profileIconMode: profileIconModeInput,
+                  profileIconEmoji: profileIconEmojiInput,
+                  profileIconText: profileIconTextInput,
+                  profileIconImageUrl: profileIconImageUrlInput,
+                }}
+                fallbackName={currentDisplayName}
+                size="lg"
+              />
+              <div className="text-sm text-slate-300">
+                <p className="font-semibold text-white">Live preview</p>
+                <p className="mt-1">This is what players will see on the leaderboard.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-3">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-sm font-bold text-white">Emoji</p>
+              <p className="mt-1 text-xs text-slate-400">Pick a simple emoji identity.</p>
+              <div className="mt-3 grid grid-cols-4 gap-2">
+                {PROFILE_ICON_EMOJIS.map((emoji) => {
+                  const selected = profileIconEmojiInput === emoji;
+                  return (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => {
+                        setProfileIconEmojiInput(emoji);
+                        setProfileIconModeInput("emoji");
+                        setProfileIconError(null);
+                      }}
+                      className={`flex h-14 items-center justify-center rounded-2xl border text-2xl transition ${
+                        selected
+                          ? "border-cyan-300/45 bg-cyan-400/12 shadow-[0_0_18px_rgba(34,211,238,0.14)]"
+                          : "border-white/10 bg-slate-950/45 hover:border-cyan-300/25 hover:bg-cyan-400/[0.05]"
+                      }`}
+                      aria-pressed={selected}
+                      aria-label={`Select ${emoji} as your leaderboard icon`}
+                    >
+                      <span aria-hidden="true">{emoji}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <Button
+                className="mt-3 w-full"
+                onClick={() => void handleProfileIconSave("emoji")}
+                disabled={loading || savingProfileIcon}
+                loading={savingProfileIcon && profileIconModeInput === "emoji"}
+                loadingText="Saving..."
+              >
+                Use Emoji
+              </Button>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-sm font-bold text-white">Text Icon</p>
+              <p className="mt-1 text-xs text-slate-400">Use 1-2 letters or numbers for a clean badge.</p>
+              <input
+                type="text"
+                value={profileIconTextInput}
+                maxLength={2}
+                onChange={(event) => {
+                  setProfileIconTextInput(sanitizeProfileIconText(event.target.value, currentDisplayName));
+                  setProfileIconModeInput("monogram");
+                  setProfileIconError(null);
+                }}
+                className="mt-3 w-full neon-input rounded-2xl px-4 py-3 text-center text-xl font-black uppercase tracking-[0.22em] text-slate-100"
+              />
+              <Button
+                className="mt-3 w-full"
+                onClick={() => void handleProfileIconSave("monogram")}
+                disabled={loading || savingProfileIcon}
+                loading={savingProfileIcon && profileIconModeInput === "monogram"}
+                loadingText="Saving..."
+              >
+                Use Text Icon
+              </Button>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-sm font-bold text-white">Upload Image</p>
+              <p className="mt-1 text-xs text-slate-400">PNG, JPG, WEBP, or GIF up to 2MB.</p>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                className="mt-3 block w-full text-sm text-slate-300 file:mr-3 file:rounded-xl file:border-0 file:bg-cyan-400/15 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-cyan-100"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  void handleProfileIconUpload(file);
+                  event.currentTarget.value = "";
+                }}
+              />
+              {profileIconImageUrlInput ? (
+                <Button
+                  variant="secondary"
+                  className="mt-3 w-full"
+                  onClick={() => void handleProfileIconSave("image")}
+                  disabled={loading || savingProfileIcon}
+                >
+                  Reuse Uploaded Image
+                </Button>
+              ) : null}
+            </div>
+          </div>
+          {profileIconError ? <p className="mt-4 text-sm text-rose-300">{profileIconError}</p> : null}
         </div>
 
         <div>

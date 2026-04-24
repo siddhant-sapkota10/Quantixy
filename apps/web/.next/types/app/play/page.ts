@@ -1,4 +1,4 @@
-// File: /Users/sidsapkota/Desktop/Quantixy/apps/web/app/play/page.tsx
+// File: C:\Users\siddh\Desktop\Quantixy\apps\web\app\play\page.tsx
 import * as entry from '../../../../app/play/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

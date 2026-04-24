@@ -5,16 +5,20 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/button";
 import { Dropdown } from "@/components/dropdown";
 import { RankBadge } from "@/components/rank-badge";
-import { getAvatar } from "@/lib/avatars";
+import { ProfileIconBadge } from "@/components/profile-icon-badge";
 import { getSupabaseClient } from "@/lib/supabase";
 import { TOPICS, Topic, formatTopicLabel } from "@/lib/topics";
 import { PageContent } from "@/components/page-content";
+import type { ProfileIconMode } from "@/lib/profile-icon";
 
 type LeaderboardEntry = {
   rank: number;
   playerId: string;
   name: string;
-  avatarId?: string;
+  profileIconMode?: ProfileIconMode | string;
+  profileIconEmoji?: string | null;
+  profileIconText?: string | null;
+  profileIconImageUrl?: string | null;
   rating: number;
   topic: string;
 };
@@ -176,9 +180,14 @@ export function LeaderboardClient() {
                         <span className="mt-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">Rank</span>
                       </div>
 
-                      <div className="min-w-0 flex-1">
-                        <div className="flex min-w-0 items-start gap-3">
-                          <span className="shrink-0 text-2xl leading-none">{getAvatar(entry.avatarId).icon}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 items-start gap-3">
+                          <ProfileIconBadge
+                            icon={entry}
+                            fallbackName={entry.name}
+                            size="sm"
+                            className="shrink-0"
+                          />
                           <div className="min-w-0 flex-1">
                             <div className="flex min-w-0 items-center gap-1.5">
                               <span className="truncate font-semibold text-white">{entry.name}</span>
@@ -213,7 +222,12 @@ export function LeaderboardClient() {
                       </span>
 
                       <span className="flex min-w-0 items-center gap-2.5">
-                        <span className="shrink-0 text-2xl leading-none">{getAvatar(entry.avatarId).icon}</span>
+                        <ProfileIconBadge
+                          icon={entry}
+                          fallbackName={entry.name}
+                          size="sm"
+                          className="shrink-0"
+                        />
                         <span className="min-w-0">
                           <span className="flex min-w-0 items-center gap-1.5">
                             <span className="truncate font-semibold text-white">{entry.name}</span>
@@ -244,6 +258,7 @@ export function LeaderboardClient() {
             <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-cyan-200">Your Standing</p>
             <div className="mt-2 flex items-center gap-3">
               <span className="text-2xl font-black tabular-nums text-cyan-100">#{myRank.rank}</span>
+              <ProfileIconBadge icon={myRank} fallbackName={myRank.name} size="sm" />
               <div className="space-y-0.5">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-white">{myRank.name}</span>

@@ -290,6 +290,52 @@ async function findOrCreatePlayerFromAuthUser(authUser) {
   throw error;
 }
 
+function buildProfileIconPayload(player) {
+  return {
+    profileIconMode: player?.profile_icon_mode ?? "monogram",
+    profileIconEmoji: player?.profile_icon_emoji ?? null,
+    profileIconText: player?.profile_icon_text ?? null,
+    profileIconImageUrl: player?.profile_icon_image_url ?? null,
+  };
+}
+
+async function hydrateProfileIcons(players = []) {
+  if (!Array.isArray(players) || players.length === 0) {
+    return players;
+  }
+
+  const playerIds = players.map((player) => player.id).filter(Boolean);
+  if (playerIds.length === 0) {
+    return players;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("players")
+    .select("id, profile_icon_mode, profile_icon_emoji, profile_icon_text, profile_icon_image_url")
+    .in("id", playerIds);
+
+  if (error) {
+    return players.map((player) => ({
+      ...player,
+      profile_icon_mode: "monogram",
+      profile_icon_emoji: null,
+      profile_icon_text: null,
+      profile_icon_image_url: null,
+    }));
+  }
+
+  const iconMap = new Map((data ?? []).map((row) => [row.id, row]));
+  return players.map((player) => ({
+    ...player,
+    ...(iconMap.get(player.id) ?? {
+      profile_icon_mode: "monogram",
+      profile_icon_emoji: null,
+      profile_icon_text: null,
+      profile_icon_image_url: null,
+    }),
+  }));
+}
+
 async function updateRatingsAfterMatch({ topic, playerOneId, playerTwoId, playerOneRating, playerTwoRating }) {
   const { error } = await supabaseAdmin.from("ratings").upsert(
     [
@@ -421,7 +467,7 @@ async function getLeaderboard(options = {}) {
   }
 
   const playerIds = [...new Set(uniqueRatings.map((entry) => entry.player_id))];
-  const { data: players, error: playersError } = await supabaseAdmin
+  const { data: playersRaw, error: playersError } = await supabaseAdmin
     .from("players")
     .select("id, username, display_name, avatar")
     .in("id", playerIds);
@@ -430,12 +476,18 @@ async function getLeaderboard(options = {}) {
     throw playersError;
   }
 
+  const players = await hydrateProfileIcons(playersRaw ?? []);
+
   const playerMap = new Map(
     (players ?? []).map((player) => [
       player.id,
       {
         username: player.display_name ?? player.username,
         avatarId: normalizeAvatarId(player.avatar),
+        profileIconMode: player.profile_icon_mode ?? "monogram",
+        profileIconEmoji: player.profile_icon_emoji ?? null,
+        profileIconText: player.profile_icon_text ?? null,
+        profileIconImageUrl: player.profile_icon_image_url ?? null,
         isGuest: isGuestLeaderboardPlayer(player)
       }
     ])
@@ -452,7 +504,7 @@ async function getLeaderboard(options = {}) {
         return {
           playerId: entry.player_id,
           name: player.username,
-          avatarId: player.avatarId,
+          ...buildProfileIconPayload(player),
           rating: entry.rating,
           topic: entry.topic
         };
@@ -483,6 +535,8 @@ async function getProfileSummary(authUserId) {
   if (!player) {
     return null;
   }
+
+  const [playerWithIcon] = await hydrateProfileIcons([player]);
 
   const [{ data: ratings, error: ratingsError }, { data: matches, error: matchesError }] =
     await Promise.all([
@@ -554,6 +608,7 @@ async function getProfileSummary(authUserId) {
     username: player.display_name ?? player.username,
     displayName: player.display_name ?? player.username,
     avatarId: normalizeAvatarId(player.avatar),
+    ...buildProfileIconPayload(playerWithIcon),
     streakEffect: cosmetics.streakEffect,
     emotePack: cosmetics.emotePack,
     summary: {

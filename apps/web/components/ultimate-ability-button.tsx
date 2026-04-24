@@ -43,6 +43,7 @@ export function UltimateAbilityButton({
   const pct = Math.max(0, Math.min(100, Math.round(charge)));
   const canActivate = ((ready && !used) || activeWindow) && implemented && !activating && !disabled;
   const isCharging = !used && implemented && !ready;
+  const isArchitectReleaseWindow = activeWindow && normalizedType === "perfect_sequence";
 
   const stateLabel = statusOverride ?? (used
     ? "USED"
@@ -59,11 +60,13 @@ export function UltimateAbilityButton({
     ? "Ultimate spent"
     : !implemented
       ? "Not available yet"
+      : isArchitectReleaseWindow
+        ? actionLabel ?? "Use Perfect System now"
       : activeWindow
         ? actionLabel ?? "Tap to trigger"
-      : ready
-        ? actionLabel ?? "Tap to unleash"
-        : `${pct}% charged`;
+        : ready
+          ? actionLabel ?? "Tap to unleash"
+          : `${pct}% charged`;
 
   const isCompact = size === "compact";
 
@@ -79,11 +82,17 @@ export function UltimateAbilityButton({
         canActivate
           ? "border-white/25 focus-visible:ring-white/45"
           : "border-indigo-300/25 opacity-85 saturate-[0.9]"
-      } ${isCompact ? "h-11 px-3 py-0" : "px-3.5 py-3"} ${className ?? ""}`}
+      } ${isArchitectReleaseWindow ? "ring-1 ring-amber-300/35" : ""} ${isCompact ? "h-11 px-3 py-0" : "px-3.5 py-3"} ${className ?? ""}`}
       style={{
-        background: canActivate ? config.presentation.buttonGradient : "linear-gradient(145deg, rgba(12,20,43,0.95), rgba(10,16,36,0.92))",
+        background: canActivate
+          ? isArchitectReleaseWindow
+            ? "linear-gradient(135deg, rgba(251,191,36,0.38), rgba(96,165,250,0.28) 48%, rgba(12,20,43,0.95) 100%)"
+            : config.presentation.buttonGradient
+          : "linear-gradient(145deg, rgba(12,20,43,0.95), rgba(10,16,36,0.92))",
         boxShadow: canActivate
-          ? `0 0 0 1px ${config.presentation.primary}44, 0 16px 34px rgba(3,8,20,0.62), 0 0 28px ${config.glow}`
+          ? isArchitectReleaseWindow
+            ? "0 0 0 1px rgba(251,191,36,0.4), 0 18px 38px rgba(3,8,20,0.62), 0 0 30px rgba(251,191,36,0.25)"
+            : `0 0 0 1px ${config.presentation.primary}44, 0 16px 34px rgba(3,8,20,0.62), 0 0 28px ${config.glow}`
           : "0 10px 24px rgba(3,8,20,0.55)"
       }}
       aria-label={`${ultimateName} ${stateLabel}`}
@@ -109,13 +118,15 @@ export function UltimateAbilityButton({
           />
         ) : null}
 
-        {ready && !activating ? (
+        {canActivate && (ready || isArchitectReleaseWindow) && !activating ? (
           <motion.div
             className="absolute inset-0"
-            animate={{ opacity: [0.08, 0.26, 0.12] }}
-            transition={{ duration: 1.15, repeat: Infinity, ease: "easeInOut" }}
+            animate={{ opacity: isArchitectReleaseWindow ? [0.12, 0.34, 0.14] : [0.08, 0.26, 0.12] }}
+            transition={{ duration: isArchitectReleaseWindow ? 0.85 : 1.15, repeat: Infinity, ease: "easeInOut" }}
             style={{
-              background: `radial-gradient(circle at 50% 50%, ${config.presentation.primary}44 0%, transparent 68%)`
+              background: isArchitectReleaseWindow
+                ? "radial-gradient(circle at 50% 50%, rgba(251,191,36,0.42) 0%, transparent 70%)"
+                : `radial-gradient(circle at 50% 50%, ${config.presentation.primary}44 0%, transparent 68%)`
             }}
           />
         ) : null}

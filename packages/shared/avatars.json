@@ -9,11 +9,11 @@
       "accent": "#38BDF8",
       "glow": "rgba(56,189,248,0.45)"
     },
-    "description": "A high-tempo striker who turns clean answers into steady pressure.",
-    "passive": "Overclock: while your ultimate is active, each correct adds a Power stack (max 5). Every stack adds a flat damage chip on your next hits; a wrong answer removes two stacks instead of wiping you clean.",
+    "description": "A high-tempo striker who turns clean answers into short pressure spikes.",
+    "passive": "Overclock: while your ultimate is active, each correct adds a Power stack (max 4). Every stack adds a flat damage chip on your next hits; a wrong answer removes two stacks instead of wiping you clean.",
     "ultimateId": "rapid_fire",
     "ultimateName": "Overclock",
-    "ultimateDescription": "10 seconds. Each correct adds Power (up to 5). Each Power stack adds flat bonus damage on your attacks. Wrong answers strip 2 stacks.",
+    "ultimateDescription": "8 seconds. Each correct adds Power (up to 4). Each Power stack adds flat bonus damage on your attacks. Wrong answers strip 2 stacks.",
     "ultimateMeta": {
       "effectType": "stacking_damage_snowball",
       "chargeMultiplier": 1.0
@@ -33,7 +33,7 @@
     "passive": "Neural Jam: on ult, the opponent is visibly jammed and gets brief input-lock windows that disrupt rhythm without piling on extra punishment.",
     "ultimateId": "system_corrupt",
     "ultimateName": "Neural Jam",
-    "ultimateDescription": "10 seconds. Opponent is visibly JAMMED and gets brief input-lock windows that interrupt answer flow.",
+    "ultimateDescription": "8 seconds. Opponent is visibly JAMMED and gets brief input-lock windows that interrupt answer flow.",
     "ultimateMeta": {
       "effectType": "visibility_modifier",
       "chargeMultiplier": 1.0
@@ -49,11 +49,11 @@
       "accent": "#34D399",
       "glow": "rgba(52,211,153,0.4)"
     },
-    "description": "A defensive specialist that turns absorbed pressure into a finishing burst.",
-    "passive": "Reflect Bastion: while your ultimate is up you take less damage, bank part of what you prevent, and fire it back when Bastion ends (capped burst).",
+    "description": "A defensive specialist built around surviving pressure with a fortified window.",
+    "passive": "Reflect Bastion: while your ultimate is up you take much less damage for a short window, letting you outlast enemy pressure without adding a burst finisher.",
     "ultimateId": "shield",
     "ultimateName": "Reflect Bastion",
-    "ultimateDescription": "10 seconds. You mitigate incoming hits, store prevented damage, then release it as one shockwave when Bastion ends (damage capped).",
+    "ultimateDescription": "8 seconds. You heavily mitigate incoming hits for a short fortified window.",
     "ultimateMeta": {
       "effectType": "domain_reflect",
       "chargeMultiplier": 1.0
@@ -73,7 +73,7 @@
     "passive": "Blaze Surge: correct answers add burn stacks while your ultimate is active. Burn ticks chip the opponent; wrong answers shave one stack.",
     "ultimateId": "double",
     "ultimateName": "Blaze Surge",
-    "ultimateDescription": "10 seconds. Correct answers add burn stacks; burn ticks every ~0.9s. Wrong answers remove one stack.",
+    "ultimateDescription": "8 seconds. Correct answers add burn stacks; burn ticks every ~0.9s. Wrong answers remove one stack.",
     "ultimateMeta": {
       "effectType": "stacking_burn_dot",
       "tickEveryMs": 900,
@@ -103,7 +103,7 @@
     "ultimateDescription": "10 seconds (premium). Correct answers build up to 5 System Nodes. Release early for a capped burst, or auto-release when the window ends. Wrong answers remove 1 node.",
     "ultimateMeta": {
       "effectType": "premium_sequence_overload",
-      "chargeMultiplier": 1.06
+      "chargeMultiplier": 1.1
     }
   },
   {
@@ -129,7 +129,7 @@
     "ultimateDescription": "10 seconds (premium). Correct answers hit harder and restore some HP, but each empowered hit causes a short recovery delay. Wrong answers still punish you.",
     "ultimateMeta": {
       "effectType": "premium_juggernaut_burst",
-      "chargeMultiplier": 1.06
+      "chargeMultiplier": 1.12
     }
   }
 ]

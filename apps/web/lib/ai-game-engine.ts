@@ -16,14 +16,22 @@ export type AiProfile = {
   accuracy: number;
 };
 
-const AI_PROFILES: Record<Difficulty, AiProfile> = {
-  easy: { minMs: 6000, maxMs: 14000, accuracy: 0.5 },
-  medium: { minMs: 2800, maxMs: 7000, accuracy: 0.7 },
-  hard: { minMs: 900, maxMs: 3200, accuracy: 0.88 },
+export const AI_DIFFICULTIES = ["easy", "medium", "hard"] as const;
+
+export type AiDifficulty = (typeof AI_DIFFICULTIES)[number];
+
+const AI_PROFILES: Record<AiDifficulty, AiProfile> = {
+  easy: { minMs: 5200, maxMs: 12000, accuracy: 0.52 },
+  medium: { minMs: 2600, maxMs: 6200, accuracy: 0.72 },
+  hard: { minMs: 950, maxMs: 2600, accuracy: 0.9 },
 };
 
-export function getAiProfile(difficulty: Difficulty): AiProfile {
-  return AI_PROFILES[difficulty];
+export function getSafeAiDifficulty(value?: string): AiDifficulty {
+  return AI_DIFFICULTIES.includes(value as AiDifficulty) ? (value as AiDifficulty) : "medium";
+}
+
+export function getAiProfile(aiDifficulty: AiDifficulty): AiProfile {
+  return AI_PROFILES[aiDifficulty];
 }
 
 export function generateQuestion(topic: Topic, difficulty: Difficulty): GeneratedQuestion {

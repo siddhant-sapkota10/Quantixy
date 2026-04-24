@@ -12,7 +12,11 @@ import { useGameAnimations } from "@/hooks/useGameAnimations";
 import { FloatingLabel } from "@/components/animations/FloatingLabel";
 import { CountdownDisplay } from "@/components/animations/CountdownDisplay";
 import { GameOverOverlay } from "@/components/animations/GameOverOverlay";
-import { generateQuestion, getAiProfile } from "@/lib/ai-game-engine";
+import {
+  generateQuestion,
+  getAiProfile,
+  getSafeAiDifficulty
+} from "@/lib/ai-game-engine";
 import { getSupabaseClient } from "@/lib/supabase";
 import { QuestionContent } from "@/components/question-content";
 import type { DuelQuestion } from "@/lib/question-model";
@@ -70,10 +74,10 @@ const DUEL_CORRECT_DAMAGE = 15;
 const DUEL_SKIP_DAMAGE = 12;
 const AI_EMOTE_COOLDOWN_MS = 1500;
 const BOT_ULTIMATE_DURATIONS: Record<BotUltimateId, number> = {
-  rapid_fire: 10_000,
-  system_corrupt: 10_000,
-  shield: 10_000,
-  double: 10_000,
+  rapid_fire: 8_000,
+  system_corrupt: 8_000,
+  shield: 8_000,
+  double: 8_000,
   perfect_sequence: 10_000,
   overpower: 10_000
 };
@@ -89,17 +93,25 @@ function getRandomBotAvatarId() {
 type AiGameClientProps = {
   initialTopic?: string;
   initialDifficulty?: string;
+  initialAiDifficulty?: string;
   opponentMode?: "practice" | "duel";
 };
 
-export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "practice" }: AiGameClientProps) {
+export function AiGameClient({
+  initialTopic,
+  initialDifficulty,
+  initialAiDifficulty,
+  opponentMode = "practice"
+}: AiGameClientProps) {
   const router = useRouter();
   const topic = getSafeTopic(initialTopic);
   const difficulty = getSafeDifficulty(initialDifficulty);
+  const aiDifficulty = getSafeAiDifficulty(initialAiDifficulty);
   const isDuelMode = opponentMode === "duel";
   const matchDurationSeconds = isDuelMode ? Number(getSharedMatchDurationSeconds(topic, difficulty) ?? 60) : 60;
   const topicLabel = formatTopicLabel(topic);
   const difficultyLabel = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+  const aiDifficultyLabel = aiDifficulty.charAt(0).toUpperCase() + aiDifficulty.slice(1);
 
   // Auth / player info
   const [yourName, setYourName] = useState("You");
@@ -516,7 +528,7 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
     if (statusRef.current !== "playing") return;
     if (eliminatedRef.current.opponent) return;
 
-    const profile = getAiProfile(difficulty);
+    const profile = getAiProfile(aiDifficulty);
     const delay = profile.minMs + Math.random() * (profile.maxMs - profile.minMs);
 
     if (aiTimeoutRef.current) clearTimeout(aiTimeoutRef.current);
@@ -601,7 +613,7 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
       scheduleAiAttempt();
     }, delay);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applyDuelDamage, difficulty, increaseBotUltimateCharge, isDuelMode, topic, triggerEndgameScoreImpact, triggerScoreGlow]);
+  }, [aiDifficulty, applyDuelDamage, difficulty, increaseBotUltimateCharge, isDuelMode, topic, triggerEndgameScoreImpact, triggerScoreGlow]);
 
   // ---------------------------------------------------------------------------
   // Start countdown then game
@@ -1472,6 +1484,7 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
           <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.25em] text-cyan-200">
             <span>Topic: {topicLabel}</span>
             <span>Difficulty: {difficultyLabel}</span>
+            <span>AI: {aiDifficultyLabel}</span>
             <span className={showFinalPhase ? "text-rose-300" : undefined}>Time: {timerLabel}</span>
             <span className="rounded-full border border-purple-300/40 bg-purple-500/12 px-2 py-0.5 text-purple-200">
               {isDuelMode ? "AI Duel" : "Practice"}

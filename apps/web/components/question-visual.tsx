@@ -1,10 +1,42 @@
-"use client";
+﻿"use client";
 
 import type { DiagramSpec } from "@/lib/question-model";
 
 type QuestionVisualProps = {
   spec: DiagramSpec | null | undefined;
+  compact?: boolean;
 };
+
+function LabelChip({
+  x,
+  y,
+  width,
+  text,
+  textColor,
+}: {
+  x: number;
+  y: number;
+  width: number;
+  text: string;
+  textColor: string;
+}) {
+  return (
+    <g transform={`translate(${x - width / 2}, ${y - 12})`}>
+      <rect
+        x="0"
+        y="0"
+        width={width}
+        height="24"
+        rx="8"
+        fill="rgba(2,6,23,0.92)"
+        stroke="rgba(148,163,184,0.45)"
+      />
+      <text x={width / 2} y="16" textAnchor="middle" fill={textColor} fontSize="12" fontWeight="800">
+        {text}
+      </text>
+    </g>
+  );
+}
 
 function CoordinateGrid({
   xRange = [-6, 6],
@@ -138,37 +170,33 @@ function fractionToDecimal(n: number, d: number) {
   return n / d;
 }
 
-export function QuestionVisual({ spec }: QuestionVisualProps) {
+export function QuestionVisual({ spec, compact = false }: QuestionVisualProps) {
   if (!spec) return null;
 
   if (spec.kind === "rectangle") {
     return (
-      <svg viewBox="0 0 320 220" className="h-[13.5rem] w-full text-slate-100">
-        <rect x="24" y="36" width="272" height="148" rx="16" fill="rgba(15,23,42,0.72)" stroke="rgba(148,163,184,0.45)" strokeWidth="2" />
-        <text x="160" y="30" textAnchor="middle" fill="rgba(226,232,240,0.92)" fontSize="13" fontWeight="700">
-          w = {spec.labels?.width ?? spec.width}
-        </text>
-        <text x="12" y="112" fill="rgba(226,232,240,0.92)" fontSize="13" fontWeight="700">
-          h = {spec.labels?.height ?? spec.height}
-        </text>
+      <svg viewBox="0 0 320 220" className={`${compact ? "h-[8.75rem] sm:h-[10rem]" : "h-[11rem] sm:h-[13.5rem]"} w-full text-slate-100`}>
+        <rect x="56" y="52" width="208" height="112" rx="16" fill="rgba(15,23,42,0.72)" stroke="rgba(148,163,184,0.45)" strokeWidth="2" />
+        <LabelChip x={160} y={28} width={78} text={`w = ${spec.labels?.width ?? spec.width}`} textColor="rgba(226,232,240,0.95)" />
+        <LabelChip x={40} y={108} width={70} text={`h = ${spec.labels?.height ?? spec.height}`} textColor="rgba(226,232,240,0.95)" />
       </svg>
     );
   }
 
   if (spec.kind === "triangle-angle") {
     return (
-      <svg viewBox="0 0 320 220" className="h-[13.5rem] w-full text-slate-100">
+      <svg viewBox="0 0 320 220" className={`${compact ? "h-[8.75rem] sm:h-[10rem]" : "h-[11rem] sm:h-[13.5rem]"} w-full text-slate-100`}>
         <polygon points="60,176 258,176 165,44" fill="rgba(15,23,42,0.76)" stroke="rgba(148,163,184,0.65)" strokeWidth="2.2" />
-        <text x="86" y="164" fill="rgba(125,211,252,0.95)" fontSize="13" fontWeight="700">{spec.values.a}°</text>
-        <text x="226" y="164" fill="rgba(251,146,60,0.95)" fontSize="13" fontWeight="700">{spec.values.b}°</text>
-        <text x="158" y="64" fill="rgba(192,132,252,0.98)" fontSize="14" fontWeight="800">{spec.values.c}°</text>
+        <LabelChip x={94} y={158} width={44} text={`${spec.values.a}°`} textColor="rgba(125,211,252,0.98)" />
+        <LabelChip x={228} y={158} width={44} text={`${spec.values.b}°`} textColor="rgba(251,146,60,0.98)" />
+        <LabelChip x={164} y={62} width={42} text={`${spec.values.c}°`} textColor="rgba(192,132,252,0.98)" />
       </svg>
     );
   }
 
   if (spec.kind === "circle") {
     return (
-      <svg viewBox="0 0 320 220" className="h-[13.5rem] w-full text-slate-100">
+      <svg viewBox="0 0 320 220" className={`${compact ? "h-[8.75rem] sm:h-[10rem]" : "h-[11rem] sm:h-[13.5rem]"} w-full text-slate-100`}>
         <circle cx="160" cy="112" r="72" fill="rgba(15,23,42,0.76)" stroke="rgba(148,163,184,0.62)" strokeWidth="2.2" />
         {spec.showDiameter ? <line x1="88" y1="112" x2="232" y2="112" stroke="rgba(56,189,248,0.8)" strokeWidth="2.4" /> : null}
         <text x="160" y="110" textAnchor="middle" fill="rgba(226,232,240,0.95)" fontSize="14" fontWeight="700">
@@ -180,13 +208,13 @@ export function QuestionVisual({ spec }: QuestionVisualProps) {
 
   if (spec.kind === "line-angle") {
     return (
-      <svg viewBox="0 0 320 220" className="h-[13.5rem] w-full text-slate-100">
+      <svg viewBox="0 0 320 220" className={`${compact ? "h-[8.25rem] sm:h-[9.5rem]" : "h-[10.5rem] sm:h-[13.5rem]"} w-full text-slate-100`}>
         <line x1="40" y1="160" x2="280" y2="160" stroke="rgba(148,163,184,0.8)" strokeWidth="2.4" />
         <line x1="160" y1="160" x2="100" y2="84" stroke="rgba(56,189,248,0.85)" strokeWidth="2.4" />
         <path d="M140 158 A28 28 0 0 1 122 134" stroke="rgba(56,189,248,0.9)" fill="none" strokeWidth="2.2" />
         <path d="M180 158 A40 40 0 0 0 105 126" stroke="rgba(251,113,133,0.9)" fill="none" strokeWidth="2.2" />
-        <text x="112" y="128" fill="rgba(125,211,252,0.96)" fontSize="14" fontWeight="700">{spec.known}°</text>
-        <text x="205" y="132" fill="rgba(251,113,133,0.96)" fontSize="14" fontWeight="700">{spec.unknownLabel ?? "?"}</text>
+        <LabelChip x={110} y={126} width={42} text={`${spec.known}°`} textColor="rgba(125,211,252,0.98)" />
+        <LabelChip x={212} y={126} width={34} text={`${spec.unknownLabel ?? "?"}`} textColor="rgba(251,113,133,0.98)" />
       </svg>
     );
   }
@@ -324,7 +352,7 @@ export function QuestionVisual({ spec }: QuestionVisualProps) {
     const cx = 72;
     const cy = 70;
     return (
-      <svg viewBox="0 0 320 220" className="h-[13.5rem] w-full text-slate-100">
+      <svg viewBox="0 0 320 220" className={`${compact ? "h-[8.75rem] sm:h-[10rem]" : "h-[11rem] sm:h-[13.5rem]"} w-full text-slate-100`}>
         <polygon
           points={`${ax},${ay} ${bx},${by} ${cx},${cy}`}
           fill="rgba(15,23,42,0.76)"
@@ -336,7 +364,7 @@ export function QuestionVisual({ spec }: QuestionVisualProps) {
         {/* Theta arc + symbol at the reference angle */}
         <path d="M236 178 A28 28 0 0 0 247 162" fill="none" stroke="rgba(125,211,252,0.95)" strokeWidth="2.2" />
         <text x="231" y="164" fill="rgba(125,211,252,0.98)" fontSize="15" fontWeight="800">
-          θ
+          Î¸
         </text>
 
         {/* Opposite label chip */}
@@ -416,3 +444,6 @@ export function QuestionVisual({ spec }: QuestionVisualProps) {
 
   return null;
 }
+
+
+

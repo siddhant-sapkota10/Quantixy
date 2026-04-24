@@ -6,6 +6,7 @@ type GamePageProps = {
   searchParams: {
     topic?: string;
     difficulty?: string;
+    aiDifficulty?: string;
     mode?: string;
     aiMode?: string;
     match?: string;
@@ -22,6 +23,7 @@ export default function GamePage({ searchParams }: GamePageProps) {
         <AiGameClient
           initialTopic={searchParams.topic}
           initialDifficulty={searchParams.difficulty}
+          initialAiDifficulty={searchParams.aiDifficulty}
           opponentMode={searchParams.aiMode === "duel" ? "duel" : "practice"}
         />
       ) : (

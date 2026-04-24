@@ -78,10 +78,10 @@ const HP_WRONG_ANSWER_PENALTY = 12;
 const HP_TIMEOUT_PENALTY = 12;
 // Free roster: equal 10s windows. Premium: slightly longer + tuned kits below.
 const ULTIMATE_DURATION_MS = Object.freeze({
-  rapid_fire: 10_000,
-  system_corrupt: 10_000,
-  shield: 10_000,
-  double: 10_000,
+  rapid_fire: 8_000,
+  system_corrupt: 8_000,
+  shield: 8_000,
+  double: 8_000,
   perfect_sequence: 10_000,
   overpower: 10_000
 });
@@ -92,32 +92,32 @@ const WILDFIRE_TICK_PER_STACK = 1;
 const INFERNO_DOT_TICK_MS = 900;
 const INFERNO_MAX_TICK_DAMAGE = 4;
 const INFERNO_BURN_TICK_MS = INFERNO_DOT_TICK_MS;
-/** Guardian: fraction of raw damage that still connects; reflect uses prevented portion. */
-const GUARDIAN_REDUCTION_MULTIPLIER = 0.52;
-const GUARDIAN_REFLECT_MULTIPLIER = 0.3;
-/** Titan: premium juggernaut. Hits harder than free burst kits, but the recovery window keeps it honest. */
-const TITAN_DAMAGE_MULTIPLIER = 1.22;
-const TITAN_BONUS_DAMAGE = 2;
-const TITAN_RESIST_MULTIPLIER = 0.88;
-/** Flash — Overclock: strong snowball pressure, but should not out-burst premium finishers at full ramp. */
-const FLASH_OVERCLOCK_STACK_CAP = 5;
-const FLASH_POWER_FLAT_PER_STACK = 3;
+/** Guardian: now a pure short mitigation window for free-roster parity, not a burst finisher. */
+const GUARDIAN_REDUCTION_MULTIPLIER = 0.4;
+const GUARDIAN_REFLECT_MULTIPLIER = 0;
+/** Titan: premium juggernaut. Intentionally stronger than the free roster, but still answer-gated. */
+const TITAN_DAMAGE_MULTIPLIER = 1.4;
+const TITAN_BONUS_DAMAGE = 4;
+const TITAN_RESIST_MULTIPLIER = 0.82;
+/** Flash — Overclock: still pressure-oriented, but shorter and lighter than premium burst windows. */
+const FLASH_OVERCLOCK_STACK_CAP = 4;
+const FLASH_POWER_FLAT_PER_STACK = 2;
 /** Shadow — Neural Jam: keep it readable and fair with visible input-lock disruption only. */
 const NEURAL_INPUT_LOCK_MS = 720;
 /** Extra lock applied to the opponent the moment Shadow pops Neural Jam (mid-card). */
 const NEURAL_ULT_ACTIVATION_LOCK_MS = 1800;
 const NEURAL_QUESTION_TIMER_MULT = 1;
 const NEURAL_WRONG_EXTRA_HP = 0;
-/** Guardian — Reflect Bastion: store prevented damage; burst cap when ultimate ends. */
-const GUARDIAN_BURST_DAMAGE_CAP = 30;
-/** Architect — Perfect System: premium precision burst with manual/auto release. */
+/** Guardian — Reflect Bastion: no burst release in the free-roster parity pass. */
+const GUARDIAN_BURST_DAMAGE_CAP = 0;
+/** Architect — Perfect System: premium finisher with a higher ceiling than free burst ultimates. */
 const ARCHITECT_NODE_CAP = 5;
-const ARCHITECT_BURST_BASE_DAMAGE = 6;
-const ARCHITECT_BURST_DAMAGE_PER_NODE = 5;
-const ARCHITECT_BURST_DAMAGE_CAP = 28;
-/** Titan — Colossus Mode: premium sustain is slightly stronger, but still answer-gated. */
-const TITAN_LIFESTEAL_RATIO = 0.24;
-const TITAN_RECOVERY_MS = 1000;
+const ARCHITECT_BURST_BASE_DAMAGE = 8;
+const ARCHITECT_BURST_DAMAGE_PER_NODE = 6;
+const ARCHITECT_BURST_DAMAGE_CAP = 36;
+/** Titan — Colossus Mode: premium sustain is overtly stronger, traded for a heavier rhythm lock. */
+const TITAN_LIFESTEAL_RATIO = 0.3;
+const TITAN_RECOVERY_MS = 1100;
 const ROOM_CODE_LENGTH = 6;
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -1226,8 +1226,9 @@ function resolveIncomingDamage(
     const prevented = Math.max(0, damage - reducedDamage);
     mitigatedDamage += prevented;
     damage = reducedDamage;
-    if (prevented > 0) {
-      game.reflectedDamage[targetSocketId] = (game.reflectedDamage?.[targetSocketId] ?? 0) + prevented;
+    const reflectedPortion = Math.max(0, Math.round(prevented * GUARDIAN_REFLECT_MULTIPLIER));
+    if (reflectedPortion > 0) {
+      game.reflectedDamage[targetSocketId] = (game.reflectedDamage?.[targetSocketId] ?? 0) + reflectedPortion;
       storedDamageTotal = game.reflectedDamage[targetSocketId];
     }
   }
@@ -2165,6 +2166,9 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
       architectNodesGained = nextNodes - (game.architectMarks[playerSocketId] ?? 0);
       game.architectMarks[playerSocketId] = nextNodes;
       game.architectSequenceStreak[playerSocketId] = nextNodes;
+      if (nextNodes >= ARCHITECT_NODE_CAP) {
+        detonateArchitectSystem(game, roomId, playerSocketId, "auto");
+      }
     }
 
     if (ultimateType === "overpower" && ultimateActive) {

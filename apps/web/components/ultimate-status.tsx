@@ -178,16 +178,29 @@ export function UltimateStatus({
 
       {ultimateType === "shield" ? (
         <div className="mt-2">
-          <div className="mb-1 flex items-center justify-between text-[9px] font-black uppercase tracking-[0.16em] text-cyan-100/85">
-            <span>Stored Reflect</span>
-            <span>{Math.max(0, Math.round(fortressStoredDamage))}</span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-slate-950/60">
-            <div
-              className="h-full rounded-full bg-cyan-300 transition-all duration-200"
-              style={{ width: `${Math.min(100, (Math.max(0, fortressStoredDamage) / 30) * 100)}%` }}
-            />
-          </div>
+          {fortressStoredDamage > 0 ? (
+            <>
+              <div className="mb-1 flex items-center justify-between text-[9px] font-black uppercase tracking-[0.16em] text-cyan-100/85">
+                <span>Stored Reflect</span>
+                <span>{Math.max(0, Math.round(fortressStoredDamage))}</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-slate-950/60">
+                <div
+                  className="h-full rounded-full bg-cyan-300 transition-all duration-200"
+                  style={{ width: `${Math.min(100, (Math.max(0, fortressStoredDamage) / 30) * 100)}%` }}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-100/90">
+              <span className="rounded-full border border-cyan-300/25 bg-cyan-500/12 px-2 py-0.5">
+                Fortified
+              </span>
+              <span className="rounded-full border border-white/10 bg-black/15 px-2 py-0.5">
+                Reduced Damage
+              </span>
+            </div>
+          )}
         </div>
       ) : null}
 
