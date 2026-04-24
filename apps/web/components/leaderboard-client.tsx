@@ -141,12 +141,12 @@ export function LeaderboardClient() {
           </div>
         </div>
 
-        <div className="neon-panel-soft overflow-x-auto rounded-3xl">
-          <div className="grid min-w-[300px] grid-cols-[44px_1fr_68px] gap-2 border-b border-white/[0.06] px-3 py-3 text-xs font-semibold uppercase tracking-[0.25em] text-textSecondary/65 sm:grid-cols-[68px_1fr_96px_1fr] sm:gap-4 sm:px-6 sm:py-4">
+        <div className="neon-panel-soft rounded-3xl">
+          <div className="hidden grid-cols-[68px_1fr_96px_1fr] gap-4 border-b border-white/[0.06] px-6 py-4 text-xs font-semibold uppercase tracking-[0.25em] text-textSecondary/65 sm:grid">
             <span>#</span>
             <span>Player</span>
             <span>Rating</span>
-            <span className="hidden sm:block">Topic</span>
+            <span>Topic</span>
           </div>
 
           {loading ? (
@@ -160,45 +160,78 @@ export function LeaderboardClient() {
               {entries.map((entry, index) => {
                 const isTopThree = index < 3;
                 const isCurrentUser = myRank?.playerId === entry.playerId;
+                const rowTint = isCurrentUser
+                  ? "bg-cyan-400/[0.06]"
+                  : isTopThree
+                    ? "bg-indigo-400/[0.055]"
+                    : "";
 
                 return (
-                  <div
-                    key={entry.playerId}
-                    className={`q-row-hover grid min-w-[300px] grid-cols-[44px_1fr_68px] items-center gap-2 border-b border-white/[0.045] px-3 py-3 text-sm last:border-b-0 sm:grid-cols-[68px_1fr_96px_1fr] sm:gap-4 sm:px-6 sm:py-4 ${
-                      isCurrentUser
-                        ? "bg-cyan-400/[0.06]"
-                        : isTopThree
-                          ? "bg-indigo-400/[0.055]"
-                          : ""
-                    }`}
-                  >
-                    {/* Position */}
-                    <span className={`text-sm font-bold tabular-nums ${isTopThree ? "text-cyan-200" : "text-slate-500"}`}>
-                      {entry.rank}
-                    </span>
+                  <div key={entry.playerId} className={`border-b border-white/[0.045] last:border-b-0 ${rowTint}`}>
+                    <div className="q-row-hover flex items-start gap-3 px-4 py-4 sm:hidden">
+                      <div className="flex w-12 shrink-0 flex-col items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03] px-2 py-2">
+                        <span className={`text-lg font-black tabular-nums ${isTopThree ? "text-cyan-200" : "text-slate-400"}`}>
+                          {entry.rank}
+                        </span>
+                        <span className="mt-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">Rank</span>
+                      </div>
 
-                    {/* Player identity — avatar, name, rank badge */}
-                    <span className="flex min-w-0 items-center gap-2 sm:gap-2.5">
-                      <span className="shrink-0 text-xl leading-none sm:text-2xl">{getAvatar(entry.avatarId).icon}</span>
-                      <span className="min-w-0">
-                        <span className="flex min-w-0 items-center gap-1.5">
-                          <span className="truncate font-semibold text-white">{entry.name}</span>
-                          {isCurrentUser ? (
+                      <div className="min-w-0 flex-1">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <span className="shrink-0 text-2xl leading-none">{getAvatar(entry.avatarId).icon}</span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex min-w-0 items-center gap-1.5">
+                              <span className="truncate font-semibold text-white">{entry.name}</span>
+                              {isCurrentUser ? (
+                                <span className="shrink-0 rounded-full border border-cyan-300/45 bg-cyan-400/15 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] text-cyan-100">
+                                  You
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="mt-1">
+                              <RankBadge rating={entry.rating} size="sm" />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Rating</p>
+                            <p className="mt-1 font-bold tabular-nums text-slate-100">{entry.rating}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Topic</p>
+                            <p className="mt-1 text-slate-300">{formatTopicLabel(entry.topic as Topic)}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="hidden grid-cols-[68px_1fr_96px_1fr] items-center gap-4 px-6 py-4 text-sm sm:grid">
+                      <span className={`text-sm font-bold tabular-nums ${isTopThree ? "text-cyan-200" : "text-slate-500"}`}>
+                        {entry.rank}
+                      </span>
+
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <span className="shrink-0 text-2xl leading-none">{getAvatar(entry.avatarId).icon}</span>
+                        <span className="min-w-0">
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <span className="truncate font-semibold text-white">{entry.name}</span>
+                            {isCurrentUser ? (
                               <span className="shrink-0 rounded-full border border-cyan-300/45 bg-cyan-400/15 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.14em] text-cyan-100">
                                 You
                               </span>
-                          ) : null}
-                        </span>
-                        <span className="mt-0.5 block">
-                          <RankBadge rating={entry.rating} size="sm" />
+                            ) : null}
+                          </span>
+                          <span className="mt-0.5 block">
+                            <RankBadge rating={entry.rating} size="sm" />
+                          </span>
                         </span>
                       </span>
-                    </span>
 
-                    {/* Rating — clean number, secondary to rank identity */}
-                    <span className="font-bold tabular-nums text-slate-100">{entry.rating}</span>
-
-                    <span className="hidden text-slate-400 sm:block">{formatTopicLabel(entry.topic as Topic)}</span>
+                      <span className="font-bold tabular-nums text-slate-100">{entry.rating}</span>
+                      <span className="text-slate-400">{formatTopicLabel(entry.topic as Topic)}</span>
+                    </div>
                   </div>
                 );
               })}

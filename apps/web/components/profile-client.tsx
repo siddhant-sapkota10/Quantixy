@@ -1244,8 +1244,68 @@ export function ProfileClient() {
               </div>
             </div>
 
-            <div className="q-card-subtle mt-6 overflow-x-auto rounded-3xl">
-              <div className="min-w-[700px]">
+            <div className="mt-6 space-y-3 md:hidden">
+              {loading ? (
+                <div className="q-card-subtle rounded-3xl px-4 py-10 text-center text-slate-300">Loading profile...</div>
+              ) : data && filteredMatches.length > 0 ? (
+                filteredMatches.map((match) => (
+                  <div key={match.id} className="q-card-subtle rounded-3xl px-4 py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-white">{formatTopicLabel(match.topic as Topic)}</p>
+                        <p className="mt-1 text-sm text-slate-300">vs {match.opponentName}</p>
+                      </div>
+                      <span
+                        className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${
+                          match.result === "win"
+                            ? "border-emerald-400/25 bg-emerald-500/10 text-emerald-200"
+                            : match.result === "loss"
+                              ? "border-rose-400/25 bg-rose-500/10 text-rose-200"
+                              : "border-white/10 bg-white/5 text-slate-200"
+                        }`}
+                      >
+                        {match.result === "win" ? "Win" : match.result === "loss" ? "Loss" : "Draw"}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Score</p>
+                        <p className="mt-1 font-semibold text-white">
+                          {match.score.you} - {match.score.opponent}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Rating</p>
+                        <p
+                          className={`mt-1 font-semibold ${
+                            match.ratingChange > 0
+                              ? "text-emerald-300"
+                              : match.ratingChange < 0
+                                ? "text-rose-300"
+                                : "text-slate-300"
+                          }`}
+                        >
+                          {match.ratingChange > 0 ? "+" : ""}
+                          {match.ratingChange}
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="mt-3 text-xs text-slate-400">{new Date(match.createdAt).toLocaleString()}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="q-card-subtle rounded-3xl px-4 py-10 text-center text-slate-300">
+                  {selectedMatchTopic === "all"
+                    ? "No completed matches yet. Jump into a game and your history will show up here."
+                    : `No ${formatTopicLabel(selectedMatchTopic as Topic)} matches yet.`}
+                </div>
+              )}
+            </div>
+
+            <div className="q-card-subtle mt-6 hidden rounded-3xl md:block">
+              <div>
                 <div className="grid grid-cols-[1.1fr_1fr_110px_110px_1fr] gap-3 border-b border-white/[0.06] px-5 py-4 text-xs font-semibold uppercase tracking-[0.22em] text-slate-400/60">
                   <span>Topic</span>
                   <span>Opponent</span>

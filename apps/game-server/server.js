@@ -1745,6 +1745,7 @@ function applyMistakePenalty(roomId, playerSocketId, reason, damage, clientFxHin
 
   const playerState = game.playerQuestionState[playerSocketId];
   if (!playerState || playerState.answered || game.eliminated[playerSocketId]) return;
+  const playerUltimateType = getUltimateTypeForPlayer(game, playerSocketId);
 
   // Timeout path bypasses handleIncorrectAnswer, so we must apply
   // avatar-specific mistake consequences here as well.
@@ -3584,4 +3585,3 @@ httpServer.listen(PORT, HOST, () => {
   console.log(`[server] leaderboard endpoint available at /leaderboard`);
   console.log(`[server] default rating = ${DEFAULT_RATING}`);
 });
-

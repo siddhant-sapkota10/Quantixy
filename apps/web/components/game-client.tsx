@@ -47,6 +47,7 @@ import {
 } from "@/components/animations/UltimateActivationOverlay";
 import { UltimateCombatFxLayer, type UltimateFxSnapshot } from "@/components/animations/UltimateCombatFxLayer";
 import { ULTIMATE_VFX, normalizeUltimateType, type UltimateType } from "@/lib/ultimate-vfx";
+import { cn } from "@/lib/utils";
 
 type GameStatus =
   | "connecting"
@@ -494,6 +495,13 @@ export function GameClient({
   /** Token (server-side generation counter) of the question currently on screen.
    *  Sent back with every submitAnswer so the server can reject stale submissions. */
   const currentQuestionTokenRef = useRef(0);
+  const [viewportState, setViewportState] = useState({
+    width: 0,
+    height: 0,
+    keyboardOpen: false,
+    compact: false,
+    cramped: false
+  });
 
   // Opponent presence / activity state
   const [opponentActivity, setOpponentActivity] = useState<OpponentActivity>("idle");
@@ -523,6 +531,49 @@ export function GameClient({
     peakStreak: number;
     opponentPeakStreak: number;
   } | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const updateViewportState = () => {
+      const visualViewport = window.visualViewport;
+      const width = Math.round(visualViewport?.width ?? window.innerWidth);
+      const height = Math.round(visualViewport?.height ?? window.innerHeight);
+      const baselineHeight = Math.max(window.innerHeight, height);
+      const keyboardOpen = baselineHeight - height > 160;
+      const compact = height < 820 || width < 390;
+      const cramped = height < 700 || keyboardOpen;
+
+      setViewportState((previous) => {
+        if (
+          previous.width === width &&
+          previous.height === height &&
+          previous.keyboardOpen === keyboardOpen &&
+          previous.compact === compact &&
+          previous.cramped === cramped
+        ) {
+          return previous;
+        }
+
+        return { width, height, keyboardOpen, compact, cramped };
+      });
+    };
+
+    updateViewportState();
+
+    const visualViewport = window.visualViewport;
+    window.addEventListener("resize", updateViewportState);
+    visualViewport?.addEventListener("resize", updateViewportState);
+    visualViewport?.addEventListener("scroll", updateViewportState);
+
+    return () => {
+      window.removeEventListener("resize", updateViewportState);
+      visualViewport?.removeEventListener("resize", updateViewportState);
+      visualViewport?.removeEventListener("scroll", updateViewportState);
+    };
+  }, []);
   /** Peak answer-streak reached by local player this match. */
   const peakYouStreakRef = useRef(0);
   /** Peak answer-streak reached by opponent this match. */
@@ -3398,6 +3449,9 @@ export function GameClient({
   const isOpponentLeft = status === "opponent-left";
   const isWaitingState = status === "connecting" || status === "waiting";
   const isActiveGameplay = status === "playing";
+  const compactGameplay = isActiveGameplay && viewportState.compact;
+  const crampedGameplay = isActiveGameplay && viewportState.cramped;
+  const keyboardOpenDuringGameplay = isActiveGameplay && viewportState.keyboardOpen;
   const emotesEnabled = status === "playing" || status === "countdown" || status === "finished";
   const youEliminated = eliminated.you;
   const opponentEliminated = eliminated.opponent;
@@ -3814,7 +3868,7 @@ export function GameClient({
   // Dedicated in-match layout (competitive HUD + sticky action bar).
   if (isActiveGameplay) {
     return (
-      <section className="fixed inset-0 z-10 text-white">
+      <section className="fixed inset-0 z-10 overflow-hidden text-white">
         {/* Overlays */}
         <GameOverOverlay result={null} />
         <UltimateActivationOverlay cue={ultimateCue} />
@@ -3840,7 +3894,12 @@ export function GameClient({
           />
         ) : null}
         {/* Emote bubbles (HUD layout doesn't render PlayerPanels) */}
-        <div className="pointer-events-none absolute left-0 right-0 top-16 z-30 flex items-start justify-between gap-3 px-3 sm:px-5">
+        <div
+          className={cn(
+            "pointer-events-none absolute left-0 right-0 top-16 z-30 flex items-start justify-between gap-3 px-3 sm:px-5",
+            crampedGameplay && "hidden"
+          )}
+        >
           <div className="relative h-14 w-[46%] max-w-sm">
             <EmoteDisplay items={youEmoteItems} />
           </div>
@@ -3852,7 +3911,10 @@ export function GameClient({
           {ultimateToast ? (
             <motion.div
               key={`ultimate-toast-${ultimateToast.id}`}
-              className="pointer-events-none absolute left-1/2 top-24 z-40 -translate-x-1/2"
+              className={cn(
+                "pointer-events-none absolute left-1/2 z-40 -translate-x-1/2",
+                crampedGameplay ? "top-20" : "top-24"
+              )}
               initial={{ opacity: 0, y: -8, scale: 0.94 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -10, scale: 0.96 }}
@@ -3871,10 +3933,20 @@ export function GameClient({
           ) : null}
         </AnimatePresence>
 
-        <div className="flex h-[100dvh] flex-col overflow-hidden">
+        <div
+          className={cn(
+            "flex min-h-[100dvh] flex-col",
+            compactGameplay ? "overflow-y-auto overscroll-contain" : "h-[100dvh] overflow-hidden"
+          )}
+        >
           {/* Top HUD */}
-          <div className="shrink-0 px-3 pb-2 pt-2.5 sm:px-5 sm:pb-2.5 sm:pt-3">
-            <div className="q-card relative rounded-[1.55rem] p-2 sm:p-3">
+          <div
+            className={cn(
+              "shrink-0 px-3 pb-2 pt-2.5 sm:px-5 sm:pb-2.5 sm:pt-3",
+              compactGameplay && "pb-1.5 pt-2 sm:pb-2"
+            )}
+          >
+            <div className={cn("q-card relative rounded-[1.55rem] p-2 sm:p-3", crampedGameplay && "sm:p-2.5")}>
               <div
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-0 rounded-[1.55rem] opacity-70"
@@ -3884,7 +3956,12 @@ export function GameClient({
                 }}
               />
 
-              <div className="relative grid items-stretch gap-2 md:grid-cols-[minmax(0,1fr)_8.5rem_minmax(0,1fr)] md:gap-3">
+              <div
+                className={cn(
+                  "relative grid items-stretch gap-2 md:grid-cols-[minmax(0,1fr)_8.5rem_minmax(0,1fr)] md:gap-3",
+                  crampedGameplay && "gap-1.5 md:grid-cols-[minmax(0,1fr)_7rem_minmax(0,1fr)]"
+                )}
+              >
                 <MatchChampionCard
                   variant="battle"
                   hp={youDisplayHP}
@@ -3930,15 +4007,15 @@ export function GameClient({
                   }}
                 />
 
-                <div className="flex min-h-[3.1rem] items-center justify-center md:min-h-full">
+                <div className={cn("flex min-h-[3.1rem] items-center justify-center md:min-h-full", crampedGameplay && "min-h-[2.8rem]")}>
                   <div className="flex w-full flex-col items-center gap-2">
                     <SoundToggle muted={muted} onToggle={handleToggleSound} />
-                    <div className="q-card-subtle w-full rounded-2xl px-2.5 py-1.5 text-center sm:px-3 sm:py-2">
+                    <div className={cn("q-card-subtle w-full rounded-2xl px-2.5 py-1.5 text-center sm:px-3 sm:py-2", crampedGameplay && "sm:px-2.5 sm:py-1.5")}>
                       <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-textSecondary/70">Duel</p>
                       <div className="mt-1 flex items-baseline justify-center gap-2">
-                        <span className="text-xl font-black tabular-nums text-sky-200 sm:text-3xl">{scores.you}</span>
+                        <span className={cn("text-xl font-black tabular-nums text-sky-200 sm:text-3xl", crampedGameplay && "sm:text-2xl")}>{scores.you}</span>
                         <span className="text-[10px] font-black uppercase tracking-[0.34em] text-textSecondary/60 sm:text-xs">VS</span>
-                        <span className="text-xl font-black tabular-nums text-rose-200 sm:text-3xl">{scores.opponent}</span>
+                        <span className={cn("text-xl font-black tabular-nums text-rose-200 sm:text-3xl", crampedGameplay && "sm:text-2xl")}>{scores.opponent}</span>
                       </div>
                       <div className="mt-1 inline-flex rounded-full border border-sky-300/18 bg-sky-500/10 px-3 py-1 text-[10px] font-black tracking-[0.24em] text-sky-200 sm:mt-1.5 sm:text-xs">
                         {timerLabel}
@@ -4000,9 +4077,14 @@ export function GameClient({
           </div>
 
           {/* Middle: Question zone */}
-          <div className="flex min-h-0 flex-1 flex-col items-stretch justify-start px-3 py-3 sm:px-5 sm:py-4 md:justify-center md:py-10">
+          <div
+            className={cn(
+              "flex min-h-0 flex-1 flex-col items-stretch justify-start px-3 py-3 sm:px-5 sm:py-4 md:justify-center md:py-10",
+              compactGameplay && "py-2.5 sm:py-3 md:py-4"
+            )}
+          >
             <motion.div animate={animState.questionShakeControls} className="mx-auto w-full max-w-3xl md:max-w-4xl lg:max-w-5xl">
-              <div className="q-card-strong relative rounded-[1.5rem] p-3 text-center sm:p-6 md:p-8">
+              <div className={cn("q-card-strong relative rounded-[1.5rem] p-3 text-center sm:p-6 md:p-8", compactGameplay && "sm:p-4 md:p-5")}>
                 <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-textSecondary/70">
                   Question
                 </p>
@@ -4011,11 +4093,17 @@ export function GameClient({
                     question={currentQuestionData}
                     fallbackPrompt={currentQuestion}
                     compact
-                    promptClassName="text-xl font-black tracking-tight text-white sm:text-4xl md:text-5xl lg:text-6xl"
+                    promptClassName={
+                      crampedGameplay
+                        ? "text-lg font-black tracking-tight text-white sm:text-2xl md:text-3xl"
+                        : compactGameplay
+                          ? "text-xl font-black tracking-tight text-white sm:text-3xl md:text-4xl"
+                          : "text-xl font-black tracking-tight text-white sm:text-4xl md:text-5xl lg:text-6xl"
+                    }
                   />
                 </div>
 
-                <div className="mt-3 min-h-[2.25rem]">
+                <div className={cn("mt-3 min-h-[2.25rem]", crampedGameplay && "min-h-[1.75rem]")}>
                   {primaryStatus ? (
                     <p className={`text-xs font-black uppercase tracking-[0.22em] ${primaryStatus.color}`}>
                       {primaryStatus.text}
@@ -4035,9 +4123,15 @@ export function GameClient({
           </div>
 
           {/* Bottom: Sticky action bar */}
-          <div className="shrink-0 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 sm:px-5">
+          <div
+            className={cn(
+              "shrink-0 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 sm:px-5",
+              compactGameplay && "pt-2",
+              keyboardOpenDuringGameplay && "pb-[calc(env(safe-area-inset-bottom,0px)+8px)]"
+            )}
+          >
             <div className="mx-auto w-full max-w-3xl">
-              <div className="mb-2 flex items-center justify-start sm:justify-center">
+              <div className={cn("mb-2 flex items-center justify-start sm:justify-center", crampedGameplay && "mb-1.5")}>
                 <EmoteBar
                   emotes={availableEmotes}
                   open={emoteBarOpen && emotesEnabled}
@@ -4048,7 +4142,7 @@ export function GameClient({
                   disabled={!emotesEnabled}
                 />
               </div>
-              <form className="flex w-full flex-col gap-2" onSubmit={handleSubmit}>
+              <form className={cn("flex w-full flex-col gap-2", crampedGameplay && "gap-1.5")} onSubmit={handleSubmit}>
                 {isNeuralJamSilenced ? (
                   <div className="flex items-center justify-start sm:justify-center">
                     <span className="rounded-full border border-violet-300/35 bg-violet-500/12 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-violet-100">
@@ -4058,13 +4152,16 @@ export function GameClient({
                 ) : null}
                 <WorkingScratchpad answerInputLocked={inputsLocked} />
                 {Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0 ? (
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className={cn("grid grid-cols-1 gap-2 sm:grid-cols-2", compactGameplay && "sm:grid-cols-1")}>
                     {currentQuestionData.options.map((option, idx) => (
                       <Button
                         key={`${option}-${idx}`}
                         type="button"
                         variant="secondary"
-                        className="relative min-h-[2.75rem] w-full justify-start text-left text-sm"
+                        className={cn(
+                          "relative min-h-[2.75rem] w-full justify-start text-left text-sm",
+                          compactGameplay && "min-h-[2.6rem]"
+                        )}
                         disabled={inputsLocked || youEliminated || feedback.youAnsweredCurrent}
                         onClick={() => handleOptionSubmit(option)}
                       >
@@ -4078,7 +4175,7 @@ export function GameClient({
                 ) : null}
 
                 {!(Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0) ? (
-                  <div className="flex items-stretch gap-2">
+                  <div className={cn("flex items-stretch gap-2", compactGameplay && "flex-col")}>
                     <input
                       ref={answerInputRef}
                       type="text"
@@ -4105,10 +4202,13 @@ export function GameClient({
                       autoCorrect="off"
                       spellCheck={false}
                       enterKeyHint="go"
-                      className="neon-input h-12 min-w-0 flex-1 rounded-2xl px-4 disabled:cursor-not-allowed disabled:opacity-60"
+                      className={cn(
+                        "neon-input h-12 min-w-0 flex-1 rounded-2xl px-4 disabled:cursor-not-allowed disabled:opacity-60",
+                        compactGameplay && "h-11"
+                      )}
                     />
                     <Button
-                      className="h-12 w-[7.5rem] shrink-0"
+                      className={cn("h-12 w-[7.5rem] shrink-0", compactGameplay && "h-11 w-full")}
                       type="submit"
                       disabled={!answer.trim() || inputsLocked || youEliminated || feedback.youAnsweredCurrent}
                     >
@@ -4120,7 +4220,13 @@ export function GameClient({
                 {skipQuestionButton}
 
                 {/* Abilities row: keep things orderly (no empty placeholder box). */}
-                <div className={`grid gap-2 ${POWERUPS_ENABLED ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-2"}`}>
+                <div
+                  className={cn(
+                    "grid gap-2",
+                    POWERUPS_ENABLED ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-2",
+                    compactGameplay && "grid-cols-1"
+                  )}
+                >
                   {POWERUPS_ENABLED ? (
                     <button
                       type="button"
@@ -4939,5 +5045,4 @@ export function GameClient({
     </section>
   );
 }
-
 

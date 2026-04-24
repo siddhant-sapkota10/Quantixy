@@ -429,6 +429,18 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
             />
           </div>
 
+          {hpPct !== null ? (
+            <div className="mt-2">
+              <div className="mb-1 flex items-center justify-between text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                <span>HP</span>
+                <span className="tabular-nums text-slate-200">{Math.round(hpSafe ?? 0)}</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+                <div className={`h-full rounded-full transition-all duration-300 ${hpColor}`} style={{ width: `${hpPct}%` }} />
+              </div>
+            </div>
+          ) : null}
+
           {/* Charge bar */}
           <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-800">
             <div

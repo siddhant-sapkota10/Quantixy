@@ -24,6 +24,7 @@ import { UltimateAbilityButton } from "@/components/ultimate-ability-button";
 import { EMOTES, getEmoteById } from "@/lib/emotes";
 import { EmoteBar } from "@/components/EmoteBar";
 import { EmoteDisplay, type EmoteDisplayItem } from "@/components/EmoteDisplay";
+import { cn } from "@/lib/utils";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const {
   isCorrectAnswer: isSharedCorrectAnswer,
@@ -179,12 +180,62 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
   const countdownGenRef = useRef(0);
   // Increment to restart the whole game
   const [gameKey, setGameKey] = useState(0);
+  const [viewportState, setViewportState] = useState({
+    width: 0,
+    height: 0,
+    keyboardOpen: false,
+    compact: false,
+    cramped: false
+  });
 
   const {
     animState,
     triggerScoreGlow,
     triggerStreakBroken,
   } = useGameAnimations();
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const updateViewportState = () => {
+      const visualViewport = window.visualViewport;
+      const width = Math.round(visualViewport?.width ?? window.innerWidth);
+      const height = Math.round(visualViewport?.height ?? window.innerHeight);
+      const baselineHeight = Math.max(window.innerHeight, height);
+      const keyboardOpen = baselineHeight - height > 160;
+      const compact = height < 820 || width < 390;
+      const cramped = height < 700 || keyboardOpen;
+
+      setViewportState((previous) => {
+        if (
+          previous.width === width &&
+          previous.height === height &&
+          previous.keyboardOpen === keyboardOpen &&
+          previous.compact === compact &&
+          previous.cramped === cramped
+        ) {
+          return previous;
+        }
+
+        return { width, height, keyboardOpen, compact, cramped };
+      });
+    };
+
+    updateViewportState();
+
+    const visualViewport = window.visualViewport;
+    window.addEventListener("resize", updateViewportState);
+    visualViewport?.addEventListener("resize", updateViewportState);
+    visualViewport?.addEventListener("scroll", updateViewportState);
+
+    return () => {
+      window.removeEventListener("resize", updateViewportState);
+      visualViewport?.removeEventListener("resize", updateViewportState);
+      visualViewport?.removeEventListener("scroll", updateViewportState);
+    };
+  }, []);
 
   // Keep refs in sync
   useEffect(() => { statusRef.current = status; }, [status]);
@@ -912,6 +963,200 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
   const youEmoteItems = emoteLabels.filter((item) => item.who === "you");
   const opponentEmoteItems = emoteLabels.filter((item) => item.who === "opponent");
   const inputsLocked = isPlayerInputLocked;
+  const questionOptions = Array.isArray(currentQuestionData?.options) ? currentQuestionData.options : [];
+  const hasMultipleChoiceOptions = questionOptions.length > 0;
+  const compactDuelUi =
+    isDuelMode &&
+    !isFinished &&
+    (viewportState.compact || (viewportState.width > 0 && viewportState.width < 768));
+  const crampedDuelUi =
+    isDuelMode &&
+    !isFinished &&
+    (viewportState.cramped || (viewportState.width > 0 && viewportState.width < 480));
+  const keyboardOpenInDuel = isDuelMode && !isFinished && viewportState.keyboardOpen;
+  const compactTextEntryUi = compactDuelUi && !hasMultipleChoiceOptions;
+
+  const duelAnswerForm = isPlaying ? (
+    <form className={cn("flex w-full flex-col gap-2", crampedDuelUi && "gap-1.5")} onSubmit={handleSubmit}>
+      {isPlayerInputLocked ? (
+        <div className="flex items-center justify-start sm:justify-center">
+          <span className="rounded-full border border-violet-300/35 bg-violet-500/12 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-violet-100">
+            JAMMED
+          </span>
+        </div>
+      ) : null}
+      {!compactDuelUi ? <WorkingScratchpad answerInputLocked={inputsLocked} /> : null}
+      {hasMultipleChoiceOptions ? (
+        <div className={cn("grid grid-cols-1 gap-2 sm:grid-cols-2", compactDuelUi && "gap-1.5 sm:grid-cols-1")}>
+          {questionOptions.map((option, idx) => (
+            <Button
+              key={`${option}-${idx}`}
+              type="button"
+              variant="secondary"
+              className={cn(
+                "relative min-h-[2.75rem] w-full justify-start text-left text-sm",
+                compactDuelUi && "min-h-[2.35rem] px-3 py-2 text-sm"
+              )}
+              disabled={inputsLocked || youEliminated}
+              onClick={() => handleOptionSubmit(option)}
+            >
+              {option}
+            </Button>
+          ))}
+        </div>
+      ) : null}
+
+      {!hasMultipleChoiceOptions ? (
+        <div className={cn("flex items-stretch gap-2", compactDuelUi && "flex-col", compactTextEntryUi && "gap-1.5")}>
+          <input
+            type="text"
+            autoFocus
+            value={answer}
+            onChange={(event) => setAnswer(event.target.value)}
+            placeholder={
+              isPlayerInputLocked
+                ? "Neural jam - inputs unlock shortly..."
+                : youEliminated
+                  ? "Eliminated"
+                  : currentQuestionData?.inputMode === "text"
+                    ? "Type text or symbol answer..."
+                    : "Type answer..."
+            }
+            disabled={inputsLocked || youEliminated}
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="go"
+            className={cn(
+              "neon-input h-12 min-w-0 flex-1 rounded-2xl px-4 disabled:cursor-not-allowed disabled:opacity-60",
+              compactDuelUi && "h-11",
+              compactTextEntryUi && "h-10 rounded-xl"
+            )}
+          />
+          <Button
+            className={cn("h-12 w-[7.5rem] shrink-0", compactDuelUi && "h-11 w-full", compactTextEntryUi && "h-10")}
+            type="submit"
+            disabled={!answer.trim() || inputsLocked || youEliminated}
+          >
+            Submit
+          </Button>
+        </div>
+      ) : null}
+
+      {compactDuelUi ? <WorkingScratchpad answerInputLocked={inputsLocked} /> : null}
+
+      <div className="sm:hidden">
+        <UltimateAbilityButton
+          type={yourUltimateType}
+          ultimateName={yourAvatarData.ultimateName}
+          charge={yourUltimateCharge}
+          ready={canUseYourUltimate}
+          used={yourUltimateUsed}
+          implemented
+          disabled={!canUseYourUltimate}
+          onActivate={() => activateYourUltimate()}
+          size="compact"
+          className="h-11"
+        />
+      </div>
+      <div className="hidden sm:block">
+        <UltimateAbilityButton
+          type={yourUltimateType}
+          ultimateName={yourAvatarData.ultimateName}
+          charge={yourUltimateCharge}
+          ready={canUseYourUltimate}
+          used={yourUltimateUsed}
+          implemented
+          disabled={!canUseYourUltimate}
+          onActivate={() => activateYourUltimate()}
+          size="regular"
+        />
+      </div>
+    </form>
+  ) : null;
+
+  const compactDuelHud = compactDuelUi ? (
+    <div className="q-card relative rounded-[1.35rem] p-2.5">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 rounded-[1.35rem] opacity-70"
+        style={{
+          background:
+            "radial-gradient(ellipse at 28% 35%, rgba(56,189,248,0.12) 0%, transparent 56%), radial-gradient(ellipse at 72% 35%, rgba(251,113,133,0.12) 0%, transparent 56%)"
+        }}
+      />
+      <div className="relative space-y-2">
+        <div className="grid gap-2">
+          <div className="q-card-subtle rounded-2xl px-3 py-2.5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-2.5">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-slate-950/65 text-xl">
+                  {yourAvatar}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black text-white">{yourAvatarData.name}</p>
+                  <p className="truncate text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">{yourName}</p>
+                </div>
+              </div>
+              <span className="shrink-0 rounded-full border border-amber-300/25 bg-amber-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-100">
+                {Math.round(yourUltimateCharge)}%
+              </span>
+            </div>
+            <div className="mt-2 flex items-center justify-between gap-3 text-[11px]">
+              <p className="truncate text-slate-200">{yourAvatarData.ultimateName}</p>
+              <p className="shrink-0 font-bold tabular-nums text-slate-300">{Math.max(0, Math.round(hp.you))} HP</p>
+            </div>
+            <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-800">
+              <div className="h-full rounded-full bg-emerald-400 transition-all duration-300" style={{ width: `${displayHp.you}%` }} />
+            </div>
+          </div>
+
+          <div className="q-card-subtle rounded-2xl px-3 py-2.5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-2.5">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-slate-950/65 text-xl">
+                  {botAvatar.icon}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black text-white">{botAvatar.name}</p>
+                  <p className="truncate text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">{BOT_NAME}</p>
+                </div>
+              </div>
+              <span className="shrink-0 rounded-full border border-sky-300/25 bg-sky-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-sky-100">
+                {Math.round(botUltimateCharge)}%
+              </span>
+            </div>
+            <div className="mt-2 flex items-center justify-between gap-3 text-[11px]">
+              <p className="truncate text-slate-200">{botAvatar.ultimateName}</p>
+              <p className="shrink-0 font-bold tabular-nums text-slate-300">{Math.max(0, Math.round(hp.opponent))} HP</p>
+            </div>
+            <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-800">
+              <div className="h-full rounded-full bg-emerald-400 transition-all duration-300" style={{ width: `${displayHp.opponent}%` }} />
+            </div>
+          </div>
+        </div>
+
+        <div className="q-card-subtle flex items-center justify-between gap-3 rounded-2xl px-3 py-2">
+          <SoundToggle
+            muted={muted}
+            onToggle={() => {
+              const next = !muted;
+              soundManager.setMuted(next);
+              setMuted(next);
+            }}
+          />
+          <div className="flex items-center gap-2 text-center">
+            <span className="text-xl font-black tabular-nums text-sky-200">{scores.you}</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.28em] text-textSecondary">VS</span>
+            <span className="text-xl font-black tabular-nums text-rose-200">{scores.opponent}</span>
+          </div>
+          <span className="rounded-full border border-slate-800 bg-slate-900/85 px-3 py-1 text-[10px] font-black tracking-[0.24em] text-sky-200">
+            {timerLabel}
+          </span>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   const getStreakLabel = (streak: number) => {
     if (streak >= 5) return "UNSTOPPABLE";
@@ -936,9 +1181,14 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
   // ---------------------------------------------------------------------------
   if (isDuelMode && !isFinished) {
     return (
-      <section className="fixed inset-0 z-10 text-white">
+      <section className="fixed inset-0 z-10 overflow-hidden text-white">
         <GameOverOverlay result={null} />
-        <div className="pointer-events-none absolute left-0 right-0 top-16 z-30 flex items-start justify-between gap-3 px-3 sm:px-5">
+        <div
+          className={cn(
+            "pointer-events-none absolute left-0 right-0 top-16 z-30 flex items-start justify-between gap-3 px-3 sm:px-5",
+            crampedDuelUi && "hidden"
+          )}
+        >
           <div className="relative h-14 w-[46%] max-w-sm">
             <EmoteDisplay items={youEmoteItems} />
           </div>
@@ -947,9 +1197,20 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
           </div>
         </div>
 
-        <div className="flex h-[100dvh] flex-col overflow-hidden">
-          <div className="shrink-0 px-3 pb-2 pt-2.5 sm:px-5 sm:pb-2.5 sm:pt-3">
-            <div className="q-card relative rounded-[1.55rem] p-2 sm:p-3">
+        <div
+          className={cn(
+            "flex min-h-[100dvh] flex-col",
+            compactDuelUi ? "overflow-y-auto overscroll-contain" : "h-[100dvh] overflow-hidden"
+          )}
+        >
+          <div
+            className={cn(
+              "shrink-0 px-3 pb-2 pt-2.5 sm:px-5 sm:pb-2.5 sm:pt-3",
+              compactDuelUi && "pb-1.5 pt-2 sm:pb-2"
+            )}
+          >
+            {compactDuelUi ? compactDuelHud : (
+            <div className={cn("q-card relative rounded-[1.55rem] p-2 sm:p-3", crampedDuelUi && "sm:p-2.5")}>
               <div
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-0 rounded-[1.55rem] opacity-70"
@@ -958,9 +1219,14 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
                     "radial-gradient(ellipse at 28% 35%, rgba(56,189,248,0.12) 0%, transparent 56%), radial-gradient(ellipse at 72% 35%, rgba(251,113,133,0.12) 0%, transparent 56%)"
                 }}
               />
-              <div className="relative grid items-stretch gap-2 md:grid-cols-[minmax(0,1fr)_8.5rem_minmax(0,1fr)] md:gap-3">
+              <div
+                className={cn(
+                  "relative grid items-stretch gap-2 md:grid-cols-[minmax(0,1fr)_8.5rem_minmax(0,1fr)] md:gap-3",
+                  crampedDuelUi && "gap-1.5 md:grid-cols-[minmax(0,1fr)_7rem_minmax(0,1fr)]"
+                )}
+              >
                 <MatchChampionCard
-                  variant="battle"
+                  variant={compactDuelUi ? "compact" : "battle"}
                   hp={displayHp.you}
                   maxHp={DUEL_DISPLAY_MAX_HP}
                   model={{
@@ -989,7 +1255,7 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
                   }}
                 />
 
-                <div className="flex min-h-[3.1rem] items-center justify-center md:min-h-full">
+                <div className={cn("flex min-h-[3.1rem] items-center justify-center md:min-h-full", crampedDuelUi && "min-h-[2.8rem]")}>
                   <div className="flex w-full flex-col items-center gap-2">
                     <SoundToggle
                       muted={muted}
@@ -999,12 +1265,12 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
                         setMuted(next);
                       }}
                     />
-                    <div className="q-card-subtle w-full rounded-2xl px-2.5 py-1.5 text-center sm:px-3 sm:py-2">
+                    <div className={cn("q-card-subtle w-full rounded-2xl px-2.5 py-1.5 text-center sm:px-3 sm:py-2", crampedDuelUi && "sm:px-2.5 sm:py-1.5")}>
                       <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-textSecondary">Duel</p>
                       <div className="mt-1 flex items-baseline justify-center gap-2">
-                        <span className="text-xl font-black tabular-nums text-sky-200 sm:text-3xl">{scores.you}</span>
+                        <span className={cn("text-xl font-black tabular-nums text-sky-200 sm:text-3xl", crampedDuelUi && "sm:text-2xl")}>{scores.you}</span>
                         <span className="text-[10px] font-black uppercase tracking-[0.34em] text-textSecondary sm:text-xs">VS</span>
-                        <span className="text-xl font-black tabular-nums text-rose-200 sm:text-3xl">{scores.opponent}</span>
+                        <span className={cn("text-xl font-black tabular-nums text-rose-200 sm:text-3xl", crampedDuelUi && "sm:text-2xl")}>{scores.opponent}</span>
                       </div>
                       <div className="mt-1 inline-flex rounded-full border border-slate-800 bg-slate-900/85 px-3 py-1 text-[10px] font-black tracking-[0.24em] text-sky-200 sm:mt-1.5 sm:text-xs">
                         {timerLabel}
@@ -1014,7 +1280,7 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
                 </div>
 
                 <MatchChampionCard
-                  variant="battle"
+                  variant={compactDuelUi ? "compact" : "battle"}
                   hp={displayHp.opponent}
                   maxHp={DUEL_DISPLAY_MAX_HP}
                   model={{
@@ -1044,15 +1310,34 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
                 />
               </div>
             </div>
+            )}
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col items-stretch justify-start px-3 py-3 sm:px-5 sm:py-4 md:justify-center md:py-10">
-            <motion.div animate={animState.questionShakeControls} className="mx-auto w-full max-w-3xl md:max-w-4xl lg:max-w-5xl">
-              <div className="q-card-strong relative rounded-[1.5rem] p-3 text-center sm:p-6 md:p-8">
+          <div
+            className={cn(
+              "flex min-h-0 flex-1 flex-col items-stretch justify-start px-3 py-3 sm:px-5 sm:py-4 md:justify-center md:py-10",
+              compactDuelUi && "py-2.5 sm:py-3 md:py-4",
+              compactTextEntryUi && "justify-center py-2"
+            )}
+          >
+            <motion.div animate={animState.questionShakeControls} className="mx-auto flex w-full max-w-3xl flex-col gap-2 md:max-w-4xl lg:max-w-5xl">
+              <div
+                className={cn(
+                  "q-card-strong relative rounded-[1.5rem] p-3 text-center sm:p-6 md:p-8",
+                  compactDuelUi && "p-2.5 sm:p-3",
+                  compactTextEntryUi && "p-2.5"
+                )}
+              >
                 <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-textSecondary/70">
                   {isCountdown ? "Countdown" : "Question"}
                 </p>
-                <div className="mt-3 flex min-h-[4.5rem] items-center justify-center sm:min-h-[6rem]">
+                <div
+                  className={cn(
+                    "mt-3 flex min-h-[4.5rem] items-center justify-center sm:min-h-[6rem]",
+                    compactDuelUi && "mt-2 min-h-[2.5rem] sm:min-h-[3rem]",
+                    compactTextEntryUi && "min-h-[1.8rem]"
+                  )}
+                >
                   {isCountdown ? (
                     <CountdownDisplay value={countdownValue} />
                   ) : (
@@ -1060,22 +1345,39 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
                       question={currentQuestionData}
                       fallbackPrompt={currentQuestion}
                       compact
-                      promptClassName="text-xl font-black tracking-tight text-white sm:text-4xl md:text-5xl lg:text-6xl"
+                      promptClassName={
+                        crampedDuelUi
+                          ? "text-base font-black tracking-tight text-white sm:text-xl md:text-2xl"
+                        : compactDuelUi
+                          ? "text-lg font-black tracking-tight text-white sm:text-2xl md:text-3xl"
+                          : "text-xl font-black tracking-tight text-white sm:text-4xl md:text-5xl lg:text-6xl"
+                      }
                     />
                   )}
                 </div>
-                <div className="mt-3 min-h-[2.25rem]">
+                <div className={cn("mt-3 min-h-[2.25rem]", compactDuelUi && "mt-2 min-h-0", compactTextEntryUi && "mt-1", crampedDuelUi && "min-h-[1.5rem]")}>
                   {canUseYourUltimate ? (
                     <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-200">Ultimate Ready</p>
                   ) : null}
                 </div>
               </div>
+              {compactDuelUi ? (
+                <div className={cn(compactTextEntryUi && "mt-1")}>
+                  {duelAnswerForm}
+                </div>
+              ) : null}
             </motion.div>
           </div>
 
-          <div className="shrink-0 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 sm:px-5">
+          <div
+            className={cn(
+              "shrink-0 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 sm:px-5",
+              compactDuelUi && "hidden",
+              keyboardOpenInDuel && "pb-[calc(env(safe-area-inset-bottom,0px)+8px)]"
+            )}
+          >
             <div className="mx-auto w-full max-w-3xl">
-              <div className="mb-2 flex items-center justify-start sm:justify-center">
+              <div className={cn("mb-2 flex items-center justify-start sm:justify-center", crampedDuelUi && "mb-1.5")}>
                 <EmoteBar
                   emotes={availableEmotes}
                   open={emoteBarOpen}
@@ -1086,92 +1388,7 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
                   disabled={!isPlaying}
                 />
               </div>
-
-              {isPlaying ? (
-                <form className="flex w-full flex-col gap-2" onSubmit={handleSubmit}>
-                  {isPlayerInputLocked ? (
-                    <div className="flex items-center justify-start sm:justify-center">
-                      <span className="rounded-full border border-violet-300/35 bg-violet-500/12 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-violet-100">
-                        JAMMED
-                      </span>
-                    </div>
-                  ) : null}
-                  <WorkingScratchpad answerInputLocked={inputsLocked} />
-                  {Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0 ? (
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      {currentQuestionData.options.map((option, idx) => (
-                        <Button
-                          key={`${option}-${idx}`}
-                          type="button"
-                          variant="secondary"
-                          className="relative min-h-[2.75rem] w-full justify-start text-left text-sm"
-                          disabled={inputsLocked || youEliminated}
-                          onClick={() => handleOptionSubmit(option)}
-                        >
-                          {option}
-                        </Button>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  {!(Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0) ? (
-                    <div className="flex items-stretch gap-2">
-                      <input
-                        type="text"
-                        autoFocus
-                        value={answer}
-                        onChange={(event) => setAnswer(event.target.value)}
-                        placeholder={
-                          isPlayerInputLocked
-                            ? "Neural jam - inputs unlock shortly..."
-                            : youEliminated
-                              ? "Eliminated"
-                              : currentQuestionData?.inputMode === "text"
-                                ? "Type text or symbol answer..."
-                                : "Type answer..."
-                        }
-                        disabled={inputsLocked || youEliminated}
-                        autoCapitalize="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        enterKeyHint="go"
-                        className="neon-input h-12 min-w-0 flex-1 rounded-2xl px-4 disabled:cursor-not-allowed disabled:opacity-60"
-                      />
-                      <Button className="h-12 w-[7.5rem] shrink-0" type="submit" disabled={!answer.trim() || inputsLocked || youEliminated}>
-                        Submit
-                      </Button>
-                    </div>
-                  ) : null}
-
-                  <div className="sm:hidden">
-                    <UltimateAbilityButton
-                      type={yourUltimateType}
-                      ultimateName={yourAvatarData.ultimateName}
-                      charge={yourUltimateCharge}
-                      ready={canUseYourUltimate}
-                      used={yourUltimateUsed}
-                      implemented
-                      disabled={!canUseYourUltimate}
-                      onActivate={() => activateYourUltimate()}
-                      size="compact"
-                      className="h-11"
-                    />
-                  </div>
-                  <div className="hidden sm:block">
-                    <UltimateAbilityButton
-                      type={yourUltimateType}
-                      ultimateName={yourAvatarData.ultimateName}
-                      charge={yourUltimateCharge}
-                      ready={canUseYourUltimate}
-                      used={yourUltimateUsed}
-                      implemented
-                      disabled={!canUseYourUltimate}
-                      onActivate={() => activateYourUltimate()}
-                      size="regular"
-                    />
-                  </div>
-                </form>
-              ) : null}
+              {duelAnswerForm}
             </div>
           </div>
         </div>
@@ -1540,5 +1757,3 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
     </section>
   );
 }
-
-
