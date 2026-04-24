@@ -1,2 +1,5 @@
-look
-node_modules
+.env
+.env.*
+!.env.example
+.next/
+*.tsbuildinfo
