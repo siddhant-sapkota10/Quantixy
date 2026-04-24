@@ -129,7 +129,7 @@ function AvatarCard({
       initial={{ opacity: 0, x: side === "you" ? -24 : 24 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.38, delay: animDelay, ease: "easeOut" }}
-      className={`relative flex flex-1 flex-col items-center gap-1.5 rounded-2xl border p-3 text-center sm:gap-2 sm:p-4 ${cardClass}`}
+      className={`relative flex min-w-0 flex-1 flex-col items-center gap-1.5 rounded-2xl border p-3 text-center sm:gap-2 sm:p-4 ${cardClass}`}
     >
       {/* Winner badge */}
       {isWinner && !isDraw && (
@@ -138,10 +138,10 @@ function AvatarCard({
         </div>
       )}
 
-      <p className="max-w-[7rem] truncate text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+      <p className="max-w-full truncate text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
         {name}
       </p>
-      <p className={`text-4xl font-black leading-none sm:text-5xl ${scoreClass}`}>{score}</p>
+      <p className={`text-3xl font-black leading-none sm:text-5xl ${scoreClass}`}>{score}</p>
 
       {typeof ratingChange === "number" && (
         <p
@@ -189,6 +189,10 @@ export type MatchResultPanelProps = {
   peakStreak: number;
   opponentPeakStreak: number;
   rematchRequested: boolean;
+  statusText?: string;
+  primaryActionLabel?: string;
+  secondaryActionLabel?: string;
+  primaryActionDisabled?: boolean;
   onRematch: () => void;
   onChangeTopic: () => void;
 };
@@ -205,6 +209,10 @@ export function MatchResultPanel({
   peakStreak,
   opponentPeakStreak,
   rematchRequested,
+  statusText,
+  primaryActionLabel,
+  secondaryActionLabel,
+  primaryActionDisabled,
   onRematch,
   onChangeTopic,
 }: MatchResultPanelProps) {
@@ -224,7 +232,7 @@ export function MatchResultPanel({
       initial={{ opacity: 0, y: 20, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.35, ease: "easeOut" }}
-      className="relative overflow-hidden rounded-[1.75rem] p-5 sm:p-7"
+      className="relative mx-auto w-full max-w-4xl overflow-hidden rounded-[1.75rem] p-4 sm:p-6 lg:p-7"
     >
       {/* Win confetti overlay */}
       {result === "win" && <Confetti />}
@@ -254,7 +262,7 @@ export function MatchResultPanel({
         </div>
 
         {/* ── Avatar score row ── */}
-        <div className="flex w-full items-stretch gap-3 sm:gap-4">
+        <div className="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-stretch sm:gap-4">
           <AvatarCard
             name={yourName}
             score={scores.you}
@@ -268,7 +276,7 @@ export function MatchResultPanel({
           />
 
           {/* VS divider */}
-          <div className="flex flex-col items-center justify-center gap-1 px-1">
+          <div className="flex flex-col items-center justify-center gap-1 px-1 py-1">
             <span className="text-xs font-black uppercase tracking-[0.35em] text-slate-600">vs</span>
           </div>
 
@@ -315,8 +323,13 @@ export function MatchResultPanel({
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.55 }}
-          className="flex w-full flex-col gap-3"
+          className="grid w-full gap-3 sm:grid-cols-2"
         >
+          {statusText ? (
+            <p className="text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 sm:col-span-2">
+              {statusText}
+            </p>
+          ) : null}
           <Button
             className={`w-full py-3 text-base font-black tracking-wide sm:py-4 sm:text-lg ${
               result === "win"
@@ -326,12 +339,12 @@ export function MatchResultPanel({
                 : ""
             }`}
             onClick={onRematch}
-            disabled={rematchRequested}
+            disabled={primaryActionDisabled ?? rematchRequested}
           >
-            {rematchRequested ? "Waiting for opponent…" : "Rematch ↺"}
+            {primaryActionLabel ?? (rematchRequested ? "Waiting for opponent…" : "Rematch ↺")}
           </Button>
           <Button variant="secondary" className="w-full" onClick={onChangeTopic}>
-            Change Topic
+            {secondaryActionLabel ?? "Change Topic"}
           </Button>
         </motion.div>
       </div>

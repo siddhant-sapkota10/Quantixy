@@ -18,7 +18,9 @@ import { QuestionContent } from "@/components/question-content";
 import type { DuelQuestion } from "@/lib/question-model";
 import { WorkingScratchpad } from "@/components/working-scratchpad";
 import { MatchChampionCard } from "@/components/match-champion-card";
+import { MatchResultPanel } from "@/components/MatchResultPanel";
 import { normalizeUltimateType } from "@/lib/ultimate-vfx";
+import { UltimateAbilityButton } from "@/components/ultimate-ability-button";
 import { EMOTES, getEmoteById } from "@/lib/emotes";
 import { EmoteBar } from "@/components/EmoteBar";
 import { EmoteDisplay, type EmoteDisplayItem } from "@/components/EmoteDisplay";
@@ -71,8 +73,8 @@ const BOT_ULTIMATE_DURATIONS: Record<BotUltimateId, number> = {
   system_corrupt: 10_000,
   shield: 10_000,
   double: 10_000,
-  perfect_sequence: 13_000,
-  overpower: 13_000
+  perfect_sequence: 10_000,
+  overpower: 10_000
 };
 
 function getRandomBotAvatarId() {
@@ -868,10 +870,14 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
   const isPlaying = status === "playing";
   const isFinished = status === "finished";
   const isCountdown = status === "countdown";
+  const isActiveGameplay = isPlaying;
   const showFinalPhase = isPlaying && isFinalPhase;
   const isFinalSeconds = isPlaying && secondsLeft <= CLUTCH_SECONDS;
   const isCloseScore = Math.abs(scores.you - scores.opponent) <= CLOSE_SCORE_DELTA;
   const resultIsClose = isFinished && isCloseScore;
+  const finalResult =
+    gameResult?.result ??
+    (scores.you === scores.opponent ? "draw" : scores.you > scores.opponent ? "win" : "loss");
   const youEliminated = eliminated.you;
   const opponentEliminated = eliminated.opponent;
   const yourAvatarData = getAvatar(yourAvatarId);
@@ -901,6 +907,7 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
   const emoteCoolingDown = emoteCooldownUntil > Date.now();
   const youEmoteItems = emoteLabels.filter((item) => item.who === "you");
   const opponentEmoteItems = emoteLabels.filter((item) => item.who === "opponent");
+  const inputsLocked = isPlayerInputLocked;
 
   const getStreakLabel = (streak: number) => {
     if (streak >= 5) return "UNSTOPPABLE";
@@ -1037,8 +1044,8 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
 
           <div className="flex min-h-0 flex-1 flex-col items-stretch justify-start px-3 py-3 sm:px-5 sm:py-4 md:justify-center md:py-10">
             <motion.div animate={animState.questionShakeControls} className="mx-auto w-full max-w-3xl md:max-w-4xl lg:max-w-5xl">
-              <div className="relative rounded-[1.5rem] border border-slate-800 bg-slate-900/70 p-3 text-center sm:p-6 md:p-8">
-                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-textSecondary">
+              <div className="q-card-strong relative rounded-[1.5rem] p-3 text-center sm:p-6 md:p-8">
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-textSecondary/70">
                   {isCountdown ? "Countdown" : "Question"}
                 </p>
                 <div className="mt-3 flex min-h-[4.5rem] items-center justify-center sm:min-h-[6rem]">
@@ -1054,9 +1061,7 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
                   )}
                 </div>
                 <div className="mt-3 min-h-[2.25rem]">
-                  {isPlayerInputLocked ? (
-                    <p className="text-xs font-black uppercase tracking-[0.22em] text-violet-200">Neural Jam - Inputs Locked</p>
-                  ) : canUseYourUltimate ? (
+                  {canUseYourUltimate ? (
                     <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-200">Ultimate Ready</p>
                   ) : null}
                 </div>
@@ -1064,7 +1069,7 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
             </motion.div>
           </div>
 
-          <div className="shrink-0 border-t border-white/10 bg-slate-950/90 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 backdrop-blur sm:px-5">
+          <div className="shrink-0 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 sm:px-5">
             <div className="mx-auto w-full max-w-3xl">
               <div className="mb-2 flex items-center justify-start sm:justify-center">
                 <EmoteBar
@@ -1080,7 +1085,14 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
 
               {isPlaying ? (
                 <form className="flex w-full flex-col gap-2" onSubmit={handleSubmit}>
-                  <WorkingScratchpad answerInputLocked={isPlayerInputLocked} />
+                  {isPlayerInputLocked ? (
+                    <div className="flex items-center justify-start sm:justify-center">
+                      <span className="rounded-full border border-violet-300/35 bg-violet-500/12 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-violet-100">
+                        JAMMED
+                      </span>
+                    </div>
+                  ) : null}
+                  <WorkingScratchpad answerInputLocked={inputsLocked} />
                   {Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0 ? (
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {currentQuestionData.options.map((option, idx) => (
@@ -1089,7 +1101,7 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
                           type="button"
                           variant="secondary"
                           className="relative min-h-[2.75rem] w-full justify-start text-left text-sm"
-                          disabled={isPlayerInputLocked || youEliminated}
+                          disabled={inputsLocked || youEliminated}
                           onClick={() => handleOptionSubmit(option)}
                         >
                           {option}
@@ -1114,49 +1126,46 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
                                 ? "Type text or symbol answer..."
                                 : "Type answer..."
                         }
-                        disabled={isPlayerInputLocked || youEliminated}
+                        disabled={inputsLocked || youEliminated}
                         autoCapitalize="off"
                         autoCorrect="off"
                         spellCheck={false}
                         enterKeyHint="go"
                         className="neon-input h-12 min-w-0 flex-1 rounded-2xl px-4 disabled:cursor-not-allowed disabled:opacity-60"
                       />
-                      <Button className="h-12 w-[7.5rem] shrink-0" type="submit" disabled={!answer.trim() || isPlayerInputLocked || youEliminated}>
+                      <Button className="h-12 w-[7.5rem] shrink-0" type="submit" disabled={!answer.trim() || inputsLocked || youEliminated}>
                         Submit
                       </Button>
                     </div>
                   ) : null}
 
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="h-10 w-fit self-end rounded-xl border-amber-300/35 bg-amber-400/10 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-amber-100 hover:border-amber-200/60 hover:bg-amber-400/15"
-                    disabled={youEliminated || isPlayerInputLocked}
-                    aria-label="Skip question and lose HP"
-                    onClick={handleSkipQuestion}
-                  >
-                    Skip question
-                  </Button>
-
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="min-h-[2.75rem] w-full border-slate-700/80 bg-slate-950/70 text-left"
-                    disabled={!canUseYourUltimate}
-                    onClick={() => activateYourUltimate()}
-                  >
-                    <span className="flex items-center justify-between gap-2">
-                      <span>
-                        <span className="block text-[11px] font-black uppercase tracking-[0.18em]">{yourAvatarData.ultimateName}</span>
-                        <span className="mt-0.5 block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                          {yourUltimateUsed ? "Used" : canUseYourUltimate ? "Ready" : `${Math.round(yourUltimateCharge)}% charged`}
-                        </span>
-                      </span>
-                      <span className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-300">
-                        {canUseYourUltimate ? "Use" : yourUltimateUsed ? "Used" : "Charging"}
-                      </span>
-                    </span>
-                  </Button>
+                  <div className="sm:hidden">
+                    <UltimateAbilityButton
+                      type={yourUltimateType}
+                      ultimateName={yourAvatarData.ultimateName}
+                      charge={yourUltimateCharge}
+                      ready={canUseYourUltimate}
+                      used={yourUltimateUsed}
+                      implemented
+                      disabled={!canUseYourUltimate}
+                      onActivate={() => activateYourUltimate()}
+                      size="compact"
+                      className="h-11"
+                    />
+                  </div>
+                  <div className="hidden sm:block">
+                    <UltimateAbilityButton
+                      type={yourUltimateType}
+                      ultimateName={yourAvatarData.ultimateName}
+                      charge={yourUltimateCharge}
+                      ready={canUseYourUltimate}
+                      used={yourUltimateUsed}
+                      implemented
+                      disabled={!canUseYourUltimate}
+                      onActivate={() => activateYourUltimate()}
+                      size="regular"
+                    />
+                  </div>
                 </form>
               ) : null}
             </div>
@@ -1262,7 +1271,7 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
         </div>
 
         {/* PvP-style champion HUD */}
-        {isDuelMode ? (
+        {isDuelMode && !isFinished ? (
         <div className="relative rounded-[1.55rem] border border-white/10 bg-slate-950/72 p-2 shadow-[0_18px_44px_rgba(2,6,23,0.5)] sm:p-3">
           <div
             aria-hidden="true"
@@ -1359,7 +1368,7 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
             </div>
           </div>
         </div>
-        ) : (
+        ) : !isDuelMode ? (
           <div className="grid gap-3 rounded-[1.55rem] border border-white/10 bg-slate-950/72 p-4 shadow-[0_18px_44px_rgba(2,6,23,0.42)] sm:grid-cols-[1fr_auto_1fr] sm:items-center sm:p-5">
             <div className="rounded-2xl border border-sky-400/20 bg-sky-500/10 p-4 text-center">
               <p className="text-[10px] font-black uppercase tracking-[0.26em] text-sky-200">You</p>
@@ -1373,7 +1382,7 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
               <p className="mt-2 text-4xl font-black tabular-nums text-white">{scores.opponent}</p>
             </div>
           </div>
-        )}
+        ) : null}
 
         {/* Question card / countdown / game-over panel */}
         {!isFinished ? (
@@ -1502,83 +1511,30 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
         ) : (
           <motion.div
             initial={{ y: 0 }}
-            animate={gameResult?.result === "loss" ? { y: [0, 6, 0] } : {}}
+            animate={finalResult === "loss" ? { y: [0, 6, 0] } : {}}
             transition={{ duration: 1.3, delay: 0.5, ease: "easeInOut" }}
           >
-            <div
-              className={`rounded-[1.75rem] border p-4 text-center sm:p-6 ${
-                gameResult?.result === "win"
-                  ? "border-sky-400/40 bg-sky-500/10"
-                  : gameResult?.result === "draw"
-                  ? "border-amber-400/40 bg-amber-500/10"
-                  : "border-rose-500/30 bg-rose-500/10"
-              } ${resultIsClose ? "shadow-[0_0_30px_rgba(248,113,113,0.18)]" : ""}`}
-            >
-              <p
-                className={`text-sm uppercase tracking-[0.3em] ${
-                  gameResult?.result === "win"
-                    ? "text-sky-300"
-                    : gameResult?.result === "draw"
-                    ? "text-amber-300"
-                    : "text-rose-300"
-                }`}
-              >
-                Game Over
-              </p>
-              <h2
-                className={`mt-3 text-2xl font-black tracking-tight sm:mt-4 sm:text-3xl md:text-4xl ${
-                  gameResult?.result === "win"
-                    ? "text-sky-200"
-                    : gameResult?.result === "draw"
-                    ? "text-amber-200"
-                    : "text-rose-200"
-                }`}
-              >
-                {gameResult?.result === "win"
-                  ? "You Win! 🎉"
-                  : gameResult?.result === "draw"
-                  ? "It's a Draw! 🤝"
-                  : "You Lose"}
-              </h2>
-              <p className="mt-3 text-sm text-slate-300 sm:text-base">
-                {gameResult?.result === "win"
-                  ? `You beat ${BOT_NAME} — nice work!`
-                  : gameResult?.result === "draw"
-                  ? `Dead heat against ${BOT_NAME}.`
-                  : `${BOT_NAME} won this round. Try again!`}
-              </p>
-              {resultIsClose ? (
-                <p className="mt-2 text-xs font-semibold uppercase tracking-[0.22em] text-amber-200">
-                  Photo Finish
-                </p>
-              ) : null}
-              <p className="mt-4 text-sm uppercase tracking-[0.25em] text-slate-400 sm:mt-6">
-                Final Score
-              </p>
-              <p className="mt-2 text-2xl font-black text-white sm:text-3xl">
-                {scores.you} – {scores.opponent}
-              </p>
-              <p className="mt-2 text-sm text-slate-400">Opponent: {BOT_NAME}</p>
-
-              <div className="mt-6 grid gap-3 sm:mt-8 md:grid-cols-2">
-                <Button
-                  className="w-full"
-                  onClick={() => setGameKey((k) => k + 1)}
-                >
-                  Play Again
-                </Button>
-                <Button
-                  variant="secondary"
-                  className="w-full"
-                  onClick={() => router.push("/play?mode=ai")}
-                >
-                  Change Topic
-                </Button>
-              </div>
-            </div>
+            <MatchResultPanel
+              result={finalResult}
+              scores={scores}
+              yourName={yourName}
+              opponentName={BOT_NAME}
+              yourAvatar={yourAvatar}
+              opponentAvatar={botAvatar.emoji}
+              peakStreak={0}
+              opponentPeakStreak={0}
+              rematchRequested={false}
+              statusText={resultIsClose ? "Photo Finish" : undefined}
+              primaryActionLabel="Play Again"
+              secondaryActionLabel="Change Topic"
+              onRematch={() => setGameKey((k) => k + 1)}
+              onChangeTopic={() => router.push("/play?mode=ai")}
+            />
           </motion.div>
         )}
       </div>
     </section>
   );
 }
+
+

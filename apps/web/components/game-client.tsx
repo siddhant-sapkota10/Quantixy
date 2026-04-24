@@ -21,9 +21,8 @@ import {
   type EmotePackId,
 } from "@/lib/cosmetics";
 import { getPowerUpMeta, POWER_UPS, type PowerUpId } from "@/lib/powerups";
-import { getRankFromRating, RANKS } from "@/lib/ranks";
-import { RankBadge } from "@/components/rank-badge";
 import { MatchChampionCard } from "@/components/match-champion-card";
+import { MatchResultPanel } from "@/components/MatchResultPanel";
 
 // Feature flag — set to true to re-enable the powerup system in live matches.
 // While false, powerup UI is hidden and powerup socket events are no-ops.
@@ -3506,8 +3505,10 @@ export function GameClient({
   const isCloseScore = Math.abs(scores.you - scores.opponent) <= CLOSE_SCORE_DELTA;
   const isFinalSeconds = isActiveGameplay && timer.secondsLeft <= CLUTCH_SECONDS;
   const showFinalPhase = isActiveGameplay && isFinalPhase;
-  const resultIsClose = isFinished && isCloseScore;
   const now = Date.now();
+  const finalResult =
+    gameResult?.result ??
+    (scores.you === scores.opponent ? "draw" : scores.you > scores.opponent ? "win" : "loss");
 
   /**
    * Consolidated in-match status display.
@@ -4906,125 +4907,36 @@ export function GameClient({
             </div>
           </>
         ) : (
-          /* Game over — loss gets a subtle downward drift */
+          /* Game over - loss gets a subtle downward drift */
           <motion.div
             initial={{ y: 0 }}
-            animate={gameResult?.result === "loss" ? { y: [0, 6, 0] } : {}}
+            animate={finalResult === "loss" ? { y: [0, 6, 0] } : {}}
             transition={{ duration: 1.3, delay: 0.5, ease: "easeInOut" }}
           >
-            <div
-              className={`rounded-[1.75rem] border p-4 text-center sm:p-6 ${
-                gameResult?.result === "win"
-                  ? "border-sky-400/40 bg-sky-500/10"
-                  : gameResult?.result === "draw"
-                  ? "border-amber-400/40 bg-amber-500/10"
-                  : "border-rose-500/30 bg-rose-500/10"
-              } ${resultIsClose ? "shadow-[0_0_32px_rgba(248,113,113,0.18)]" : ""}`}
-            >
-              <p
-                className={`text-sm uppercase tracking-[0.3em] ${
-                  gameResult?.result === "win"
-                    ? "text-sky-300"
-                    : gameResult?.result === "draw"
-                    ? "text-amber-300"
-                    : "text-rose-300"
-                }`}
-              >
-                Game Over
-              </p>
-              <h2
-                className={`mt-3 text-2xl font-black tracking-tight sm:mt-4 sm:text-3xl md:text-4xl ${
-                  gameResult?.result === "win"
-                    ? "text-sky-200"
-                    : gameResult?.result === "draw"
-                    ? "text-amber-200"
-                    : "text-rose-200"
-                }`}
-              >
-                {gameResult?.result === "win"
-                  ? "You Win! 🎉"
-                  : gameResult?.result === "draw"
-                  ? "It's a Draw! 🤝"
-                  : "You Lose"}
-              </h2>
-              <p className="mt-3 text-base text-slate-200">{gameResult?.message}</p>
-              {resultIsClose ? (
-                <p className="mt-2 text-xs font-semibold uppercase tracking-[0.22em] text-amber-200">
-                  Photo Finish
-                </p>
-              ) : null}
-              <p className="mt-4 text-sm uppercase tracking-[0.25em] text-slate-400 sm:mt-6">Final Score</p>
-              <p className="mt-2 text-2xl font-black text-white sm:text-3xl">
-                {scores.you} - {scores.opponent}
-              </p>
-              <p className="mt-2 text-sm text-slate-400">Opponent: {opponentName}</p>
-              {gameResult?.ratingChange ? (
-                <p
-                  className={`mt-3 text-sm font-semibold ${
-                    gameResult.ratingChange.you >= 0 ? "text-emerald-300" : "text-rose-300"
-                  }`}
-                >
-                  {gameResult.ratingChange.you >= 0 ? "+" : ""}
-                  {gameResult.ratingChange.you} rating
-                </p>
-              ) : null}
-              {gameResult?.newRatings && gameResult?.ratingChange ? (() => {
-                const newRating = gameResult.newRatings.you;
-                const prevRating = newRating - gameResult.ratingChange.you;
-                const prevRank = getRankFromRating(prevRating);
-                const newRank = getRankFromRating(newRating);
-                const rankChanged = prevRank.id !== newRank.id;
-                const rankUp = rankChanged &&
-                  RANKS.findIndex((r) => r.id === newRank.id) > RANKS.findIndex((r) => r.id === prevRank.id);
-                return (
-                  <div className="mt-2 space-y-1">
-                    {rankChanged && rankUp ? (
-                      <p className="text-xs font-bold uppercase tracking-[0.25em] text-emerald-300">
-                        Rank Up!
-                      </p>
-                    ) : rankChanged ? (
-                      <p className="text-xs font-semibold uppercase tracking-[0.25em] text-rose-400">
-                        Rank Down
-                      </p>
-                    ) : null}
-                    <div className="flex items-center justify-center gap-2">
-                      <RankBadge rank={newRank} size="md" />
-                      <p className="text-sm text-slate-300">{newRating}</p>
-                    </div>
-                  </div>
-                );
-              })() : gameResult?.newRatings ? (
-                <p className="mt-1 text-sm text-slate-300">New Rating: {gameResult.newRatings.you}</p>
-              ) : null}
-
-              <div className="mt-4 min-h-[1.25rem] text-center text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                {rematchStatusText}
-              </div>
-              <div className="mt-6 grid gap-3 sm:mt-8 md:grid-cols-2">
-                <Button
-                  className="w-full min-h-[2.75rem]"
-                  onClick={handlePlayAgain}
-                  disabled={rematchRequested}
-                  loading={rematchRequested}
-                  loadingText="Waiting..."
-                >
-                  {rematchCtaLabel}
-                </Button>
-                <Button
-                  variant="secondary"
-                  className="w-full min-h-[2.75rem]"
-                  onClick={handleChangeTopic}
-                  disabled={leavePending}
-                  loading={leavePending}
-                  loadingText="Leaving..."
-                >
-                  Change Topic
-                </Button>
-              </div>
-            </div>
+            <MatchResultPanel
+              result={finalResult}
+              scores={scores}
+              yourName={yourName}
+              opponentName={opponentName}
+              yourAvatar={yourAvatar}
+              opponentAvatar={opponentAvatar}
+              ratingChange={gameResult?.ratingChange}
+              newRatings={gameResult?.newRatings}
+              peakStreak={gameResult?.peakStreak ?? peakYouStreakRef.current}
+              opponentPeakStreak={gameResult?.opponentPeakStreak ?? peakOpponentStreakRef.current}
+              rematchRequested={rematchRequested}
+              statusText={rematchStatusText.trim() || undefined}
+              primaryActionLabel={rematchCtaLabel}
+              primaryActionDisabled={rematchRequested || leavePending}
+              secondaryActionLabel={leavePending ? "Leaving..." : "Change Topic"}
+              onRematch={handlePlayAgain}
+              onChangeTopic={handleChangeTopic}
+            />
           </motion.div>
         )}
       </div>
     </section>
   );
 }
+
+
