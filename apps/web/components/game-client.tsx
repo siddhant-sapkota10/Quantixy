@@ -1681,6 +1681,7 @@ export function GameClient({
       if (feedbackRef.current.youStreak >= 2) {
         triggerStreakBroken();
       }
+      setFeedback((f) => ({ ...f, youStreak: 0 }));
 
       const dmg = Math.max(0, payload.damage ?? 0);
       if (dmg > 0) {

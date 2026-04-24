@@ -74,7 +74,7 @@ const HP_FAST_BONUS = 4;
 const HP_STREAK_3_BONUS = 2;
 const HP_STREAK_5_BONUS = 4;
 // HP penalty for mistakes (replaces strikes system).
-const HP_WRONG_ANSWER_PENALTY = 0;
+const HP_WRONG_ANSWER_PENALTY = 12;
 const HP_TIMEOUT_PENALTY = 12;
 // Free roster: equal 10s windows. Premium: slightly longer + tuned kits below.
 const ULTIMATE_DURATION_MS = Object.freeze({

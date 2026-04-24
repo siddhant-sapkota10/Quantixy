@@ -786,6 +786,8 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
       setFeedback((f) => ({ ...f, youStreak: 0 }));
       setMistakes((previous) => ({ ...previous, you: previous.you + 1 }));
       setAnswer("");
+      if (isDuelMode) applyDuelDamage("you", DUEL_SKIP_DAMAGE);
+      spawnPlayerQuestion();
     }
   };
 
@@ -861,6 +863,8 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
     yourArchitectSequenceRef.current = 0;
     setFeedback((f) => ({ ...f, youStreak: 0 }));
     setMistakes((previous) => ({ ...previous, you: previous.you + 1 }));
+    if (isDuelMode) applyDuelDamage("you", DUEL_SKIP_DAMAGE);
+    spawnPlayerQuestion();
   };
 
   // ---------------------------------------------------------------------------
