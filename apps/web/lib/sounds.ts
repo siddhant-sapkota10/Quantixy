@@ -22,6 +22,13 @@ export type SoundName =
   | "ultActivateGuardian"
   | "ultActivateInferno"
   | "ultActivateShadow"
+  | "ultActivateArchitect"
+  | "ultActivateTitan"
+  | "jammed"
+  | "burnTick"
+  | "overclockStack"
+  | "sequenceBurst"
+  | "titanLifesteal"
   // Match end / KO
   | "koWin"
   | "koLose"
@@ -51,6 +58,13 @@ const SOUND_FILES: Record<SoundName, string> = {
   ultActivateGuardian: "/sounds/ult-activate-guardian.mp3",
   ultActivateInferno: "/sounds/ult-activate-inferno.mp3",
   ultActivateShadow: "/sounds/ult-activate-shadow.mp3",
+  ultActivateArchitect: "/sounds/ult-activate-architect.mp3",
+  ultActivateTitan: "/sounds/ult-activate-titan.mp3",
+  jammed: "/sounds/jammed.mp3",
+  burnTick: "/sounds/burn-tick.mp3",
+  overclockStack: "/sounds/overclock-stack.mp3",
+  sequenceBurst: "/sounds/sequence-burst.mp3",
+  titanLifesteal: "/sounds/titan-lifesteal.mp3",
   koWin: "/sounds/ko-win.mp3",
   koLose: "/sounds/ko-lose.mp3",
   uiClick: "/sounds/ui-click.mp3"
@@ -76,6 +90,13 @@ const FALLBACK_TONES: Record<SoundName, { frequency: number; duration: number; t
   ultActivateGuardian: { frequency: 760, duration: 0.2, type: "triangle" },
   ultActivateInferno: { frequency: 560, duration: 0.22, type: "sawtooth" },
   ultActivateShadow: { frequency: 860, duration: 0.18, type: "square" },
+  ultActivateArchitect: { frequency: 700, duration: 0.2, type: "triangle" },
+  ultActivateTitan: { frequency: 360, duration: 0.22, type: "sawtooth" },
+  jammed: { frequency: 480, duration: 0.12, type: "square" },
+  burnTick: { frequency: 420, duration: 0.09, type: "triangle" },
+  overclockStack: { frequency: 1180, duration: 0.08, type: "square" },
+  sequenceBurst: { frequency: 760, duration: 0.16, type: "triangle" },
+  titanLifesteal: { frequency: 520, duration: 0.12, type: "sine" },
   koWin: { frequency: 880, duration: 0.28, type: "triangle" },
   koLose: { frequency: 140, duration: 0.32, type: "sawtooth" },
   uiClick: { frequency: 920, duration: 0.05, type: "square" }

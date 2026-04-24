@@ -3,6 +3,7 @@
 import { io, type Socket } from "socket.io-client";
 import type { PowerUpId } from "@/lib/powerups";
 import type { DuelQuestion } from "@/lib/question-model";
+import type { Avatar, AvatarUltimateMeta } from "@/lib/avatars";
 
 /**
  * Resolve the game server URL.
@@ -68,18 +69,30 @@ type UltimateStatePayload = {
   opponentArchitectMarks?: number;
   architectSequenceStreak?: number;
   opponentArchitectSequenceStreak?: number;
+  architectNodes?: number;
+  opponentArchitectNodes?: number;
+  architectReady?: boolean;
+  opponentArchitectReady?: boolean;
   titanOverpowerUntil?: number;
   opponentTitanOverpowerUntil?: number;
   titanStreak?: number;
   opponentTitanStreak?: number;
   titanBreakArmed?: boolean;
   opponentTitanBreakArmed?: boolean;
+  titanRecoveryUntil?: number;
+  opponentTitanRecoveryUntil?: number;
+  titanRecovering?: boolean;
+  opponentTitanRecovering?: boolean;
+  titanDamageReduction?: number;
+  opponentTitanDamageReduction?: number;
   overclockUntil?: number;
   opponentOverclockUntil?: number;
   fortressUntil?: number;
   opponentFortressUntil?: number;
   fortressBlocksRemaining?: number;
   opponentFortressBlocksRemaining?: number;
+  fortressStoredDamage?: number;
+  opponentFortressStoredDamage?: number;
   flashBonusRemaining?: number;
   opponentFlashBonusRemaining?: number;
   novaBonusRemaining?: number;
@@ -90,13 +103,34 @@ type UltimateStatePayload = {
   opponentInfernoPendingUntil?: number;
   flashOverclockStacks?: number;
   opponentFlashOverclockStacks?: number;
+  jammed?: boolean;
+  opponentJammed?: boolean;
   neuralInputUnlockAt?: number;
   opponentNeuralInputUnlockAt?: number;
   overclockCombo?: number;
   scorerOverclockCombo?: number;
-  overclockBonusDamage?: number;
-  perfectStrikeDamage?: number;
-  titanLifestealApplied?: number;
+    overclockBonusDamage?: number;
+    perfectStrikeDamage?: number;
+    architectNodesGained?: number;
+    nodesSpent?: number;
+    titanLifestealApplied?: number;
+  };
+
+type ServerAvatarPayload = Pick<
+  Avatar,
+  | "id"
+  | "name"
+  | "role"
+  | "emoji"
+  | "icon"
+  | "description"
+  | "passive"
+  | "ultimateId"
+  | "ultimateName"
+  | "ultimateDescription"
+> & {
+  howItPlays?: string;
+  ultimateMeta?: AvatarUltimateMeta;
 };
 
 export type ServerToClientEvents = {
@@ -111,6 +145,8 @@ export type ServerToClientEvents = {
     difficulty?: string;
     yourAvatar?: string;
     opponentAvatar?: string;
+    yourAvatarData?: ServerAvatarPayload;
+    opponentAvatarData?: ServerAvatarPayload;
     ratings?: {
       you: number;
       opponent: number;
@@ -209,6 +245,8 @@ export type ServerToClientEvents = {
     fastAnswer?: boolean;
     opponentFastAnswer?: boolean;
     pointsAwarded?: number;
+    guardianMitigatedDamage?: number;
+    guardianStoredDamage?: number;
     strikes?: number;
     opponentStrikes?: number;
     youEliminated?: boolean;

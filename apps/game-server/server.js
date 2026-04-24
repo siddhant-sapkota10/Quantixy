@@ -82,8 +82,8 @@ const ULTIMATE_DURATION_MS = Object.freeze({
   system_corrupt: 10_000,
   shield: 10_000,
   double: 10_000,
-  perfect_sequence: 13_000,
-  overpower: 13_000
+  perfect_sequence: 10_000,
+  overpower: 10_000
 });
 /** Inferno: per-correct chip + stacks; wrong answers shave a stack (applyFailureUltimateConsequences). */
 const WILDFIRE_MAX_STACKS = 6;
@@ -95,28 +95,29 @@ const INFERNO_BURN_TICK_MS = INFERNO_DOT_TICK_MS;
 /** Guardian: fraction of raw damage that still connects; reflect uses prevented portion. */
 const GUARDIAN_REDUCTION_MULTIPLIER = 0.52;
 const GUARDIAN_REFLECT_MULTIPLIER = 0.3;
-/** Titan: outgoing hit amplifier + flat spike; resist shaves incoming while ultimate is up. */
-const TITAN_DAMAGE_MULTIPLIER = 1.24;
+/** Titan: premium juggernaut. Hits harder than free burst kits, but the recovery window keeps it honest. */
+const TITAN_DAMAGE_MULTIPLIER = 1.22;
 const TITAN_BONUS_DAMAGE = 2;
 const TITAN_RESIST_MULTIPLIER = 0.88;
-/** Flash — Overclock: each correct adds a stack; each stack adds flat chip damage; wrong drops 2 stacks. */
+/** Flash — Overclock: strong snowball pressure, but should not out-burst premium finishers at full ramp. */
 const FLASH_OVERCLOCK_STACK_CAP = 5;
-const FLASH_POWER_FLAT_PER_STACK = 4;
-/** Shadow — Neural Jam: input lock + shorter question clock for the victim. */
+const FLASH_POWER_FLAT_PER_STACK = 3;
+/** Shadow — Neural Jam: keep it readable and fair with visible input-lock disruption only. */
 const NEURAL_INPUT_LOCK_MS = 720;
 /** Extra lock applied to the opponent the moment Shadow pops Neural Jam (mid-card). */
 const NEURAL_ULT_ACTIVATION_LOCK_MS = 1800;
-const NEURAL_QUESTION_TIMER_MULT = 0.78;
-const NEURAL_WRONG_EXTRA_HP = 5;
+const NEURAL_QUESTION_TIMER_MULT = 1;
+const NEURAL_WRONG_EXTRA_HP = 0;
 /** Guardian — Reflect Bastion: store prevented damage; burst cap when ultimate ends. */
 const GUARDIAN_BURST_DAMAGE_CAP = 30;
-/** Architect — Perfect Sequence: offensive burst after N corrects while ultimate is up. */
-const ARCHITECT_BURST_STACK_THRESHOLD = 3;
-const ARCHITECT_BURST_DAMAGE = 17;
-/** Light defensive mitigation while Architect ultimate is active (separate from burst). */
-const ARCHITECT_DEFENSE_MULT = 0.9;
-/** Titan — Overpower: heal fraction of damage dealt on correct hits. */
-const TITAN_LIFESTEAL_RATIO = 0.2;
+/** Architect — Perfect System: premium precision burst with manual/auto release. */
+const ARCHITECT_NODE_CAP = 5;
+const ARCHITECT_BURST_BASE_DAMAGE = 6;
+const ARCHITECT_BURST_DAMAGE_PER_NODE = 5;
+const ARCHITECT_BURST_DAMAGE_CAP = 28;
+/** Titan — Colossus Mode: premium sustain is slightly stronger, but still answer-gated. */
+const TITAN_LIFESTEAL_RATIO = 0.24;
+const TITAN_RECOVERY_MS = 1000;
 const ROOM_CODE_LENGTH = 6;
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -453,6 +454,7 @@ function clearUltimateEffects(game) {
   game.titanOverpowerUntil = buildTitanOverpowerUntilMap(game.players);
   game.titanStreak = buildTitanStreakMap(game.players);
   game.titanBreakArmed = buildTitanBreakArmedMap(game.players);
+  game.titanRecoveryUntil = buildZeroMap(game.players);
   game.flashOverclockStacks = buildZeroMap(game.players);
   game.neuralInputUnlockAt = buildZeroMap(game.players);
   game.neuralJamActive = buildFalseMap(game.players);
@@ -733,6 +735,11 @@ function expireAvatarUltimateDuration(roomId, casterSocketId) {
   const ultimateType = getUltimateTypeForPlayer(game, casterSocketId);
   const opponent = getOpponent(game, casterSocketId);
 
+  if (ultimateType === "perfect_sequence") {
+    detonateArchitectSystem(game, roomId, casterSocketId, "auto");
+    return;
+  }
+
   if (ultimateType === "shield" && opponent) {
     releaseGuardianStoredBurst(game, roomId, casterSocketId);
   }
@@ -747,6 +754,10 @@ function expireAvatarUltimateDuration(roomId, casterSocketId) {
   if (ultimateType === "system_corrupt") {
     game.neuralInputUnlockAt[opponent.socketId] = 0;
     game.neuralJamActive[opponent.socketId] = false;
+  }
+
+  if (ultimateType === "overpower") {
+    clearTitanOverpowerForPlayer(game, casterSocketId);
   }
 
   emitUltimateEnded(
@@ -774,18 +785,9 @@ function expireAvatarUltimateDuration(roomId, casterSocketId) {
   emitQuestionState(roomId);
 }
 
-/** True while the opponent's Shadow (system_corrupt) ultimate is still running. */
-function isVictimOfActiveOpponentNeuralJam(game, socketId) {
-  const opponent = getOpponent(game, socketId);
-  if (!opponent) return false;
-  if (getUltimateTypeForPlayer(game, opponent.socketId) !== "system_corrupt") return false;
-  return isUltimateActiveForPlayer(game, opponent.socketId);
-}
-
-/** Server-side input block for answers / typing signals — burst lock and/or whole Neural Jam window. */
+/** Server-side input block for answers / typing signals — only the brief Neural Jam lock window. */
 function isNeuralJamInputBlocked(game, socketId) {
-  if ((game.neuralInputUnlockAt?.[socketId] ?? 0) > Date.now()) return true;
-  return isVictimOfActiveOpponentNeuralJam(game, socketId);
+  return (game.neuralInputUnlockAt?.[socketId] ?? 0) > Date.now();
 }
 
 function buildRoomLobbyPayload(room, socketId) {
@@ -820,6 +822,24 @@ function isActiveUntil(value) {
 function getAvatarUltimateConfig(avatarId) {
   const normalizedAvatarId = normalizeAvatarId(avatarId);
   return AVATAR_BY_ID.get(normalizedAvatarId) ?? AVATAR_BY_ID.get("flash");
+}
+
+function buildAvatarPayload(avatarId) {
+  const avatar = getAvatarUltimateConfig(avatarId);
+  return {
+    id: avatar.id,
+    name: avatar.name,
+    role: avatar.role,
+    emoji: avatar.emoji,
+    icon: avatar.icon,
+    description: avatar.description,
+    passive: avatar.passive,
+    howItPlays: avatar.howItPlays ?? "",
+    ultimateId: avatar.ultimateId,
+    ultimateName: avatar.ultimateName,
+    ultimateDescription: avatar.ultimateDescription,
+    ultimateMeta: avatar.ultimateMeta ?? {}
+  };
 }
 
 function normalizeAvatarId(value) {
@@ -907,6 +927,13 @@ function buildPlayerUltimateState(game, socketId) {
   const opponentPseudoUntil = opponentActive ? opponentEnd : 0;
   const yourBurnStacks = game.wildfireStacks?.[socketId] ?? 0;
   const opponentBurnStacks = opponentId ? game.wildfireStacks?.[opponentId] ?? 0 : 0;
+  const jammed = (game.neuralInputUnlockAt?.[socketId] ?? 0) > now;
+  const opponentJammed = opponentId ? (game.neuralInputUnlockAt?.[opponentId] ?? 0) > now : false;
+  const titanRecoveryUntil = game.titanRecoveryUntil?.[socketId] ?? 0;
+  const opponentTitanRecoveryUntil = opponentId ? game.titanRecoveryUntil?.[opponentId] ?? 0 : 0;
+  const architectNodes = yourUltimateType === "perfect_sequence" ? (game.architectMarks?.[socketId] ?? 0) : 0;
+  const opponentArchitectNodes =
+    opponentId && opponentUltimateType === "perfect_sequence" ? (game.architectMarks?.[opponentId] ?? 0) : 0;
 
   return {
     ultimateType: yourUltimateType,
@@ -944,13 +971,15 @@ function buildPlayerUltimateState(game, socketId) {
     architectUntil: yourUltimateType === "perfect_sequence" && youActive ? yourPseudoUntil : 0,
     opponentArchitectUntil:
       opponentId && opponentUltimateType === "perfect_sequence" && opponentActive ? opponentPseudoUntil : 0,
-    architectMarks: yourUltimateType === "perfect_sequence" ? (game.architectMarks?.[socketId] ?? 0) : 0,
+    architectMarks: architectNodes,
     opponentArchitectMarks:
-      opponentId && opponentUltimateType === "perfect_sequence"
-        ? (game.architectMarks?.[opponentId] ?? 0)
-        : 0,
-    architectSequenceStreak: game.architectSequenceStreak?.[socketId] ?? 0,
-    opponentArchitectSequenceStreak: opponentId ? game.architectSequenceStreak?.[opponentId] ?? 0 : 0,
+      opponentId && opponentUltimateType === "perfect_sequence" ? opponentArchitectNodes : 0,
+    architectSequenceStreak: architectNodes,
+    opponentArchitectSequenceStreak: opponentArchitectNodes,
+    architectNodes,
+    opponentArchitectNodes,
+    architectReady: architectNodes >= ARCHITECT_NODE_CAP,
+    opponentArchitectReady: opponentArchitectNodes >= ARCHITECT_NODE_CAP,
     flashOverclockStacks: game.flashOverclockStacks?.[socketId] ?? 0,
     opponentFlashOverclockStacks: opponentId ? game.flashOverclockStacks?.[opponentId] ?? 0 : 0,
     neuralInputUnlockAt: game.neuralInputUnlockAt?.[socketId] ?? 0,
@@ -971,6 +1000,8 @@ function buildPlayerUltimateState(game, socketId) {
       opponentId && opponentUltimateType === "shield" && opponentActive ? opponentPseudoUntil : 0,
     fortressBlocksRemaining: game.reflectedDamage?.[socketId] ?? 0,
     opponentFortressBlocksRemaining: opponentId ? game.reflectedDamage?.[opponentId] ?? 0 : 0,
+    fortressStoredDamage: game.reflectedDamage?.[socketId] ?? 0,
+    opponentFortressStoredDamage: opponentId ? game.reflectedDamage?.[opponentId] ?? 0 : 0,
     flashBonusRemaining: 0,
     opponentFlashBonusRemaining: 0,
     novaBonusRemaining: yourBurnStacks,
@@ -980,7 +1011,16 @@ function buildPlayerUltimateState(game, socketId) {
     opponentInfernoPending:
       !!opponentId && opponentUltimateType === "double" && opponentActive,
     opponentInfernoPendingUntil:
-      opponentId && opponentUltimateType === "double" && opponentActive ? opponentPseudoUntil : 0
+      opponentId && opponentUltimateType === "double" && opponentActive ? opponentPseudoUntil : 0,
+    jammed,
+    opponentJammed,
+    titanRecoveryUntil,
+    opponentTitanRecoveryUntil,
+    titanRecovering: titanRecoveryUntil > now,
+    opponentTitanRecovering: opponentTitanRecoveryUntil > now,
+    titanDamageReduction: yourUltimateType === "overpower" && youActive ? 1 - TITAN_RESIST_MULTIPLIER : 0,
+    opponentTitanDamageReduction:
+      opponentId && opponentUltimateType === "overpower" && opponentActive ? 1 - TITAN_RESIST_MULTIPLIER : 0
   };
 }
 
@@ -1097,16 +1137,14 @@ function clearArchitectSequenceForPlayer(game, casterSocketId, options = {}) {
   const preserveMarks = options?.preserveMarks === true;
   game.architectSequenceStreak[casterSocketId] = 0;
   if (!preserveMarks) {
-    const opponent = getOpponent(game, casterSocketId);
-    if (opponent) {
-      game.architectMarks[opponent.socketId] = 0;
-    }
+    game.architectMarks[casterSocketId] = 0;
   }
 }
 
 function clearTitanOverpowerForPlayer(game, socketId) {
   game.titanStreak[socketId] = 0;
   game.titanBreakArmed[socketId] = false;
+  game.titanRecoveryUntil[socketId] = 0;
 }
 
 function applyFailureUltimateConsequences(game, playerSocketId, reason = "wrong") {
@@ -1132,11 +1170,8 @@ function applyFailureUltimateConsequences(game, playerSocketId, reason = "wrong"
     ultimateType === "perfect_sequence" &&
     isUltimateActiveForPlayer(game, playerSocketId)
   ) {
-    clearArchitectSequenceForPlayer(game, playerSocketId);
-  }
-  if (ultimateType === "overpower" && isUltimateActiveForPlayer(game, playerSocketId) && reason === "wrong") {
-    // Overpower protects from self-punish while active.
-    return;
+    game.architectMarks[playerSocketId] = Math.max(0, (game.architectMarks[playerSocketId] ?? 0) - 1);
+    game.architectSequenceStreak[playerSocketId] = game.architectMarks[playerSocketId];
   }
 }
 
@@ -1159,6 +1194,8 @@ function resolveIncomingDamage(
   let damage = Math.max(0, Number(incomingDamage) || 0);
   let knockedOutTarget = false;
   let knockedOutAttacker = false;
+  let mitigatedDamage = 0;
+  let storedDamageTotal = 0;
   const bypassDefense = options?.bypassDefense === true;
   const bypassProtection = options?.bypassProtection === true;
 
@@ -1176,27 +1213,22 @@ function resolveIncomingDamage(
     !bypassDefense &&
     targetUltimateType === "shield" &&
     isUltimateActiveForPlayer(game, targetSocketId);
-  const architectMitigationActive =
-    !bypassDefense &&
-    targetUltimateType === "perfect_sequence" &&
-    isUltimateActiveForPlayer(game, targetSocketId);
   const titanResistanceActive =
     !bypassDefense &&
     targetUltimateType === "overpower" &&
     isUltimateActiveForPlayer(game, targetSocketId);
 
-  if (architectMitigationActive) {
-    damage = Math.max(1, Math.round(damage * ARCHITECT_DEFENSE_MULT));
-  }
   if (titanResistanceActive) {
     damage = Math.max(1, Math.round(damage * TITAN_RESIST_MULTIPLIER));
   }
   if (guardianActive) {
     const reducedDamage = Math.max(1, Math.round(damage * GUARDIAN_REDUCTION_MULTIPLIER));
     const prevented = Math.max(0, damage - reducedDamage);
+    mitigatedDamage += prevented;
     damage = reducedDamage;
     if (prevented > 0) {
       game.reflectedDamage[targetSocketId] = (game.reflectedDamage?.[targetSocketId] ?? 0) + prevented;
+      storedDamageTotal = game.reflectedDamage[targetSocketId];
     }
   }
 
@@ -1216,23 +1248,14 @@ function resolveIncomingDamage(
       ...buildPlayerPowerState(game, targetSocketId)
     });
 
-    return { damageApplied: 0, knockedOutTarget, knockedOutAttacker };
+    return { damageApplied: 0, knockedOutTarget, knockedOutAttacker, mitigatedDamage, storedDamageTotal };
   }
 
   const nextTargetHp = Math.max(0, (game.hp[targetSocketId] ?? MAX_HP) - damage);
   game.hp[targetSocketId] = nextTargetHp;
   knockedOutTarget = nextTargetHp <= 0;
 
-  // Architect's deconstruct applies only while opponent is attacking.
-  if (
-    attackerUltimateType === "perfect_sequence" &&
-    isUltimateActiveForPlayer(game, attackerSocketId) &&
-    targetSocketId !== attackerSocketId
-  ) {
-    // no-op marker for state sync; effect already modeled by mitigation when architect is defending.
-  }
-
-  return { damageApplied: damage, knockedOutTarget, knockedOutAttacker };
+  return { damageApplied: damage, knockedOutTarget, knockedOutAttacker, mitigatedDamage, storedDamageTotal };
 }
 
 function releaseGuardianStoredBurst(game, roomId, guardianSocketId) {
@@ -1284,6 +1307,77 @@ function releaseGuardianStoredBurst(game, roomId, guardianSocketId) {
       forceWinnerSocketId: guardianSocketId,
       endCondition: "ko",
       reason: `${game.players.find((p) => p.socketId === guardianSocketId)?.name ?? "Guardian"} wins by KO.`
+    });
+  }
+}
+
+function detonateArchitectSystem(game, roomId, casterSocketId, trigger = "manual") {
+  const opponent = getOpponent(game, casterSocketId);
+  if (!opponent) {
+    return;
+  }
+
+  const nodes = Math.max(0, game.architectMarks?.[casterSocketId] ?? 0);
+  const burstDamage = Math.min(
+    ARCHITECT_BURST_DAMAGE_CAP,
+    ARCHITECT_BURST_BASE_DAMAGE + nodes * ARCHITECT_BURST_DAMAGE_PER_NODE
+  );
+
+  clearUltimateDurationTimeout(game, casterSocketId);
+  game.ultimateActiveUntil[casterSocketId] = 0;
+  game.architectMarks[casterSocketId] = 0;
+  game.architectSequenceStreak[casterSocketId] = 0;
+
+  let result = { damageApplied: 0, knockedOutTarget: false, knockedOutAttacker: false };
+  if (burstDamage > 0 && !game.eliminated[casterSocketId] && !game.eliminated[opponent.socketId]) {
+    result = resolveIncomingDamage(
+      game,
+      casterSocketId,
+      opponent.socketId,
+      burstDamage,
+      "damage",
+      { sourceUltimateType: "perfect_sequence", bypassDefense: false }
+    );
+  }
+
+  emitUltimateEnded(
+    game,
+    casterSocketId,
+    opponent.socketId,
+    {
+      by: "you",
+      target: "opponent",
+      type: "perfect_sequence",
+      effect: trigger === "manual" ? "architect_manual_detonate" : "architect_auto_detonate",
+      damage: result.damageApplied,
+      nodesSpent: nodes,
+      hp: {
+        you: game.hp?.[casterSocketId] ?? MAX_HP,
+        opponent: game.hp?.[opponent.socketId] ?? MAX_HP
+      }
+    },
+    {
+      by: "opponent",
+      target: "you",
+      type: "perfect_sequence",
+      effect: trigger === "manual" ? "architect_manual_detonate" : "architect_auto_detonate",
+      damage: result.damageApplied,
+      nodesSpent: nodes,
+      hp: {
+        you: game.hp?.[opponent.socketId] ?? MAX_HP,
+        opponent: game.hp?.[casterSocketId] ?? MAX_HP
+      }
+    }
+  );
+
+  emitLiveLeaderboard(roomId);
+  emitQuestionState(roomId);
+
+  if (result.knockedOutTarget) {
+    void finishGame(roomId, {
+      forceWinnerSocketId: casterSocketId,
+      endCondition: "ko",
+      reason: `${game.players.find((p) => p.socketId === casterSocketId)?.name ?? "Architect"} wins by system release.`
     });
   }
 }
@@ -1503,6 +1597,7 @@ function resetGameState(game) {
   game.titanOverpowerUntil = buildTitanOverpowerUntilMap(game.players);
   game.titanStreak = buildTitanStreakMap(game.players);
   game.titanBreakArmed = buildTitanBreakArmedMap(game.players);
+  game.titanRecoveryUntil = buildZeroMap(game.players);
   game.titanTimeout = buildUltimateEffectTimeoutMap(game.players);
   game.blackoutTimeout = buildUltimateEffectTimeoutMap(game.players);
   game.fortressTimeout = buildUltimateEffectTimeoutMap(game.players);
@@ -1618,6 +1713,32 @@ function emitNewQuestionToPlayer(roomId, socketId) {
   schedulePerQuestionDeadline(roomId, socketId);
 }
 
+function emitCurrentQuestionSnapshot(game, roomId, socketId) {
+  if (!game) {
+    return;
+  }
+
+  const questionState = game.playerQuestionState[socketId];
+  const question = questionState?.currentQuestion;
+
+  if (!questionState || !question || game.eliminated[socketId]) {
+    return;
+  }
+
+  const inputLockedUntil =
+    typeof game.neuralInputUnlockAt?.[socketId] === "number" &&
+    game.neuralInputUnlockAt[socketId] > Date.now()
+      ? game.neuralInputUnlockAt[socketId]
+      : 0;
+
+  io.to(socketId).emit("newQuestion", {
+    question: question.prompt,
+    questionData: { ...question },
+    token: questionState.generation,
+    ...(inputLockedUntil > 0 ? { inputLockedUntil } : {})
+  });
+}
+
 function applyMistakePenalty(roomId, playerSocketId, reason, damage, clientFxHint = {}) {
   const game = activeGames.get(roomId);
   if (!game || game.phase !== "playing") return;
@@ -1644,16 +1765,10 @@ function applyMistakePenalty(roomId, playerSocketId, reason, damage, clientFxHin
 
   const prev = game.hp[playerSocketId] ?? MAX_HP;
   const opponent = getOpponent(game, playerSocketId);
-  const playerUltimateType = getUltimateTypeForPlayer(game, playerSocketId);
-  const titanImmunityActive =
-    playerUltimateType === "overpower" &&
-    isUltimateActiveForPlayer(game, playerSocketId) &&
-    reason === "wrong";
-  const appliedPenalty = titanImmunityActive ? 0 : Math.max(0, damage);
+  const appliedPenalty = Math.max(0, damage);
   let shadowWrongExtra = 0;
   if (
     reason === "wrong" &&
-    !titanImmunityActive &&
     game.neuralJamActive?.[playerSocketId] &&
     opponent &&
     getUltimateTypeForPlayer(game, opponent.socketId) === "system_corrupt" &&
@@ -1663,6 +1778,12 @@ function applyMistakePenalty(roomId, playerSocketId, reason, damage, clientFxHin
   }
   const next = Math.max(0, prev - appliedPenalty - shadowWrongExtra);
   game.hp[playerSocketId] = next;
+  if (
+    playerUltimateType === "overpower" &&
+    isUltimateActiveForPlayer(game, playerSocketId)
+  ) {
+    game.titanRecoveryUntil[playerSocketId] = 0;
+  }
 
   io.to(playerSocketId).emit("incorrectAnswer", {
     reason,
@@ -1991,7 +2112,7 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
   let overclockCombo = 0;
   let overclockBonusDamage = 0;
   const architectPrecisionCutDamage = 0;
-  let perfectStrikeDamage = 0;
+  let architectNodesGained = 0;
   let titanLifestealApplied = 0;
   const titanBreakTriggered = false;
 
@@ -2006,6 +2127,13 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
   let damage = opponent ? baseDamage : 0;
   let knockedOutOpponent = false;
   let knockedOutAttacker = false;
+  let result = {
+    damageApplied: 0,
+    knockedOutTarget: false,
+    knockedOutAttacker: false,
+    mitigatedDamage: 0,
+    storedDamageTotal: 0
+  };
   if (opponent) {
     if (!game.hp) {
       game.hp = buildHpMap(game.players);
@@ -2032,13 +2160,10 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     }
 
     if (ultimateType === "perfect_sequence" && ultimateActive) {
-      const prevStreak = game.architectSequenceStreak[playerSocketId] ?? 0;
-      const nextStreak = prevStreak + 1;
-      game.architectSequenceStreak[playerSocketId] = nextStreak;
-      if (nextStreak >= ARCHITECT_BURST_STACK_THRESHOLD) {
-        game.architectSequenceStreak[playerSocketId] = 0;
-        perfectStrikeDamage = ARCHITECT_BURST_DAMAGE;
-      }
+      const nextNodes = Math.min(ARCHITECT_NODE_CAP, (game.architectMarks[playerSocketId] ?? 0) + 1);
+      architectNodesGained = nextNodes - (game.architectMarks[playerSocketId] ?? 0);
+      game.architectMarks[playerSocketId] = nextNodes;
+      game.architectSequenceStreak[playerSocketId] = nextNodes;
     }
 
     if (ultimateType === "overpower" && ultimateActive) {
@@ -2046,7 +2171,7 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     }
 
     const bypassDefense = ultimateType === "overpower" && ultimateActive;
-    const result = resolveIncomingDamage(
+    result = resolveIncomingDamage(
       game,
       playerSocketId,
       opponent.socketId,
@@ -2057,27 +2182,14 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     knockedOutAttacker = result.knockedOutAttacker;
     knockedOutOpponent = result.knockedOutTarget;
 
-    let burstResult = { damageApplied: 0, knockedOutTarget: false, knockedOutAttacker: false };
-    if (perfectStrikeDamage > 0) {
-      burstResult = resolveIncomingDamage(
-        game,
-        playerSocketId,
-        opponent.socketId,
-        perfectStrikeDamage,
-        "damage",
-        { sourceUltimateType: "perfect_sequence", bypassDefense: true }
-      );
-      if (burstResult.knockedOutTarget) knockedOutOpponent = true;
-      if (burstResult.knockedOutAttacker) knockedOutAttacker = true;
-    }
-
-    const totalDealt = (result.damageApplied ?? 0) + (burstResult.damageApplied ?? 0);
+    const totalDealt = result.damageApplied ?? 0;
     if (ultimateType === "overpower" && ultimateActive && totalDealt > 0) {
       const heal = Math.max(1, Math.round(totalDealt * TITAN_LIFESTEAL_RATIO));
       const cur = game.hp[playerSocketId] ?? MAX_HP;
       const healed = Math.min(MAX_HP, cur + heal);
       game.hp[playerSocketId] = healed;
       titanLifestealApplied = healed - cur;
+      game.titanRecoveryUntil[playerSocketId] = Date.now() + TITAN_RECOVERY_MS;
     }
   }
 
@@ -2114,9 +2226,12 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     scorerOverclockCombo: overclockCombo,
     overclockBonusDamage: scorerSocketId === playerOneSocketId ? overclockBonusDamage : 0,
     architectPrecisionCutDamage: scorerSocketId === playerOneSocketId ? architectPrecisionCutDamage : 0,
-    perfectStrikeDamage: scorerSocketId === playerOneSocketId ? perfectStrikeDamage : 0,
-    titanLifestealApplied: scorerSocketId === playerOneSocketId ? titanLifestealApplied : 0,
+    perfectStrikeDamage: 0,
+    architectNodesGained: scorerSocketId === playerOneSocketId ? architectNodesGained : 0,
+    titanLifestealApplied,
     titanBreakTriggered: scorerSocketId === playerOneSocketId ? titanBreakTriggered : false,
+    guardianMitigatedDamage: result?.mitigatedDamage ?? 0,
+    guardianStoredDamage: result?.storedDamageTotal ?? 0,
     strikes: game.strikes[playerOneSocketId] ?? 0,
     opponentStrikes: game.strikes[playerTwoSocketId] ?? 0,
     youEliminated: !!game.eliminated[playerOneSocketId],
@@ -2143,9 +2258,12 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     scorerOverclockCombo: overclockCombo,
     overclockBonusDamage: scorerSocketId === playerTwoSocketId ? overclockBonusDamage : 0,
     architectPrecisionCutDamage: scorerSocketId === playerTwoSocketId ? architectPrecisionCutDamage : 0,
-    perfectStrikeDamage: scorerSocketId === playerTwoSocketId ? perfectStrikeDamage : 0,
-    titanLifestealApplied: scorerSocketId === playerTwoSocketId ? titanLifestealApplied : 0,
+    perfectStrikeDamage: 0,
+    architectNodesGained: scorerSocketId === playerTwoSocketId ? architectNodesGained : 0,
+    titanLifestealApplied,
     titanBreakTriggered: scorerSocketId === playerTwoSocketId ? titanBreakTriggered : false,
+    guardianMitigatedDamage: result?.mitigatedDamage ?? 0,
+    guardianStoredDamage: result?.storedDamageTotal ?? 0,
     strikes: game.strikes[playerTwoSocketId] ?? 0,
     opponentStrikes: game.strikes[playerOneSocketId] ?? 0,
     youEliminated: !!game.eliminated[playerTwoSocketId],
@@ -2491,6 +2609,7 @@ function createActiveGame(players, topic, difficulty, customRoomCode = null) {
     titanOverpowerUntil: buildTitanOverpowerUntilMap(players),
     titanStreak: buildTitanStreakMap(players),
     titanBreakArmed: buildTitanBreakArmedMap(players),
+    titanRecoveryUntil: buildZeroMap(players),
     titanTimeout: buildUltimateEffectTimeoutMap(players),
     blackoutTimeout: buildUltimateEffectTimeoutMap(players),
     fortressTimeout: buildUltimateEffectTimeoutMap(players),
@@ -2550,6 +2669,8 @@ function createActiveGame(players, topic, difficulty, customRoomCode = null) {
     difficulty,
     yourAvatar: players[0].avatar,
     opponentAvatar: players[1].avatar,
+    yourAvatarData: buildAvatarPayload(players[0].avatar),
+    opponentAvatarData: buildAvatarPayload(players[1].avatar),
     ratings: {
       you: players[0].rating,
       opponent: players[1].rating
@@ -2568,6 +2689,8 @@ function createActiveGame(players, topic, difficulty, customRoomCode = null) {
     difficulty,
     yourAvatar: players[1].avatar,
     opponentAvatar: players[0].avatar,
+    yourAvatarData: buildAvatarPayload(players[1].avatar),
+    opponentAvatarData: buildAvatarPayload(players[0].avatar),
     ratings: {
       you: players[1].rating,
       opponent: players[0].rating
@@ -3022,6 +3145,15 @@ function useAvatarUltimate(roomId, playerSocketId) {
     return;
   }
 
+  const ultimateType = getUltimateTypeForPlayer(game, playerSocketId);
+  if (
+    ultimateType === "perfect_sequence" &&
+    isUltimateActiveForPlayer(game, playerSocketId)
+  ) {
+    detonateArchitectSystem(game, roomId, playerSocketId, "manual");
+    return;
+  }
+
   if (game.ultimateUsed[playerSocketId] || !game.ultimateReady[playerSocketId]) {
     return;
   }
@@ -3031,7 +3163,6 @@ function useAvatarUltimate(roomId, playerSocketId) {
     return;
   }
 
-  const ultimateType = getUltimateTypeForPlayer(game, playerSocketId);
   const durationMs = getUltimateDurationMs(ultimateType);
   const secondsRemaining = Math.max(1, Math.ceil(durationMs / 1000));
 
@@ -3060,6 +3191,13 @@ function useAvatarUltimate(roomId, playerSocketId) {
   }
   if (ultimateType === "shield") {
     game.reflectedDamage[playerSocketId] = 0;
+  }
+  if (ultimateType === "perfect_sequence") {
+    game.architectMarks[playerSocketId] = 0;
+    game.architectSequenceStreak[playerSocketId] = 0;
+  }
+  if (ultimateType === "overpower") {
+    game.titanRecoveryUntil[playerSocketId] = 0;
   }
   emitUltimateApplied(
     game,
@@ -3259,6 +3397,7 @@ io.on("connection", (socket) => {
     }
 
     if (questionState.answered) {
+      emitCurrentQuestionSnapshot(game, roomId, socket.id);
       return;
     }
 
@@ -3267,6 +3406,7 @@ io.on("connection", (socket) => {
     // an already-resolved question — drop it silently with no strike penalty.
     if (clientToken !== null && clientToken !== undefined && clientToken !== questionState.generation) {
       console.log(`[server] stale submitAnswer rejected -> id=${socket.id} clientToken=${clientToken} serverGeneration=${questionState.generation}`);
+      emitCurrentQuestionSnapshot(game, roomId, socket.id);
       return;
     }
 
@@ -3298,6 +3438,9 @@ io.on("connection", (socket) => {
 
     // Burst-only lock: full Shadow window still allows "stay" so the prompt cannot deadlock.
     if ((game.neuralInputUnlockAt?.[socket.id] ?? 0) > Date.now()) {
+      return;
+    }
+    if ((game.titanRecoveryUntil?.[socket.id] ?? 0) > Date.now()) {
       return;
     }
 

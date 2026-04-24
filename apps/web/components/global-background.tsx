@@ -82,7 +82,7 @@ const PAGE_THEMES = {
 export function GlobalBackground() {
   const pathname = usePathname();
   const theme = useMemo(() => {
-    if (pathname?.startsWith("/game")) return PAGE_THEMES.game;
+    if (pathname?.startsWith("/game")) return PAGE_THEMES.play;
     if (pathname?.startsWith("/play")) return PAGE_THEMES.play;
     if (pathname?.startsWith("/leaderboard")) return PAGE_THEMES.leaderboard;
     if (pathname?.startsWith("/profile")) return PAGE_THEMES.profile;

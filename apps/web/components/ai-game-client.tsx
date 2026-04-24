@@ -925,7 +925,7 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
   // ---------------------------------------------------------------------------
   if (isDuelMode && !isFinished) {
     return (
-      <section className="fixed inset-0 z-10 bg-slate-950 text-white">
+      <section className="fixed inset-0 z-10 text-white">
         <GameOverOverlay result={null} />
         <div className="pointer-events-none absolute left-0 right-0 top-16 z-30 flex items-start justify-between gap-3 px-3 sm:px-5">
           <div className="relative h-14 w-[46%] max-w-sm">
@@ -937,8 +937,8 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
         </div>
 
         <div className="flex h-[100dvh] flex-col overflow-hidden">
-          <div className="shrink-0 border-b border-white/10 bg-slate-950/90 px-3 pb-2 pt-2.5 backdrop-blur sm:px-5 sm:pb-2.5 sm:pt-3">
-            <div className="relative rounded-[1.55rem] border border-white/10 bg-slate-950/72 p-2 shadow-[0_18px_44px_rgba(2,6,23,0.5)] sm:p-3">
+          <div className="shrink-0 px-3 pb-2 pt-2.5 sm:px-5 sm:pb-2.5 sm:pt-3">
+            <div className="q-card relative rounded-[1.55rem] p-2 sm:p-3">
               <div
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-0 rounded-[1.55rem] opacity-70"
@@ -947,17 +947,6 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
                     "radial-gradient(ellipse at 28% 35%, rgba(56,189,248,0.12) 0%, transparent 56%), radial-gradient(ellipse at 72% 35%, rgba(251,113,133,0.12) 0%, transparent 56%)"
                 }}
               />
-              <div className="absolute right-2 top-2 z-10 sm:right-3 sm:top-3">
-                <SoundToggle
-                  muted={muted}
-                  onToggle={() => {
-                    const next = !muted;
-                    soundManager.setMuted(next);
-                    setMuted(next);
-                  }}
-                />
-              </div>
-
               <div className="relative grid items-stretch gap-2 md:grid-cols-[minmax(0,1fr)_8.5rem_minmax(0,1fr)] md:gap-3">
                 <MatchChampionCard
                   variant="battle"
@@ -990,15 +979,25 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
                 />
 
                 <div className="flex min-h-[3.1rem] items-center justify-center md:min-h-full">
-                  <div className="w-full rounded-2xl border border-slate-800 bg-slate-950/88 px-2.5 py-1.5 text-center sm:px-3 sm:py-2">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-textSecondary">Duel</p>
-                    <div className="mt-1 flex items-baseline justify-center gap-2">
-                      <span className="text-xl font-black tabular-nums text-sky-200 sm:text-3xl">{scores.you}</span>
-                      <span className="text-[10px] font-black uppercase tracking-[0.34em] text-textSecondary sm:text-xs">VS</span>
-                      <span className="text-xl font-black tabular-nums text-rose-200 sm:text-3xl">{scores.opponent}</span>
-                    </div>
-                    <div className="mt-1 inline-flex rounded-full border border-slate-800 bg-slate-900/85 px-3 py-1 text-[10px] font-black tracking-[0.24em] text-sky-200 sm:mt-1.5 sm:text-xs">
-                      {timerLabel}
+                  <div className="flex w-full flex-col items-center gap-2">
+                    <SoundToggle
+                      muted={muted}
+                      onToggle={() => {
+                        const next = !muted;
+                        soundManager.setMuted(next);
+                        setMuted(next);
+                      }}
+                    />
+                    <div className="q-card-subtle w-full rounded-2xl px-2.5 py-1.5 text-center sm:px-3 sm:py-2">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-textSecondary">Duel</p>
+                      <div className="mt-1 flex items-baseline justify-center gap-2">
+                        <span className="text-xl font-black tabular-nums text-sky-200 sm:text-3xl">{scores.you}</span>
+                        <span className="text-[10px] font-black uppercase tracking-[0.34em] text-textSecondary sm:text-xs">VS</span>
+                        <span className="text-xl font-black tabular-nums text-rose-200 sm:text-3xl">{scores.opponent}</span>
+                      </div>
+                      <div className="mt-1 inline-flex rounded-full border border-slate-800 bg-slate-900/85 px-3 py-1 text-[10px] font-black tracking-[0.24em] text-sky-200 sm:mt-1.5 sm:text-xs">
+                        {timerLabel}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1226,14 +1225,16 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
         )}
       </AnimatePresence>
 
-      <SoundToggle
-        muted={muted}
-        onToggle={() => {
-          const next = !muted;
-          soundManager.setMuted(next);
-          setMuted(next);
-        }}
-      />
+      <div className="flex justify-end">
+        <SoundToggle
+          muted={muted}
+          onToggle={() => {
+            const next = !muted;
+            soundManager.setMuted(next);
+            setMuted(next);
+          }}
+        />
+      </div>
 
       <div className="relative z-10 flex flex-col gap-5 sm:gap-6 md:gap-8">
         {/* Header */}
@@ -1581,4 +1582,3 @@ export function AiGameClient({ initialTopic, initialDifficulty, opponentMode = "
     </section>
   );
 }
-

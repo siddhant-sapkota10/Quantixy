@@ -5,6 +5,8 @@ import { useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { getAvatar, type AvatarId } from "@/lib/avatars";
 import { ULTIMATE_VFX, type UltimateType } from "@/lib/ultimate-vfx";
+import { UltimateStatus } from "@/components/ultimate-status";
+import { FloatingLabel, type FloatingLabelItem } from "@/components/animations/FloatingLabel";
 
 type Side = "you" | "opponent";
 
@@ -26,8 +28,13 @@ export type MatchChampionCardModel = {
   architectUntil?: number;
   architectMarks?: number;
   architectSequenceStreak?: number;
+  architectReady?: boolean;
+  titanOverpowerUntil?: number;
+  titanRecoveryUntil?: number;
+  titanDamageReduction?: number;
   fortressUntil?: number;
   fortressBlocksRemaining?: number;
+  fortressStoredDamage?: number;
   infernoPending?: boolean;
   infernoPendingUntil?: number;
   infernoStacks?: number;
@@ -35,8 +42,11 @@ export type MatchChampionCardModel = {
   flashOverclockStacks?: number;
   /** Seconds remaining for your active ultimate. */
   ultimateQuestionsLeft?: number;
+  jammed?: boolean;
+  burning?: boolean;
   /** Battle HUD: floating damage on this card when this player was just hit. */
   damageFloat?: { hitKey: number; amount: number; flashTier: number } | null;
+  combatEvents?: FloatingLabelItem[];
 };
 
 type MatchChampionCardProps = {
@@ -109,6 +119,17 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
   const isArmedInferno = Boolean(model.infernoPending) && (model.infernoPendingUntil ?? 0) > now;
   const infernoStacks = model.infernoStacks ?? 0;
   const questionsLeft = Math.max(0, model.ultimateQuestionsLeft ?? 0);
+  const activeUntil = isActiveRapid
+    ? model.overclockUntil ?? 0
+    : isActiveCorrupt
+      ? model.shadowCorruptUntil ?? 0
+      : isActiveArchitect
+        ? model.architectUntil ?? 0
+        : isActiveFortress
+          ? model.fortressUntil ?? 0
+          : isArmedInferno
+            ? model.infernoPendingUntil ?? 0
+            : (model.titanOverpowerUntil ?? 0);
 
   const flashStacks = model.flashOverclockStacks ?? 0;
   const activeLabel = isActiveRapid
@@ -174,6 +195,7 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
             isOpponent ? "grid-cols-[6.75rem_minmax(0,1fr)]" : "grid-cols-[minmax(0,1fr)_6.75rem]"
           }`}
         >
+          <FloatingLabel items={model.combatEvents ?? []} />
           {/* Mobile: always left-aligned + same ordering to avoid lopsided stacked HUD. */}
           <div className={`min-w-0 order-1 text-left sm:${isOpponent ? "order-2 text-right" : "order-1 text-left"}`}>
             <p className="truncate text-[0.85rem] font-black uppercase tracking-[0.06em] text-white sm:text-[1.02rem]">
@@ -199,6 +221,29 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
               <span className="font-semibold uppercase tracking-[0.16em] text-slate-400">Ultimate</span>{" "}
               <span className="font-semibold">{model.ultimateName}</span>
             </p>
+
+            <div className="mt-2">
+              <UltimateStatus
+                avatarId={model.avatarId}
+                ultimateType={avatar.ultimateId}
+                ultimateName={model.ultimateName}
+                charge={model.charge}
+                ready={model.ready}
+                used={model.used}
+                activeUntil={activeUntil}
+                remainingSeconds={questionsLeft}
+                flashStacks={flashStacks}
+                burnStacks={infernoStacks}
+                architectNodes={model.architectMarks ?? 0}
+                architectReady={model.architectReady ?? false}
+                fortressStoredDamage={model.fortressStoredDamage ?? model.fortressBlocksRemaining ?? 0}
+                jammed={Boolean(model.jammed)}
+                burning={Boolean(model.burning)}
+                titanRecovering={(model.titanRecoveryUntil ?? 0) > now}
+                titanDamageReduction={model.titanDamageReduction ?? 0}
+                compact
+              />
+            </div>
 
             {/* Mobile: hide charge bar to save vertical space (chip already shows %) */}
             <div className="mt-2.5 hidden sm:block">
@@ -299,6 +344,7 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
         theme.glow
       } ${showReadyPulse ? theme.readyGlow : ""}`}
     >
+      <FloatingLabel items={model.combatEvents ?? []} />
       {/* Subtle per-champion tint */}
       <div className="pointer-events-none absolute inset-0 opacity-70" style={{ background: vfx.tint }} />
 
@@ -359,6 +405,28 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
                 {activeLabel}
               </span>
             ) : null}
+          </div>
+
+          <div className="mt-2">
+            <UltimateStatus
+              avatarId={model.avatarId}
+              ultimateType={avatar.ultimateId}
+              ultimateName={model.ultimateName}
+              charge={model.charge}
+              ready={model.ready}
+              used={model.used}
+              activeUntil={activeUntil}
+              remainingSeconds={questionsLeft}
+              flashStacks={flashStacks}
+              burnStacks={infernoStacks}
+              architectNodes={model.architectMarks ?? 0}
+              architectReady={model.architectReady ?? false}
+              fortressStoredDamage={model.fortressStoredDamage ?? model.fortressBlocksRemaining ?? 0}
+              jammed={Boolean(model.jammed)}
+              burning={Boolean(model.burning)}
+              titanRecovering={(model.titanRecoveryUntil ?? 0) > now}
+              titanDamageReduction={model.titanDamageReduction ?? 0}
+            />
           </div>
 
           {/* Charge bar */}

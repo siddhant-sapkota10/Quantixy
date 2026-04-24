@@ -11,6 +11,7 @@ import { createGameSocket, type GameSocket } from "@/lib/socket";
 import { soundManager } from "@/lib/sounds";
 import { formatTopicLabel, getSafeDifficulty, getSafeTopic } from "@/lib/topics";
 import { getAvatar, normalizeAvatarId, type AvatarId } from "@/lib/avatars";
+import type { Avatar } from "@/lib/avatars";
 import { EMOTES, getEmoteById } from "@/lib/emotes";
 import {
   normalizeStreakEffectId,
@@ -30,6 +31,7 @@ const POWERUPS_ENABLED = false;
 import { useGameAnimations } from "@/hooks/useGameAnimations";
 import { FrostBurst } from "@/components/animations/FrostBurst";
 import { FloatingLabel } from "@/components/animations/FloatingLabel";
+import type { FloatingLabelItem } from "@/components/animations/FloatingLabel";
 import { CountdownDisplay } from "@/components/animations/CountdownDisplay";
 import { GameOverOverlay } from "@/components/animations/GameOverOverlay";
 import { SnowfallOverlay } from "@/components/animations/SnowfallOverlay";
@@ -124,18 +126,30 @@ type UltimateState = {
   opponentArchitectMarks: number;
   architectSequenceStreak: number;
   opponentArchitectSequenceStreak: number;
+  architectNodes: number;
+  opponentArchitectNodes: number;
+  architectReady: boolean;
+  opponentArchitectReady: boolean;
   titanOverpowerUntil: number;
   opponentTitanOverpowerUntil: number;
   titanStreak: number;
   opponentTitanStreak: number;
   titanBreakArmed: boolean;
   opponentTitanBreakArmed: boolean;
+  titanRecoveryUntil: number;
+  opponentTitanRecoveryUntil: number;
+  titanRecovering: boolean;
+  opponentTitanRecovering: boolean;
+  titanDamageReduction: number;
+  opponentTitanDamageReduction: number;
   overclockUntil: number;
   opponentOverclockUntil: number;
   fortressUntil: number;
   opponentFortressUntil: number;
   fortressBlocksRemaining: number;
   opponentFortressBlocksRemaining: number;
+  fortressStoredDamage: number;
+  opponentFortressStoredDamage: number;
   flashBonusRemaining: number;
   opponentFlashBonusRemaining: number;
   novaBonusRemaining: number;
@@ -146,6 +160,8 @@ type UltimateState = {
   opponentInfernoPendingUntil: number;
   flashOverclockStacks: number;
   opponentFlashOverclockStacks: number;
+  jammed: boolean;
+  opponentJammed: boolean;
 };
 
 type FeedbackState = {
@@ -225,12 +241,22 @@ const initialUltimate: UltimateState = {
   opponentArchitectMarks: 0,
   architectSequenceStreak: 0,
   opponentArchitectSequenceStreak: 0,
+  architectNodes: 0,
+  opponentArchitectNodes: 0,
+  architectReady: false,
+  opponentArchitectReady: false,
   titanOverpowerUntil: 0,
   opponentTitanOverpowerUntil: 0,
   titanStreak: 0,
   opponentTitanStreak: 0,
   titanBreakArmed: false,
   opponentTitanBreakArmed: false,
+  titanRecoveryUntil: 0,
+  opponentTitanRecoveryUntil: 0,
+  titanRecovering: false,
+  opponentTitanRecovering: false,
+  titanDamageReduction: 0,
+  opponentTitanDamageReduction: 0,
   overclockUntil: 0,
   opponentOverclockUntil: 0,
   fortressUntil: 0,
@@ -246,7 +272,17 @@ const initialUltimate: UltimateState = {
   opponentInfernoPending: false,
   opponentInfernoPendingUntil: 0,
   flashOverclockStacks: 0,
-  opponentFlashOverclockStacks: 0
+  opponentFlashOverclockStacks: 0,
+  fortressStoredDamage: 0,
+  opponentFortressStoredDamage: 0,
+  jammed: false,
+  opponentJammed: false
+};
+
+type UltimateToastState = {
+  id: number;
+  text: string;
+  by: "you" | "opponent";
 };
 
 function buildUltimateIdentityFromAvatars(yourAvatarId: AvatarId, opponentAvatarId: AvatarId): Pick<
@@ -255,6 +291,44 @@ function buildUltimateIdentityFromAvatars(yourAvatarId: AvatarId, opponentAvatar
 > {
   const yourAvatar = getAvatar(yourAvatarId);
   const opponentAvatar = getAvatar(opponentAvatarId);
+  return {
+    type: yourAvatar.ultimateId,
+    name: yourAvatar.ultimateName,
+    description: yourAvatar.ultimateDescription,
+    implemented: true,
+    opponentType: opponentAvatar.ultimateId,
+    opponentName: opponentAvatar.ultimateName,
+    opponentImplemented: true,
+  };
+}
+
+type ServerAvatarSnapshot = Pick<
+  Avatar,
+  "id" | "emoji" | "ultimateId" | "ultimateName" | "ultimateDescription"
+>;
+
+function isServerAvatarSnapshot(value: unknown): value is ServerAvatarSnapshot {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<ServerAvatarSnapshot>;
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.emoji === "string" &&
+    typeof candidate.ultimateId === "string" &&
+    typeof candidate.ultimateName === "string" &&
+    typeof candidate.ultimateDescription === "string"
+  );
+}
+
+function buildUltimateIdentityFromServerAvatars(
+  yourAvatar: ServerAvatarSnapshot,
+  opponentAvatar: ServerAvatarSnapshot
+): Pick<
+  UltimateState,
+  "type" | "name" | "description" | "implemented" | "opponentType" | "opponentName" | "opponentImplemented"
+> {
   return {
     type: yourAvatar.ultimateId,
     name: yourAvatar.ultimateName,
@@ -384,6 +458,7 @@ export function GameClient({
   const [feedback, setFeedback] = useState<FeedbackState>(initialFeedback);
   const feedbackRef = useRef(initialFeedback);
   const scoresRef = useRef(initialScores);
+  const ultimateRef = useRef(initialUltimate);
   const [currentQuestion, setCurrentQuestion] = useState("Waiting for the first question...");
   const [currentQuestionData, setCurrentQuestionData] = useState<DuelQuestion | null>(null);
   const [answer, setAnswer] = useState("");
@@ -407,7 +482,12 @@ export function GameClient({
   const [emoteBarOpen, setEmoteBarOpen] = useState(false);
   const [emoteCooldownUntil, setEmoteCooldownUntil] = useState(0);
   const [emoteLabels, setEmoteLabels] = useState<EmoteDisplayItem[]>([]);
+  const [youCombatEvents, setYouCombatEvents] = useState<FloatingLabelItem[]>([]);
+  const [opponentCombatEvents, setOpponentCombatEvents] = useState<FloatingLabelItem[]>([]);
+  const [ultimateToast, setUltimateToast] = useState<UltimateToastState | null>(null);
   const emoteIdRef = useRef(0);
+  const combatEventIdRef = useRef(0);
+  const ultimateToastIdRef = useRef(0);
   const emoteTimestampsRef = useRef<number[]>([]);
   const seenEmoteMessageIdsRef = useRef<Set<string>>(new Set());
   const currentMatchRoomIdRef = useRef<string | null>(null);
@@ -640,6 +720,31 @@ export function GameClient({
   }, [scores]);
 
   useEffect(() => {
+    ultimateRef.current = ultimate;
+  }, [ultimate]);
+
+  const pushCombatEvent = (
+    target: "you" | "opponent",
+    item: Omit<FloatingLabelItem, "id">
+  ) => {
+    const id = ++combatEventIdRef.current;
+    const nextItem: FloatingLabelItem = { id, duration: 1.1, ...item };
+    const setItems = target === "you" ? setYouCombatEvents : setOpponentCombatEvents;
+    setItems((previous) => [...previous, nextItem]);
+    window.setTimeout(() => {
+      setItems((previous) => previous.filter((entry) => entry.id !== id));
+    }, Math.round((nextItem.duration ?? 1.1) * 1000) + 120);
+  };
+
+  const pushUltimateToast = (text: string, by: "you" | "opponent") => {
+    const id = ++ultimateToastIdRef.current;
+    setUltimateToast({ id, text, by });
+    window.setTimeout(() => {
+      setUltimateToast((previous) => (previous?.id === id ? null : previous));
+    }, 950);
+  };
+
+  useEffect(() => {
     timerSecondsRef.current = timer.secondsLeft;
   }, [timer.secondsLeft]);
 
@@ -743,6 +848,9 @@ export function GameClient({
     setEmoteBarOpen(false);
     setEmoteCooldownUntil(0);
     setEmoteLabels([]);
+    setYouCombatEvents([]);
+    setOpponentCombatEvents([]);
+    setUltimateToast(null);
     seenEmoteMessageIdsRef.current.clear();
     setRematchRequested(false);
     setOpponentRematchRequested(false);
@@ -996,6 +1104,22 @@ export function GameClient({
           typeof payload.opponentArchitectSequenceStreak === "number"
             ? payload.opponentArchitectSequenceStreak
             : (previous as UltimateState & { opponentArchitectSequenceStreak?: number }).opponentArchitectSequenceStreak ?? 0,
+        architectNodes:
+          typeof payload.architectNodes === "number"
+            ? payload.architectNodes
+            : previous.architectNodes,
+        opponentArchitectNodes:
+          typeof payload.opponentArchitectNodes === "number"
+            ? payload.opponentArchitectNodes
+            : previous.opponentArchitectNodes,
+        architectReady:
+          typeof payload.architectReady === "boolean"
+            ? payload.architectReady
+            : previous.architectReady,
+        opponentArchitectReady:
+          typeof payload.opponentArchitectReady === "boolean"
+            ? payload.opponentArchitectReady
+            : previous.opponentArchitectReady,
         titanOverpowerUntil:
           typeof payload.titanOverpowerUntil === "number"
             ? payload.titanOverpowerUntil
@@ -1020,6 +1144,30 @@ export function GameClient({
           typeof payload.opponentTitanBreakArmed === "boolean"
             ? payload.opponentTitanBreakArmed
             : (previous as UltimateState & { opponentTitanBreakArmed?: boolean }).opponentTitanBreakArmed ?? false,
+        titanRecoveryUntil:
+          typeof payload.titanRecoveryUntil === "number"
+            ? payload.titanRecoveryUntil
+            : previous.titanRecoveryUntil,
+        opponentTitanRecoveryUntil:
+          typeof payload.opponentTitanRecoveryUntil === "number"
+            ? payload.opponentTitanRecoveryUntil
+            : previous.opponentTitanRecoveryUntil,
+        titanRecovering:
+          typeof payload.titanRecovering === "boolean"
+            ? payload.titanRecovering
+            : previous.titanRecovering,
+        opponentTitanRecovering:
+          typeof payload.opponentTitanRecovering === "boolean"
+            ? payload.opponentTitanRecovering
+            : previous.opponentTitanRecovering,
+        titanDamageReduction:
+          typeof payload.titanDamageReduction === "number"
+            ? payload.titanDamageReduction
+            : previous.titanDamageReduction,
+        opponentTitanDamageReduction:
+          typeof payload.opponentTitanDamageReduction === "number"
+            ? payload.opponentTitanDamageReduction
+            : previous.opponentTitanDamageReduction,
         overclockUntil:
           typeof payload.overclockUntil === "number" ? payload.overclockUntil : previous.overclockUntil,
         opponentOverclockUntil:
@@ -1040,6 +1188,14 @@ export function GameClient({
           typeof payload.opponentFortressBlocksRemaining === "number"
             ? payload.opponentFortressBlocksRemaining
             : previous.opponentFortressBlocksRemaining,
+        fortressStoredDamage:
+          typeof payload.fortressStoredDamage === "number"
+            ? payload.fortressStoredDamage
+            : previous.fortressStoredDamage,
+        opponentFortressStoredDamage:
+          typeof payload.opponentFortressStoredDamage === "number"
+            ? payload.opponentFortressStoredDamage
+            : previous.opponentFortressStoredDamage,
         flashBonusRemaining:
           typeof payload.flashBonusRemaining === "number"
             ? payload.flashBonusRemaining
@@ -1077,7 +1233,10 @@ export function GameClient({
         opponentFlashOverclockStacks:
           typeof payload.opponentFlashOverclockStacks === "number"
             ? payload.opponentFlashOverclockStacks
-            : previous.opponentFlashOverclockStacks
+            : previous.opponentFlashOverclockStacks,
+        jammed: typeof payload.jammed === "boolean" ? payload.jammed : previous.jammed,
+        opponentJammed:
+          typeof payload.opponentJammed === "boolean" ? payload.opponentJammed : previous.opponentJammed
       }));
       if ("neuralInputUnlockAt" in payload) {
         const rawNeural = payload.neuralInputUnlockAt;
@@ -1126,6 +1285,8 @@ export function GameClient({
       difficulty?: string;
       yourAvatar?: string;
       opponentAvatar?: string;
+      yourAvatarData?: ServerAvatarSnapshot;
+      opponentAvatarData?: ServerAvatarSnapshot;
       ratings?: {
         you: number;
         opponent: number;
@@ -1163,12 +1324,20 @@ export function GameClient({
         payload.roomId ?? payload.room ?? payload.roomInfo?.id ?? currentMatchRoomIdRef.current;
       setYourName(payload.yourName ?? "You");
       setOpponentName(payload.opponentName ?? payload.opponent?.name ?? "Opponent");
-      const nextYourAvatarId = normalizeAvatarId(payload.yourAvatar);
-      const nextOpponentAvatarId = normalizeAvatarId(payload.opponentAvatar);
+      const nextYourAvatarId = normalizeAvatarId(payload.yourAvatarData?.id ?? payload.yourAvatar);
+      const nextOpponentAvatarId = normalizeAvatarId(payload.opponentAvatarData?.id ?? payload.opponentAvatar);
       setYourAvatarId(nextYourAvatarId);
       setOpponentAvatarId(nextOpponentAvatarId);
-      setYourAvatar(getAvatar(nextYourAvatarId).emoji);
-      setOpponentAvatar(getAvatar(nextOpponentAvatarId).emoji);
+      setYourAvatar(
+        isServerAvatarSnapshot(payload.yourAvatarData)
+          ? payload.yourAvatarData.emoji
+          : getAvatar(nextYourAvatarId).emoji
+      );
+      setOpponentAvatar(
+        isServerAvatarSnapshot(payload.opponentAvatarData)
+          ? payload.opponentAvatarData.emoji
+          : getAvatar(nextOpponentAvatarId).emoji
+      );
       // Apply cosmetics — visual only, no gameplay effect
       setYourStreakEffect(normalizeStreakEffectId(payload.yourStreakEffect));
       setOpponentStreakEffect(normalizeStreakEffectId(payload.opponentStreakEffect));
@@ -1178,7 +1347,9 @@ export function GameClient({
       }
       setUltimate({
         ...initialUltimate,
-        ...buildUltimateIdentityFromAvatars(nextYourAvatarId, nextOpponentAvatarId),
+        ...(isServerAvatarSnapshot(payload.yourAvatarData) && isServerAvatarSnapshot(payload.opponentAvatarData)
+          ? buildUltimateIdentityFromServerAvatars(payload.yourAvatarData, payload.opponentAvatarData)
+          : buildUltimateIdentityFromAvatars(nextYourAvatarId, nextOpponentAvatarId)),
       });
       syncUltimateFromPayload(payload);
       const youPowerUpsAvailable = Array.isArray((payload as { powerUpsAvailable?: PowerUpId[] }).powerUpsAvailable)
@@ -1216,6 +1387,9 @@ export function GameClient({
       setEmoteBarOpen(false);
       setEmoteCooldownUntil(0);
       setEmoteLabels([]);
+      setYouCombatEvents([]);
+      setOpponentCombatEvents([]);
+      setUltimateToast(null);
       seenEmoteMessageIdsRef.current.clear();
       setRoomErrorMessage(null);
       setRoomNotice(null);
@@ -1267,6 +1441,9 @@ export function GameClient({
         setNeuralInputUnlockAt(0);
         setEmoteCooldownUntil(0);
         setEmoteLabels([]);
+        setYouCombatEvents([]);
+        setOpponentCombatEvents([]);
+        setUltimateToast(null);
         seenEmoteMessageIdsRef.current.clear();
         setOpponentActivity("idle");
         if (opponentTypingTimerRef.current) {
@@ -1297,15 +1474,10 @@ export function GameClient({
       setFrozenUntil(0);
       setShieldBlockedUntil(0);
       setNeuralInputUnlockAt(0);
-      // Don't force-close the emote picker during countdown; it prevents
-      // users from seeing/clicking emote buttons before "GO".
+      // Keep the emote picker user-controlled during countdown/gameplay.
+      // Auto-opening it steals focus and makes answer interactions feel broken.
       if (payload.value === "GO") {
-        // Mobile: don't auto-expand emotes (steals vertical space).
-        if (typeof window !== "undefined" && window.innerWidth >= 640) {
-          setEmoteBarOpen(true);
-        } else {
-          setEmoteBarOpen(false);
-        }
+        setEmoteBarOpen(false);
       }
       setRematchRequested(false);
       setOpponentRematchRequested(false);
@@ -1354,12 +1526,7 @@ export function GameClient({
         hintUntil: 0
       }));
       setShieldBlockedUntil(0);
-      // Mobile: don't auto-expand emotes (steals vertical space).
-      if (typeof window !== "undefined" && window.innerWidth >= 640) {
-        setEmoteBarOpen(true);
-      } else {
-        setEmoteBarOpen(false);
-      }
+      setEmoteBarOpen(false);
       setRematchRequested(false);
       setOpponentRematchRequested(false);
       setRematchProgress({ requestedPlayers: 0, requiredPlayers: 2 });
@@ -1367,6 +1534,14 @@ export function GameClient({
       setStatus("playing");
       // Reset opponent presence to "thinking" for the new question
       setOpponentActivity("thinking");
+      if (inputLockUntil > Date.now()) {
+        pushCombatEvent("you", {
+          text: "JAMMED",
+          color: "#c4b5fd",
+          className: "bg-violet-950/90 text-violet-100"
+        });
+        soundManager.play("jammed", { volume: 0.18, rate: 1.0, allowOverlap: true });
+      }
       if (opponentTypingTimerRef.current) {
         clearTimeout(opponentTypingTimerRef.current);
         opponentTypingTimerRef.current = null;
@@ -1476,12 +1651,32 @@ export function GameClient({
       syncUltimateFromPayload(payload);
       if (payload.neuralMindShock) {
         triggerShadowMindShock();
+        pushCombatEvent("you", {
+          text: "JAMMED",
+          color: "#c4b5fd",
+          className: "bg-violet-950/90 text-violet-100"
+        });
       }
       if (payload.flashOverclockSnap) {
         triggerFlashOverclockSnap();
+        pushCombatEvent("you", {
+          text: "STACKS -2",
+          color: "#fde68a",
+          className: "bg-amber-950/90 text-amber-100"
+        });
       }
-      if (payload.architectSequenceShatter) {
+      const previousArchitectNodes = ultimateRef.current.architectNodes ?? 0;
+      const nextArchitectNodes =
+        typeof (payload as { architectNodes?: number }).architectNodes === "number"
+          ? ((payload as { architectNodes?: number }).architectNodes ?? 0)
+          : previousArchitectNodes;
+      if (payload.architectSequenceShatter || nextArchitectNodes < previousArchitectNodes) {
         triggerArchitectShatter();
+        pushCombatEvent("you", {
+          text: "NODE -1",
+          color: "#67e8f9",
+          className: "bg-cyan-950/90 text-cyan-100"
+        });
       }
       // Show "Streak Broken" popup if local player had a streak going
       if (feedbackRef.current.youStreak >= 2) {
@@ -1492,6 +1687,11 @@ export function GameClient({
       if (dmg > 0) {
         setLatestYouDamage(dmg);
         setYouHitKey((k) => k + 1);
+        pushCombatEvent("you", {
+          text: `-${Math.round(dmg)} HP`,
+          color: "#fda4af",
+          className: "bg-rose-950/90 text-rose-100"
+        });
       }
       if (typeof payload.hp?.you === "number") {
         setYouDamageTaken(Math.max(0, MAX_HP - payload.hp.you));
@@ -1510,6 +1710,11 @@ export function GameClient({
       if (dmg > 0) {
         setLatestOpponentDamage(dmg);
         setOpponentHitKey((k) => k + 1);
+        pushCombatEvent("opponent", {
+          text: `-${Math.round(dmg)} HP`,
+          color: "#fda4af",
+          className: "bg-rose-950/90 text-rose-100"
+        });
       }
       if (typeof payload.hp?.opponent === "number") {
         setOpponentDamageTaken(Math.max(0, MAX_HP - payload.hp.opponent));
@@ -1568,6 +1773,8 @@ export function GameClient({
       fastAnswer?: boolean;
       opponentFastAnswer?: boolean;
       pointsAwarded?: number;
+      guardianMitigatedDamage?: number;
+      guardianStoredDamage?: number;
       strikes?: number;
       opponentStrikes?: number;
       youEliminated?: boolean;
@@ -1598,8 +1805,23 @@ export function GameClient({
       opponentBlackoutUntil?: number;
       flashBonusRemaining?: number;
       opponentFlashBonusRemaining?: number;
+      novaBonusRemaining?: number;
+      opponentNovaBonusRemaining?: number;
       infernoPending?: boolean;
+      infernoPendingUntil?: number;
       opponentInfernoPending?: boolean;
+      opponentInfernoPendingUntil?: number;
+      flashOverclockStacks?: number;
+      opponentFlashOverclockStacks?: number;
+      architectUntil?: number;
+      opponentArchitectUntil?: number;
+      architectSequenceStreak?: number;
+      opponentArchitectSequenceStreak?: number;
+      architectNodes?: number;
+      opponentArchitectNodes?: number;
+      titanOverpowerUntil?: number;
+      opponentTitanOverpowerUntil?: number;
+      titanLifestealApplied?: number;
       youAnswered?: boolean;
       opponentAnswered?: boolean;
       hp?: { you?: number | null; opponent?: number | null };
@@ -1644,21 +1866,66 @@ export function GameClient({
         const overclockCombo = pfx.overclockCombo ?? 0;
         if (overclockCombo > 0) {
           triggerFlashBolt(Math.max(1, Math.round(overclockCombo / 100)));
+          soundManager.play("overclockStack", { volume: 0.18, rate: 1.06, allowOverlap: true });
         }
-        const perfectStrike = pfx.perfectStrikeDamage ?? 0;
-        if (perfectStrike > 0) {
-          triggerArchitectBeam();
-        } else if ((pfx.architectUntil ?? 0) > nowFx && (pfx.architectSequenceStreak ?? 0) > 0) {
+        if ((payload.flashOverclockStacks ?? 0) > (ultimateRef.current.flashOverclockStacks ?? 0)) {
+          pushCombatEvent("you", {
+            text: `POWER x${payload.flashOverclockStacks}`,
+            color: "#fde68a",
+            className: "bg-amber-950/90 text-amber-100"
+          });
+        }
+        const architectNodesGained = pfx.architectNodesGained ?? 0;
+        if ((pfx.architectUntil ?? 0) > nowFx && architectNodesGained > 0) {
           triggerArchitectOrb();
+          soundManager.play("overclockStack", { volume: 0.16, rate: 1.08, allowOverlap: true });
+          pushCombatEvent("you", {
+            text: "NODE +1",
+            color: "#67e8f9",
+            className: "bg-cyan-950/90 text-cyan-100"
+          });
+          if ((payload.architectNodes ?? 0) >= 5) {
+            pushCombatEvent("you", {
+              text: "SYSTEM READY",
+              color: "#a5f3fc",
+              className: "bg-cyan-950/90 text-cyan-100",
+              duration: 1.15
+            });
+          }
         }
         if ((pfx.infernoPendingUntil ?? 0) > nowFx) {
           triggerInfernoVolley("you", pfx.novaBonusRemaining ?? 0);
+          if ((payload.novaBonusRemaining ?? 0) > (ultimateRef.current.novaBonusRemaining ?? 0)) {
+            pushCombatEvent("you", {
+              text: `BURN x${payload.novaBonusRemaining}`,
+              color: "#fda4af",
+              className: "bg-rose-950/90 text-rose-100"
+            });
+          }
         }
         if ((pfx.titanOverpowerUntil ?? 0) > nowFx) {
           triggerTitanSlam();
           if ((pfx.titanLifestealApplied ?? 0) > 0) {
             triggerTitanHealRipple();
+            soundManager.play("titanLifesteal", { volume: 0.18, rate: 0.96, allowOverlap: true });
+            pushCombatEvent("you", {
+              text: `+${pfx.titanLifestealApplied} HP`,
+              color: "#86efac",
+              className: "bg-emerald-950/90 text-emerald-100"
+            });
           }
+        }
+        if ((payload.guardianMitigatedDamage ?? 0) > 0) {
+          pushCombatEvent("opponent", {
+            text: `MITIGATED ${payload.guardianMitigatedDamage}`,
+            color: "#7dd3fc",
+            className: "bg-cyan-950/90 text-cyan-100"
+          });
+          pushCombatEvent("opponent", {
+            text: `STORED ${payload.guardianStoredDamage ?? 0}`,
+            color: "#a5f3fc",
+            className: "bg-cyan-950/90 text-cyan-100"
+          });
         }
         const youPointsDelta = newYouScore - prevScores.you;
         const dmgDealt = calcDamage(youPointsDelta, payload.fastAnswer ?? false, streakValue);
@@ -1712,11 +1979,62 @@ export function GameClient({
         const pfxO = payload as Record<string, number | undefined>;
         const scorerOc = (payload as { scorerOverclockCombo?: number }).scorerOverclockCombo ?? 0;
         const flashTierYou = scorerOc > 0 ? Math.max(1, Math.round(scorerOc / 100)) : 0;
+        const opponentArchitectNodesGained = pfxO.architectNodesGained ?? 0;
+        if ((pfxO.opponentArchitectUntil ?? 0) > nowO && opponentArchitectNodesGained > 0) {
+          pushCombatEvent("opponent", {
+            text: "NODE +1",
+            color: "#67e8f9",
+            className: "bg-cyan-950/90 text-cyan-100"
+          });
+          if ((payload.opponentArchitectNodes ?? 0) >= 5) {
+            pushCombatEvent("opponent", {
+              text: "SYSTEM READY",
+              color: "#a5f3fc",
+              className: "bg-cyan-950/90 text-cyan-100",
+              duration: 1.15
+            });
+          }
+        }
+        if ((payload.opponentFlashOverclockStacks ?? 0) > (ultimateRef.current.opponentFlashOverclockStacks ?? 0)) {
+          pushCombatEvent("opponent", {
+            text: `POWER x${payload.opponentFlashOverclockStacks}`,
+            color: "#fde68a",
+            className: "bg-amber-950/90 text-amber-100"
+          });
+          soundManager.play("overclockStack", { volume: 0.18, rate: 1.04, allowOverlap: true });
+        }
         if ((pfxO.opponentInfernoPendingUntil ?? 0) > nowO) {
           triggerInfernoVolley("opponent", pfxO.opponentNovaBonusRemaining ?? 0);
+          if ((payload.opponentNovaBonusRemaining ?? 0) > (ultimateRef.current.opponentNovaBonusRemaining ?? 0)) {
+            pushCombatEvent("opponent", {
+              text: `BURN x${payload.opponentNovaBonusRemaining}`,
+              color: "#fda4af",
+              className: "bg-rose-950/90 text-rose-100"
+            });
+          }
         }
         if ((pfxO.opponentTitanOverpowerUntil ?? 0) > nowO) {
           triggerTitanSlam();
+          if ((pfxO.titanLifestealApplied ?? 0) > 0) {
+            pushCombatEvent("opponent", {
+              text: `+${pfxO.titanLifestealApplied} HP`,
+              color: "#86efac",
+              className: "bg-emerald-950/90 text-emerald-100"
+            });
+            soundManager.play("titanLifesteal", { volume: 0.16, rate: 0.94, allowOverlap: true });
+          }
+        }
+        if ((payload.guardianMitigatedDamage ?? 0) > 0) {
+          pushCombatEvent("you", {
+            text: `MITIGATED ${payload.guardianMitigatedDamage}`,
+            color: "#7dd3fc",
+            className: "bg-cyan-950/90 text-cyan-100"
+          });
+          pushCombatEvent("you", {
+            text: `STORED ${payload.guardianStoredDamage ?? 0}`,
+            color: "#a5f3fc",
+            className: "bg-cyan-950/90 text-cyan-100"
+          });
         }
         const oppPointsDelta = newOpponentScore - prevScores.opponent;
         const dmgTaken = calcDamage(oppPointsDelta, payload.opponentFastAnswer ?? false, opponentStreakValue);
@@ -1979,6 +2297,21 @@ export function GameClient({
           previous.opponentDoublePointsUntil
       }));
       const normalizedType = normalizeUltimateType(payload.type);
+      const activationLabel =
+        payload.by === "you"
+          ? (payload.ultimateName ?? payload.type)
+          : (payload.opponentUltimateName ?? payload.type);
+      const activationText = `${activationLabel.toUpperCase()} ACTIVATED`;
+      pushUltimateToast(activationText, payload.by);
+      pushCombatEvent(payload.by === "you" ? "you" : "opponent", {
+        text: activationText,
+        color: payload.by === "you" ? "#e2e8f0" : "#fecdd3",
+        className:
+          payload.by === "you"
+            ? "bg-slate-950/92 text-slate-100"
+            : "bg-rose-950/92 text-rose-100",
+        duration: 1
+      });
       const cueId = ++ultimateCueIdRef.current;
       setUltimateCue({
         id: cueId,
@@ -2009,6 +2342,12 @@ export function GameClient({
       if ((payload.effect === "jam_active" || payload.effect === "input_disabled") && payload.target === "you" && payload.durationMs) {
         setFrozenUntil(Date.now() + payload.durationMs);
         triggerFreezeHit("you");
+        pushCombatEvent("you", {
+          text: "JAMMED",
+          color: "#c4b5fd",
+          className: "bg-violet-950/90 text-violet-100"
+        });
+        soundManager.play("jammed", { volume: 0.18, rate: 1.0, allowOverlap: true });
       }
 
       if (payload.effect === "system_corrupt_active" && payload.target === "you") {
@@ -2227,6 +2566,12 @@ export function GameClient({
 
       if (payload.effect === "guardian_burst_release" && payload.damage && payload.damage > 0 && payload.hp) {
         const dmg = Math.max(0, Number(payload.damage) || 0);
+        pushCombatEvent(payload.by === "you" ? "opponent" : "you", {
+          text: `SHOCKWAVE -${dmg}`,
+          color: "#7dd3fc",
+          className: "bg-cyan-950/90 text-cyan-100",
+          duration: 1.25
+        });
         if (payload.by === "you" && typeof payload.hp.opponent === "number") {
           setOpponentHitType("ultimate");
           setOpponentHitIntensity(Math.min(1, 0.48 + dmg * 0.02));
@@ -2265,6 +2610,41 @@ export function GameClient({
         } else {
           setOpponentUltimateFxType(normalizedType);
           setOpponentUltimateFxKey((value) => value + 1);
+        }
+      }
+
+      if (
+        (payload.effect === "architect_manual_detonate" || payload.effect === "architect_auto_detonate") &&
+        payload.damage &&
+        payload.damage > 0 &&
+        payload.hp
+      ) {
+        const dmg = Math.max(0, Number(payload.damage) || 0);
+        pushCombatEvent(payload.by === "you" ? "opponent" : "you", {
+          text: `SYSTEM RELEASE -${dmg}`,
+          color: "#67e8f9",
+          className: "bg-cyan-950/90 text-cyan-100",
+          duration: 1.2
+        });
+        triggerArchitectBeam();
+        soundManager.play("sequenceBurst", {
+          volume: 0.22,
+          rate: payload.by === "you" ? 1.02 : 0.96,
+          allowOverlap: true
+        });
+
+        if (payload.by === "you" && typeof payload.hp.opponent === "number") {
+          setOpponentHitType("ultimate");
+          setOpponentHitIntensity(Math.min(1, 0.5 + dmg * 0.02));
+          setOpponentDamageTaken(Math.max(0, MAX_HP - payload.hp.opponent));
+          setLatestOpponentDamage(dmg);
+          setOpponentHitKey((prev) => prev + 1);
+        } else if (payload.by === "opponent" && typeof payload.hp.you === "number") {
+          setYouHitType("ultimate");
+          setYouHitIntensity(Math.min(1, 0.5 + dmg * 0.02));
+          setYouDamageTaken(Math.max(0, MAX_HP - payload.hp.you));
+          setLatestYouDamage(dmg);
+          setYouHitKey((prev) => prev + 1);
         }
       }
     };
@@ -2424,6 +2804,11 @@ export function GameClient({
 
       // Animate: flash on blocking player's panel + floating "BLOCKED" label
       triggerShieldBlock(payload.target);
+      pushCombatEvent(payload.target, {
+        text: "BLOCKED",
+        color: "#7dd3fc",
+        className: "bg-cyan-950/90 text-cyan-100"
+      });
       soundManager.play("shieldBlock");
     };
 
@@ -2441,9 +2826,14 @@ export function GameClient({
       }
 
       syncUltimateFromPayload(payload);
-      soundManager.play("hitUltimate", { volume: 0.26, rate: 1.02, allowOverlap: true });
+      soundManager.play("burnTick", { volume: 0.22, rate: 1.02, allowOverlap: true });
       const intensity = Math.min(1, 0.35 + (payload.burnStacks ?? 0) * 0.08);
       triggerBurnTickFlare(payload.target === "you" ? "you" : "opponent");
+      pushCombatEvent(payload.target, {
+        text: `BURN -${damage}`,
+        color: "#fda4af",
+        className: "bg-rose-950/90 text-rose-100"
+      });
 
       if (payload.target === "you") {
         setYouHitType("ultimate");
@@ -2579,6 +2969,9 @@ export function GameClient({
       setEmoteBarOpen(false);
       setEmoteCooldownUntil(0);
       setEmoteLabels([]);
+      setYouCombatEvents([]);
+      setOpponentCombatEvents([]);
+      setUltimateToast(null);
       seenEmoteMessageIdsRef.current.clear();
       setOpponentActivity("idle");
       if (opponentTypingTimerRef.current) {
@@ -2641,6 +3034,9 @@ export function GameClient({
         opponentTypingTimerRef.current = null;
       }
       setEmoteLabels([]);
+      setYouCombatEvents([]);
+      setOpponentCombatEvents([]);
+      setUltimateToast(null);
       seenEmoteMessageIdsRef.current.clear();
       setRematchRequested(false);
       setOpponentRematchRequested(false);
@@ -2731,9 +3127,7 @@ export function GameClient({
     };
   }, [difficulty, normalizedRoomCode, retryKey, roomJoinMode, router, topic]);
 
-  const isOpponentNeuralJamVictim =
-    normalizeUltimateType(ultimate.opponentType) === "system_corrupt" &&
-    (ultimate.opponentUltimateQuestionsLeft ?? 0) > 0;
+  const isOpponentNeuralJamVictim = ultimate.jammed;
   const isNeuralBurstLocked = neuralInputUnlockAt > Date.now();
 
   const submitAnswer = (rawValue?: string) => {
@@ -2743,7 +3137,7 @@ export function GameClient({
       return;
     }
 
-    if (isNeuralBurstLocked || isOpponentNeuralJamVictim) {
+    if (isNeuralBurstLocked || isOpponentNeuralJamVictim || titanRecoveryLocked) {
       return;
     }
 
@@ -2796,7 +3190,7 @@ export function GameClient({
       return;
     }
 
-    if (isNeuralBurstLocked || isOpponentNeuralJamVictim) {
+    if (isNeuralBurstLocked || isOpponentNeuralJamVictim || titanRecoveryLocked) {
       return;
     }
 
@@ -2903,7 +3297,11 @@ export function GameClient({
       return;
     }
 
-    if (!ultimate.ready || ultimate.used || !ultimate.implemented || youEliminated || ultimateActivating) {
+    const architectRelease =
+      ultimate.type === "perfect_sequence" &&
+      ultimate.architectUntil > Date.now();
+
+    if ((!ultimate.ready && !architectRelease) || !ultimate.implemented || youEliminated || ultimateActivating) {
       return;
     }
 
@@ -2917,16 +3315,24 @@ export function GameClient({
     }, 1400);
     soundManager.play("uiClick", { volume: 0.14, rate: 1.0 });
     const id = yourAvatarId;
-    soundManager.play(
-      id === "flash"
-        ? "ultActivateFlash"
-        : id === "guardian"
-          ? "ultActivateGuardian"
-          : id === "inferno"
-            ? "ultActivateInferno"
-            : "ultActivateShadow",
-      { volume: 0.28, rate: 1.0, allowOverlap: true }
-    );
+    if (!architectRelease) {
+      soundManager.play(
+        id === "flash"
+          ? "ultActivateFlash"
+          : id === "guardian"
+            ? "ultActivateGuardian"
+            : id === "inferno"
+              ? "ultActivateInferno"
+              : id === "architect"
+                ? "ultActivateArchitect"
+                : id === "titan"
+                  ? "ultActivateTitan"
+                  : "ultActivateShadow",
+        { volume: 0.28, rate: 1.0, allowOverlap: true }
+      );
+    } else {
+      soundManager.play("sequenceBurst", { volume: 0.22, rate: 1.0, allowOverlap: true });
+    }
     if (id === "titan") {
       triggerScreenShake(0.42);
     }
@@ -3000,19 +3406,16 @@ export function GameClient({
   const youHP = Math.max(0, MAX_HP - youDamageTaken);
   const opponentHP = Math.max(0, MAX_HP - opponentDamageTaken);
   const toDisplayHp = (value: number) => Math.max(0, Math.min(DISPLAY_MAX_HP, (value / MAX_HP) * DISPLAY_MAX_HP));
-  const toDisplayDamage = (value: number | null) => {
-    if (value === null || value <= 0) return value;
-    return Math.max(1, Math.round((value / MAX_HP) * DISPLAY_MAX_HP));
-  };
   const youDisplayHP = toDisplayHp(youHP);
   const opponentDisplayHP = toDisplayHp(opponentHP);
-  const latestYouDisplayDamage = toDisplayDamage(latestYouDamage);
-  const latestOpponentDisplayDamage = toDisplayDamage(latestOpponentDamage);
+  const latestYouRawDamage = latestYouDamage;
+  const latestOpponentRawDamage = latestOpponentDamage;
   const showHP = isActiveGameplay || isFinished;
   const emoteCoolingDown = emoteCooldownUntil > Date.now();
   const isJamActive = ultimate.blackoutUntil > Date.now();
-  const isNeuralJamSilenced = isNeuralBurstLocked || isOpponentNeuralJamVictim;
-  const inputsLocked = isJamActive || isNeuralJamSilenced;
+  const isNeuralJamSilenced = isNeuralBurstLocked || ultimate.jammed;
+  const titanRecoveryLocked = ultimate.titanRecoveryUntil > Date.now();
+  const inputsLocked = isJamActive || isNeuralJamSilenced || titanRecoveryLocked;
   /** Timeout UI: only burst + blackout — full Shadow window still allows "stay" so the strip cannot deadlock. */
   const timeoutNeuralBurstLocked = isJamActive || isNeuralBurstLocked;
   const canSkipQuestion =
@@ -3044,18 +3447,23 @@ export function GameClient({
   const isArchitectActive = ultimate.architectUntil > Date.now();
   const canUseUltimate =
     isActiveGameplay &&
-    ultimate.ready &&
-    !ultimate.used &&
     ultimate.implemented &&
     !youEliminated &&
-    !ultimateActivating;
+    !ultimateActivating &&
+    (
+      (ultimate.ready && !ultimate.used) ||
+      (ultimate.type === "perfect_sequence" && ultimate.architectUntil > Date.now())
+    );
+  const architectCanRelease =
+    ultimate.type === "perfect_sequence" &&
+    ultimate.architectUntil > Date.now();
 
   // Keep the answer input always ready in live matches.
   useEffect(() => {
     if (status !== "playing") return;
     if (eliminated.you) return;
     if (feedback.youAnsweredCurrent) return;
-    if (isNeuralBurstLocked || isOpponentNeuralJamVictim) return;
+    if (isNeuralBurstLocked || isOpponentNeuralJamVictim || titanRecoveryLocked) return;
     const t = setTimeout(() => focusAnswerInput(), 40);
     return () => clearTimeout(t);
   }, [
@@ -3065,7 +3473,8 @@ export function GameClient({
     focusPulseKey,
     neuralInputUnlockAt,
     isNeuralBurstLocked,
-    isOpponentNeuralJamVictim
+    isOpponentNeuralJamVictim,
+    titanRecoveryLocked
   ]);
 
   useEffect(() => {
@@ -3115,6 +3524,8 @@ export function GameClient({
       ? { text: "⚫ Blackout — Submits Blocked", color: "text-violet-200",  large: false }
       : isNeuralJamSilenced
       ? { text: "🟣 Neural Jam — Inputs Locked", color: "text-violet-200", large: false }
+      : titanRecoveryLocked
+      ? { text: "🗿 Recovering...", color: "text-amber-200", large: false }
       : isSystemCorruptActive
       ? {
           text: "🟣 Opponent Corrupted",
@@ -3123,14 +3534,14 @@ export function GameClient({
         }
       : isTitanOverpowerActive
       ? {
-          text: "💥 Overpower Active",
-          color: "text-amber-200",
+          text: "🗿 Colossus Mode Active",
+          color: "text-orange-200",
           large: false
         }
       : isArchitectActive
       ? {
-          text: "👑 Sequence Active",
-          color: "text-amber-200",
+          text: ultimate.architectReady ? "⚙ Perfect System Ready" : "⚙ Perfect System Active",
+          color: "text-cyan-200",
           large: false
         }
       : isRapidFireActive
@@ -3160,7 +3571,6 @@ export function GameClient({
       isOpponentGuardianShieldActive &&
         `🛡️ Opp. Reflect Bastion (${ultimate.opponentFortressBlocksRemaining} stored)`,
       !youEliminated && opponentEliminated && "Opponent Eliminated",
-      !feedback.youAnsweredCurrent && feedback.opponentAnsweredCurrent && "Opponent answered — still your turn",
     ].filter(Boolean) as string[];
     return parts.length > 0 ? parts.join("  ·  ") : null;
   })();
@@ -3336,31 +3746,35 @@ export function GameClient({
 
     if (normalizedType === "perfect_sequence") {
       const until = side === "you" ? ultimate.architectUntil : ultimate.opponentArchitectUntil;
-      const marks = side === "you" ? ultimate.architectMarks : ultimate.opponentArchitectMarks;
-      const streak = side === "you" ? ultimate.architectSequenceStreak : ultimate.opponentArchitectSequenceStreak;
+      const nodes = side === "you" ? ultimate.architectNodes : ultimate.opponentArchitectNodes;
+      const ready = side === "you" ? ultimate.architectReady : ultimate.opponentArchitectReady;
       const active = until > now;
-      const total = vfx.durationMs ?? 6000;
+      const total = vfx.durationMs ?? 10000;
       const progress = active ? Math.max(0, Math.min(1, (until - now) / total)) : 0;
       return {
-        label: active ? "👑 Sequence Active" : "Perfect Sequence",
-        sublabel: active ? `Marks x${Math.max(0, marks)} · Sequence ${Math.max(0, streak)}/2` : "Stand by",
+        label: active ? "⚙ Perfect System Active" : "Perfect System",
+        sublabel: active
+          ? `${Math.max(0, nodes)}/5 nodes${ready ? " · SYSTEM READY" : ""}`
+          : "Stand by",
         progress: active ? progress : null,
-        accent: "bg-amber-300"
+        accent: "bg-cyan-300"
       };
     }
 
     if (normalizedType === "overpower") {
       const until = side === "you" ? ultimate.titanOverpowerUntil : ultimate.opponentTitanOverpowerUntil;
-      const streak = side === "you" ? ultimate.titanStreak : ultimate.opponentTitanStreak;
-      const armed = side === "you" ? ultimate.titanBreakArmed : ultimate.opponentTitanBreakArmed;
+      const recovering = side === "you" ? ultimate.titanRecovering : ultimate.opponentTitanRecovering;
+      const reduction = side === "you" ? ultimate.titanDamageReduction : ultimate.opponentTitanDamageReduction;
       const active = until > now;
-      const total = vfx.durationMs ?? 5000;
+      const total = vfx.durationMs ?? 10000;
       const progress = active ? Math.max(0, Math.min(1, (until - now) / total)) : 0;
       return {
-        label: active ? "💥 Overpower Active" : "Overpower",
-        sublabel: active ? `Chain ${Math.max(0, streak)}/2${armed ? " · BREAK HIT ARMED" : ""}` : "Stand by",
+        label: active ? "🗿 Colossus Mode Active" : "Colossus Mode",
+        sublabel: active
+          ? `${recovering ? "Recovering · " : ""}Resist ${Math.round(Math.max(0, reduction) * 100)}% · Lifesteal`
+          : "Stand by",
         progress: active ? progress : null,
-        accent: "bg-amber-300"
+        accent: "bg-orange-300"
       };
     }
 
@@ -3398,7 +3812,7 @@ export function GameClient({
   // Dedicated in-match layout (competitive HUD + sticky action bar).
   if (isActiveGameplay) {
     return (
-      <section className="fixed inset-0 z-10 bg-black text-white">
+      <section className="fixed inset-0 z-10 text-white">
         {/* Overlays */}
         <GameOverOverlay result={null} />
         <UltimateActivationOverlay cue={ultimateCue} />
@@ -3432,6 +3846,28 @@ export function GameClient({
             <EmoteDisplay items={opponentEmoteItems} />
           </div>
         </div>
+        <AnimatePresence>
+          {ultimateToast ? (
+            <motion.div
+              key={`ultimate-toast-${ultimateToast.id}`}
+              className="pointer-events-none absolute left-1/2 top-24 z-40 -translate-x-1/2"
+              initial={{ opacity: 0, y: -8, scale: 0.94 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10, scale: 0.96 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+            >
+              <span
+                className={`inline-flex rounded-full border px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] shadow-[0_12px_30px_rgba(2,6,23,0.45)] ${
+                  ultimateToast.by === "you"
+                    ? "border-cyan-300/35 bg-slate-950/92 text-cyan-100"
+                    : "border-rose-300/35 bg-slate-950/92 text-rose-100"
+                }`}
+              >
+                {ultimateToast.text}
+              </span>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
         <div className="flex h-[100dvh] flex-col overflow-hidden">
           {/* Top HUD */}
@@ -3445,10 +3881,6 @@ export function GameClient({
                     "radial-gradient(ellipse at 28% 35%, rgba(56,189,248,0.12) 0%, transparent 56%), radial-gradient(ellipse at 72% 35%, rgba(251,113,133,0.12) 0%, transparent 56%)",
                 }}
               />
-
-              <div className="absolute right-2 top-2 z-10 sm:right-3 sm:top-3">
-                <SoundToggle muted={muted} onToggle={handleToggleSound} />
-              </div>
 
               <div className="relative grid items-stretch gap-2 md:grid-cols-[minmax(0,1fr)_8.5rem_minmax(0,1fr)] md:gap-3">
                 <MatchChampionCard
@@ -3467,35 +3899,48 @@ export function GameClient({
                     implemented: ultimate.implemented,
                     overclockUntil: ultimate.overclockUntil,
                     blackoutUntil: ultimate.blackoutUntil,
+                    titanOverpowerUntil: ultimate.titanOverpowerUntil,
                     architectUntil: ultimate.architectUntil,
                     architectMarks: ultimate.architectMarks,
                     architectSequenceStreak: ultimate.architectSequenceStreak,
+                    architectReady: ultimate.architectReady,
+                    titanRecoveryUntil: ultimate.titanRecoveryUntil,
+                    titanDamageReduction: ultimate.titanDamageReduction,
                     fortressUntil: ultimate.fortressUntil,
                     fortressBlocksRemaining: ultimate.fortressBlocksRemaining,
+                    fortressStoredDamage: ultimate.fortressStoredDamage,
                     infernoPending: ultimate.infernoPending,
                     infernoPendingUntil: ultimate.infernoPendingUntil,
                     infernoStacks: ultimate.novaBonusRemaining,
                     flashOverclockStacks: ultimate.flashOverclockStacks,
                     ultimateQuestionsLeft: ultimate.ultimateQuestionsLeft,
+                    jammed: ultimate.jammed || neuralInputUnlockAt > Date.now(),
+                    burning:
+                      ultimate.opponentInfernoPendingUntil > Date.now() &&
+                      ultimate.opponentNovaBonusRemaining > 0,
+                    combatEvents: youCombatEvents,
                     damageFloat:
-                      typeof latestYouDisplayDamage === "number" &&
-                      latestYouDisplayDamage > 0 &&
+                      typeof latestYouRawDamage === "number" &&
+                      latestYouRawDamage > 0 &&
                       youHitKey > 0
-                        ? { hitKey: youHitKey, amount: latestYouDisplayDamage, flashTier: youDamageFlashTier }
+                        ? { hitKey: youHitKey, amount: latestYouRawDamage, flashTier: youDamageFlashTier }
                         : null,
                   }}
                 />
 
                 <div className="flex min-h-[3.1rem] items-center justify-center md:min-h-full">
-                  <div className="q-card-subtle w-full rounded-2xl px-2.5 py-1.5 text-center sm:px-3 sm:py-2">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-textSecondary/70">Duel</p>
-                    <div className="mt-1 flex items-baseline justify-center gap-2">
-                      <span className="text-xl font-black tabular-nums text-sky-200 sm:text-3xl">{scores.you}</span>
-                      <span className="text-[10px] font-black uppercase tracking-[0.34em] text-textSecondary/60 sm:text-xs">VS</span>
-                      <span className="text-xl font-black tabular-nums text-rose-200 sm:text-3xl">{scores.opponent}</span>
-                    </div>
-                    <div className="mt-1 inline-flex rounded-full border border-sky-300/18 bg-sky-500/10 px-3 py-1 text-[10px] font-black tracking-[0.24em] text-sky-200 sm:mt-1.5 sm:text-xs">
-                      {timerLabel}
+                  <div className="flex w-full flex-col items-center gap-2">
+                    <SoundToggle muted={muted} onToggle={handleToggleSound} />
+                    <div className="q-card-subtle w-full rounded-2xl px-2.5 py-1.5 text-center sm:px-3 sm:py-2">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-textSecondary/70">Duel</p>
+                      <div className="mt-1 flex items-baseline justify-center gap-2">
+                        <span className="text-xl font-black tabular-nums text-sky-200 sm:text-3xl">{scores.you}</span>
+                        <span className="text-[10px] font-black uppercase tracking-[0.34em] text-textSecondary/60 sm:text-xs">VS</span>
+                        <span className="text-xl font-black tabular-nums text-rose-200 sm:text-3xl">{scores.opponent}</span>
+                      </div>
+                      <div className="mt-1 inline-flex rounded-full border border-sky-300/18 bg-sky-500/10 px-3 py-1 text-[10px] font-black tracking-[0.24em] text-sky-200 sm:mt-1.5 sm:text-xs">
+                        {timerLabel}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -3516,23 +3961,33 @@ export function GameClient({
                     implemented: ultimate.opponentImplemented,
                     overclockUntil: ultimate.opponentOverclockUntil,
                     blackoutUntil: ultimate.opponentBlackoutUntil,
+                    titanOverpowerUntil: ultimate.opponentTitanOverpowerUntil,
                     architectUntil: ultimate.opponentArchitectUntil,
                     architectMarks: ultimate.opponentArchitectMarks,
                     architectSequenceStreak: ultimate.opponentArchitectSequenceStreak,
+                    architectReady: ultimate.opponentArchitectReady,
+                    titanRecoveryUntil: ultimate.opponentTitanRecoveryUntil,
+                    titanDamageReduction: ultimate.opponentTitanDamageReduction,
                     fortressUntil: ultimate.opponentFortressUntil,
                     fortressBlocksRemaining: ultimate.opponentFortressBlocksRemaining,
+                    fortressStoredDamage: ultimate.opponentFortressStoredDamage,
                     infernoPending: ultimate.opponentInfernoPending,
                     infernoPendingUntil: ultimate.opponentInfernoPendingUntil,
                     infernoStacks: ultimate.opponentNovaBonusRemaining,
                     flashOverclockStacks: ultimate.opponentFlashOverclockStacks,
                     ultimateQuestionsLeft: ultimate.opponentUltimateQuestionsLeft,
+                    jammed: ultimate.opponentJammed,
+                    burning:
+                      ultimate.infernoPendingUntil > Date.now() &&
+                      ultimate.novaBonusRemaining > 0,
+                    combatEvents: opponentCombatEvents,
                     damageFloat:
-                      typeof latestOpponentDisplayDamage === "number" &&
-                      latestOpponentDisplayDamage > 0 &&
+                      typeof latestOpponentRawDamage === "number" &&
+                      latestOpponentRawDamage > 0 &&
                       opponentHitKey > 0
                         ? {
                             hitKey: opponentHitKey,
-                            amount: latestOpponentDisplayDamage,
+                            amount: latestOpponentRawDamage,
                             flashTier: opponentDamageFlashTier
                           }
                         : null,
@@ -3592,6 +4047,13 @@ export function GameClient({
                 />
               </div>
               <form className="flex w-full flex-col gap-2" onSubmit={handleSubmit}>
+                {isNeuralJamSilenced ? (
+                  <div className="flex items-center justify-start sm:justify-center">
+                    <span className="rounded-full border border-violet-300/35 bg-violet-500/12 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-violet-100">
+                      JAMMED
+                    </span>
+                  </div>
+                ) : null}
                 <WorkingScratchpad answerInputLocked={inputsLocked} />
                 {Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0 ? (
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -3721,6 +4183,9 @@ export function GameClient({
                       disabled={!canUseUltimate}
                       onActivate={handleActivateUltimate}
                       activationBurstKey={youUltimateActivationKey}
+                      activeWindow={architectCanRelease}
+                      actionLabel={architectCanRelease ? "Release System" : undefined}
+                      statusOverride={architectCanRelease ? (ultimate.architectReady ? "SYSTEM READY" : "ACTIVE") : undefined}
                       size="compact"
                       className="h-11"
                     />
@@ -3737,6 +4202,9 @@ export function GameClient({
                       disabled={!canUseUltimate}
                       onActivate={handleActivateUltimate}
                       activationBurstKey={youUltimateActivationKey}
+                      activeWindow={architectCanRelease}
+                      actionLabel={architectCanRelease ? "Release System" : undefined}
+                      statusOverride={architectCanRelease ? (ultimate.architectReady ? "SYSTEM READY" : "ACTIVE") : undefined}
                       size="regular"
                     />
                   </div>
@@ -3810,7 +4278,9 @@ export function GameClient({
         )}
       </AnimatePresence>
 
-      <SoundToggle muted={muted} onToggle={handleToggleSound} />
+      <div className="flex justify-end">
+        <SoundToggle muted={muted} onToggle={handleToggleSound} />
+      </div>
 
       <div className="relative z-10 flex flex-col gap-4 sm:gap-5 lg:gap-6">
         <div className="space-y-2.5 sm:space-y-3">
@@ -3993,7 +4463,7 @@ export function GameClient({
                 hp={showHP ? youDisplayHP : undefined}
                 maxHp={DISPLAY_MAX_HP}
                 hitKey={youHitKey}
-                latestDamage={latestYouDisplayDamage}
+                latestDamage={latestYouRawDamage}
                 hitType={youHitType}
                 hitIntensity={youHitIntensity}
                 damageFlashTier={youDamageFlashTier}
@@ -4074,6 +4544,9 @@ export function GameClient({
                   disabled={!canUseUltimate}
                   onActivate={handleActivateUltimate}
                   activationBurstKey={youUltimateActivationKey}
+                  activeWindow={architectCanRelease}
+                  actionLabel={architectCanRelease ? "Release System" : undefined}
+                  statusOverride={architectCanRelease ? (ultimate.architectReady ? "SYSTEM READY" : "ACTIVE") : undefined}
                 />
               </div>
               <FloatingLabel items={youFloatingItems} />
@@ -4119,7 +4592,7 @@ export function GameClient({
                 hp={showHP ? opponentDisplayHP : undefined}
                 maxHp={DISPLAY_MAX_HP}
                 hitKey={opponentHitKey}
-                latestDamage={latestOpponentDisplayDamage}
+                latestDamage={latestOpponentRawDamage}
                 hitType={opponentHitType}
                 hitIntensity={opponentHitIntensity}
                 damageFlashTier={opponentDamageFlashTier}

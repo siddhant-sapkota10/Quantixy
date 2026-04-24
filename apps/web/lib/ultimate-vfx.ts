@@ -67,7 +67,7 @@ export const ULTIMATE_VFX: Record<UltimateType, UltimateVfxConfig> = {
   },
   perfect_sequence: {
     avatarName: "Architect",
-    ultimateName: "Perfect Sequence",
+    ultimateName: "Perfect System",
     icon: "\uD83D\uDCD0",
     accent: "#FBBF24",
     glow: "rgba(251, 191, 36, 0.46)",
@@ -86,7 +86,7 @@ export const ULTIMATE_VFX: Record<UltimateType, UltimateVfxConfig> = {
   },
   overpower: {
     avatarName: "Titan",
-    ultimateName: "Overpower",
+    ultimateName: "Colossus Mode",
     icon: "\uD83E\uDEA8",
     accent: "#F59E0B",
     glow: "rgba(245, 158, 11, 0.48)",

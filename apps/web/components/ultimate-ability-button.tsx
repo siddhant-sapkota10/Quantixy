@@ -16,6 +16,9 @@ type UltimateAbilityButtonProps = {
   activationBurstKey?: number;
   size?: "compact" | "regular";
   className?: string;
+  activeWindow?: boolean;
+  actionLabel?: string;
+  statusOverride?: string;
 };
 
 export function UltimateAbilityButton({
@@ -30,15 +33,18 @@ export function UltimateAbilityButton({
   onActivate,
   activationBurstKey = 0,
   size = "regular",
-  className
+  className,
+  activeWindow = false,
+  actionLabel,
+  statusOverride
 }: UltimateAbilityButtonProps) {
   const normalizedType = normalizeUltimateType(type);
   const config = ULTIMATE_VFX[normalizedType];
   const pct = Math.max(0, Math.min(100, Math.round(charge)));
-  const canActivate = ready && !used && implemented && !activating && !disabled;
+  const canActivate = ((ready && !used) || activeWindow) && implemented && !activating && !disabled;
   const isCharging = !used && implemented && !ready;
 
-  const stateLabel = used
+  const stateLabel = statusOverride ?? (used
     ? "USED"
     : !implemented
       ? "COMING SOON"
@@ -46,13 +52,17 @@ export function UltimateAbilityButton({
         ? "ACTIVATING"
         : ready
           ? "READY"
-          : "CHARGING";
+          : activeWindow
+            ? "ACTIVE"
+            : "CHARGING");
   const subLabel = used
     ? "Ultimate spent"
     : !implemented
       ? "Not available yet"
+      : activeWindow
+        ? actionLabel ?? "Tap to trigger"
       : ready
-        ? "Tap to unleash"
+        ? actionLabel ?? "Tap to unleash"
         : `${pct}% charged`;
 
   const isCompact = size === "compact";
