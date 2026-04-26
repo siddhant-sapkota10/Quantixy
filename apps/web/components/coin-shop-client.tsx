@@ -319,9 +319,14 @@ export function CoinShopClient() {
                   <p className="mt-1 text-3xl font-black tabular-nums text-white">{loading ? "..." : walletCoins}</p>
                   <p className="mt-1 text-xs text-amber-100/70">Earn more from matches and daily rewards.</p>
                 </div>
-                <Button variant="secondary" className="h-full" onClick={() => router.push("/loadout")}>
-                  Go to Loadout
-                </Button>
+                <div className="grid gap-2">
+                  <Button className="h-12" onClick={() => router.push("/shop/coins")}>
+                    Buy coins
+                  </Button>
+                  <Button variant="secondary" className="h-12" onClick={() => router.push("/loadout")}>
+                    Go to Loadout
+                  </Button>
+                </div>
               </div>
             </div>
           </div>

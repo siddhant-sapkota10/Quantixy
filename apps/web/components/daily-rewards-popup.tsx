@@ -65,6 +65,28 @@ export function DailyRewardsPopup() {
   const [claimResult, setClaimResult] = useState<ClaimResponse["reward"] | null>(null);
 
   const hiddenOnRoute = pathname?.startsWith("/game") || pathname?.startsWith("/auth/callback");
+  const dismissKey = useMemo(() => {
+    const today = status?.today;
+    return today ? `qx:daily-rewards:dismissed:${today}` : null;
+  }, [status?.today]);
+
+  const wasDismissedForToday = () => {
+    if (typeof window === "undefined" || !dismissKey) return false;
+    try {
+      return window.localStorage.getItem(dismissKey) === "1";
+    } catch {
+      return false;
+    }
+  };
+
+  const dismissForToday = () => {
+    if (typeof window === "undefined" || !dismissKey) return;
+    try {
+      window.localStorage.setItem(dismissKey, "1");
+    } catch {
+      // ignore
+    }
+  };
 
   useEffect(() => {
     if (loading || !session?.access_token || !user || hiddenOnRoute) {
@@ -90,7 +112,10 @@ export function DailyRewardsPopup() {
         const data = (await response.json()) as DailyRewardStatus;
         if (cancelled) return;
         setStatus(data);
-        setOpen(!data.claimedToday);
+        // Don't nag on every page load. Only auto-open when a reward is actually claimable,
+        // and the user hasn't dismissed it for today.
+        const shouldAutoOpen = Boolean(!data.claimedToday && data.canClaim && !wasDismissedForToday());
+        setOpen(shouldAutoOpen);
       } catch {
         // Non-critical; rewards should never block login or navigation.
       }
@@ -101,7 +126,7 @@ export function DailyRewardsPopup() {
     return () => {
       cancelled = true;
     };
-  }, [hiddenOnRoute, loading, session?.access_token, user]);
+  }, [hiddenOnRoute, loading, session?.access_token, user, dismissKey]);
 
   useEffect(() => {
     const openRewards = () => {
@@ -188,7 +213,10 @@ export function DailyRewardsPopup() {
           >
             <button
               type="button"
-              onClick={() => setOpen(false)}
+              onClick={() => {
+                dismissForToday();
+                setOpen(false);
+              }}
               className="absolute right-4 top-4 z-20 rounded-full border border-white/15 bg-slate-900 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-slate-200 transition hover:bg-slate-800"
             >
               Later

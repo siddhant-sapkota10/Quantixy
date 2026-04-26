@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getStripe, getStripePriceIdForAvatar, getStripePriceIdForPack } from "@/lib/stripe";
+import { getStripe, getStripePriceIdForAvatar, getStripePriceIdForCoinPack, getStripePriceIdForPack, STRIPE_COIN_PACKS } from "@/lib/stripe";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getURL } from "@/lib/site-url";
 
@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 type Body = {
   pack?: string;
   packId?: string;
-  itemType?: "emote_pack" | "avatar";
+  itemType?: "emote_pack" | "avatar" | "coins";
   itemId?: string;
 };
 
@@ -38,11 +38,16 @@ export async function POST(request: Request) {
 
     const isEmotePack = itemType === "emote_pack";
     const isAvatar = itemType === "avatar";
-    if (!isEmotePack && !isAvatar) {
+    const isCoins = itemType === "coins";
+    if (!isEmotePack && !isAvatar && !isCoins) {
       return NextResponse.json({ error: "Invalid purchase." }, { status: 400 });
     }
 
-    const priceId = isEmotePack ? getStripePriceIdForPack(itemId) : getStripePriceIdForAvatar(itemId);
+    const priceId = isEmotePack
+      ? getStripePriceIdForPack(itemId)
+      : isAvatar
+        ? getStripePriceIdForAvatar(itemId)
+        : getStripePriceIdForCoinPack(itemId);
     if (!priceId) {
       return NextResponse.json({ error: "Invalid purchase item." }, { status: 400 });
     }
@@ -61,7 +66,7 @@ export async function POST(request: Request) {
       if (existing) {
         return NextResponse.json({ error: "Pack already owned." }, { status: 409 });
       }
-    } else {
+    } else if (isAvatar) {
       if (itemId !== "architect" && itemId !== "titan") {
         return NextResponse.json({ error: "Invalid avatar." }, { status: 400 });
       }
@@ -73,6 +78,10 @@ export async function POST(request: Request) {
         .maybeSingle();
       if (existing) {
         return NextResponse.json({ error: "Avatar already owned." }, { status: 409 });
+      }
+    } else if (isCoins) {
+      if (!Object.prototype.hasOwnProperty.call(STRIPE_COIN_PACKS, itemId)) {
+        return NextResponse.json({ error: "Invalid coin pack." }, { status: 400 });
       }
     }
 
@@ -87,13 +96,18 @@ export async function POST(request: Request) {
     if (isEmotePack) {
       metadata.pack_id = itemId;
     }
+    if (isCoins) {
+      metadata.coins_amount = String(STRIPE_COIN_PACKS[itemId as keyof typeof STRIPE_COIN_PACKS].coins);
+    }
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       line_items: [{ price: priceId, quantity: 1 }],
       allow_promotion_codes: true,
-      success_url: getURL(`/profile?purchase=success&session_id={CHECKOUT_SESSION_ID}`),
-      cancel_url: getURL("/profile?purchase=cancel"),
+      success_url: isCoins
+        ? getURL(`/shop/coins/success?session_id={CHECKOUT_SESSION_ID}`)
+        : getURL(`/profile?purchase=success&session_id={CHECKOUT_SESSION_ID}`),
+      cancel_url: isCoins ? getURL("/shop/coins/cancel") : getURL("/profile?purchase=cancel"),
       metadata,
     });
 

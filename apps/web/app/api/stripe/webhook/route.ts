@@ -223,6 +223,31 @@ export async function POST(request: Request) {
             { status: 500 }
           );
         }
+      } else if (itemType === "coins") {
+        const coinsAmount = Number(session.metadata?.coins_amount ?? "");
+        if (!Number.isFinite(coinsAmount) || coinsAmount <= 0) {
+          return NextResponse.json({ error: "Invalid coins_amount metadata" }, { status: 400 });
+        }
+
+        // Ensure wallet row exists, then credit coins (best-effort; idempotency depends on session id).
+        // NOTE: We do not currently store a unique purchase row for coins, so this is not strictly idempotent
+        // if Stripe retries the same completed session. If you want hard idempotency, add a `stripe_coin_purchases`
+        // table keyed by session.id and enforce uniqueness in SQL.
+        await supabaseAdmin.from("player_wallets").upsert({ user_id: userId } as never, { onConflict: "user_id" });
+        const { data: walletRow } = await supabaseAdmin
+          .from("player_wallets")
+          .select("coins")
+          .eq("user_id", userId)
+          .maybeSingle();
+        const currentCoins = Number((walletRow as any)?.coins ?? 0);
+        const nextCoins = Math.max(0, currentCoins + Math.floor(coinsAmount));
+        const { error: walletError } = await supabaseAdmin
+          .from("player_wallets")
+          .update({ coins: nextCoins } as never)
+          .eq("user_id", userId);
+        if (walletError) {
+          return NextResponse.json({ error: "Failed to credit coins." }, { status: 500 });
+        }
       } else {
         return NextResponse.json({ error: "Invalid item_type" }, { status: 400 });
       }

@@ -15,7 +15,8 @@ export function DashboardShell({ children, className }: { children: ReactNode; c
   return (
     <div
       className={cn(
-        "relative isolate flex min-h-[100dvh] min-h-screen w-full max-w-[100vw] min-w-0 flex-col overflow-x-hidden",
+        /* overflow-x-hidden forces overflow-y to compute to auto (extra scroll surface); clip avoids that */
+        "relative isolate flex min-h-[100dvh] min-h-screen w-full max-w-[100vw] min-w-0 flex-col overflow-x-clip overflow-y-visible",
         className
       )}
     >
@@ -85,7 +86,7 @@ export function DashboardShell({ children, className }: { children: ReactNode; c
         </div>
       </header>
 
-      <main className="qx-dashboard-main mx-auto w-full min-w-0 flex-1">{children}</main>
+      <main className="qx-dashboard-main mx-auto w-full min-w-0 overflow-visible">{children}</main>
 
       <DashboardMobileNav pathname={pathname} />
     </div>

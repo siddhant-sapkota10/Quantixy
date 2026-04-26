@@ -14,6 +14,26 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
+async function creditCoins(opts: { supabaseAdmin: ReturnType<typeof getSupabaseAdmin>; userId: string; coins: number }) {
+  const coins = Math.floor(opts.coins);
+  if (!Number.isFinite(coins) || coins <= 0) return { ok: false as const, error: "Invalid coin amount." };
+  await opts.supabaseAdmin.from("player_wallets").upsert({ user_id: opts.userId } as never, { onConflict: "user_id" });
+  const { data: walletRow, error: walletReadError } = await opts.supabaseAdmin
+    .from("player_wallets")
+    .select("coins")
+    .eq("user_id", opts.userId)
+    .maybeSingle();
+  if (walletReadError) return { ok: false as const, error: "Unable to read wallet." };
+  const currentCoins = Number((walletRow as any)?.coins ?? 0);
+  const nextCoins = Math.max(0, currentCoins + coins);
+  const { error: walletWriteError } = await opts.supabaseAdmin
+    .from("player_wallets")
+    .update({ coins: nextCoins } as never)
+    .eq("user_id", opts.userId);
+  if (walletWriteError) return { ok: false as const, error: "Unable to credit coins." };
+  return { ok: true as const, coins: nextCoins };
+}
+
 export async function POST(request: Request) {
   try {
     const auth = request.headers.get("authorization") ?? "";
@@ -102,6 +122,20 @@ export async function POST(request: Request) {
         status: "confirmed",
         itemType,
         itemId,
+      });
+    }
+
+    if (itemType === "coins") {
+      const coinsAmount = Number(session.metadata?.coins_amount ?? "");
+      const credited = await creditCoins({ supabaseAdmin, userId, coins: coinsAmount });
+      if (!credited.ok) {
+        return NextResponse.json({ error: credited.error }, { status: 500 });
+      }
+      return NextResponse.json({
+        status: "confirmed",
+        itemType,
+        itemId,
+        wallet: { coins: credited.coins },
       });
     }
 

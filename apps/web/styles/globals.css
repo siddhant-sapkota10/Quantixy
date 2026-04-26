@@ -59,7 +59,7 @@
 
 html {
   scroll-behavior: smooth;
-  overflow-x: hidden;
+  overflow-x: clip;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
@@ -67,7 +67,8 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  overflow-x: hidden;
+  min-height: 100dvh;
+  overflow-x: clip;
   background: radial-gradient(ellipse 120% 80% at 50% -20%, rgba(34, 211, 238, 0.06), transparent 45%),
     linear-gradient(180deg, var(--qx-page-1) 0%, var(--qx-page-0) 55%, #000 100%);
   color: var(--q-text);
@@ -345,11 +346,20 @@ select {
   }
 
   .q-match-lock {
-    height: 100svh;
     height: 100dvh;
+    max-height: 100dvh;
     overscroll-behavior: none;
     touch-action: manipulation;
-    -webkit-overflow-scrolling: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* One vertical scroll surface inside fixed game shells (prevents nested wheel / trapped content). */
+  .qx-match-scroll {
+    -webkit-overflow-scrolling: touch;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
   }
 
   .q-match-lock input,

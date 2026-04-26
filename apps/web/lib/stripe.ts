@@ -27,6 +27,27 @@ export const STRIPE_PRODUCTS = {
 
 export type PaidPackId = keyof typeof STRIPE_PRODUCTS;
 
+export const STRIPE_COIN_PACKS = {
+  coins_500: {
+    coins: 500,
+    priceEnv: "STRIPE_PRICE_ID_COINS_500",
+  },
+  coins_1200: {
+    coins: 1200,
+    priceEnv: "STRIPE_PRICE_ID_COINS_1200",
+  },
+  coins_2500: {
+    coins: 2500,
+    priceEnv: "STRIPE_PRICE_ID_COINS_2500",
+  },
+  coins_6000: {
+    coins: 6000,
+    priceEnv: "STRIPE_PRICE_ID_COINS_6000",
+  },
+} as const;
+
+export type StripeCoinPackId = keyof typeof STRIPE_COIN_PACKS;
+
 export function getStripePriceIdForPack(packId: string) {
   if (packId === "tilt") {
     const id = process.env.STRIPE_PRICE_ID_TILT_PACK;
@@ -53,5 +74,14 @@ export function getStripePriceIdForAvatar(avatarId: string) {
     return id;
   }
   return null;
+}
+
+export function getStripePriceIdForCoinPack(packId: string) {
+  const key = packId as StripeCoinPackId;
+  const envName = STRIPE_COIN_PACKS[key]?.priceEnv;
+  if (!envName) return null;
+  const id = process.env[envName];
+  if (!id) throw new Error(`Missing ${envName}.`);
+  return id;
 }
 

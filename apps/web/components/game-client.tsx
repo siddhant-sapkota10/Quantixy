@@ -719,16 +719,13 @@ export function GameClient({
     if (!shouldLock) {
       html.style.overflow = "";
       body.style.overflow = "";
-      body.style.height = "";
       return;
     }
     html.style.overflow = "hidden";
     body.style.overflow = "hidden";
-    body.style.height = "100%";
     return () => {
       html.style.overflow = "";
       body.style.overflow = "";
-      body.style.height = "";
     };
   }, [status]);
 
@@ -4035,7 +4032,7 @@ export function GameClient({
 
         <div
           className={cn(
-            "flex h-[100dvh] min-h-[100dvh] flex-col overflow-hidden overscroll-none"
+            "flex h-[100dvh] min-h-[100dvh] flex-col overflow-hidden overscroll-y-contain"
           )}
         >
           {/* Top HUD */}
@@ -4184,7 +4181,7 @@ export function GameClient({
           {/* Middle: Question zone */}
           <div
             className={cn(
-              "flex min-h-0 flex-1 flex-col items-stretch justify-start px-3 py-3 sm:px-5 sm:py-4 md:justify-center md:py-10",
+              "qx-match-scroll flex min-h-0 flex-1 flex-col items-stretch justify-start px-3 py-3 sm:px-5 sm:py-4 md:justify-center md:py-10",
               compactGameplay && "py-2.5 sm:py-3 md:py-4"
             )}
           >
@@ -4260,7 +4257,9 @@ export function GameClient({
                     </span>
                   </div>
                 ) : null}
-                <WorkingScratchpad answerInputLocked={inputsLocked} />
+                <div className="hidden sm:block">
+                  <WorkingScratchpad answerInputLocked={inputsLocked} />
+                </div>
                 {Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0 ? (
                   <div className={cn("grid grid-cols-1 gap-2 sm:grid-cols-2", compactGameplay && "sm:grid-cols-1")}>
                     {currentQuestionData.options.map((option, idx) => (
@@ -4269,8 +4268,8 @@ export function GameClient({
                         type="button"
                         variant="secondary"
                         className={cn(
-                          "relative min-h-[2.75rem] w-full justify-start text-left text-sm",
-                          compactGameplay && "min-h-[2.6rem]"
+                          "relative min-h-[48px] w-full justify-start py-3 text-left text-sm sm:min-h-[2.75rem] sm:py-2",
+                          compactGameplay && "min-h-[44px] py-2.5 sm:min-h-[2.6rem]"
                         )}
                         disabled={inputsLocked || youEliminated || feedback.youAnsweredCurrent}
                         onClick={() => handleOptionSubmit(option)}
@@ -4313,12 +4312,15 @@ export function GameClient({
                       spellCheck={false}
                       enterKeyHint="go"
                       className={cn(
-                        "neon-input h-12 min-w-0 flex-1 rounded-2xl px-4 text-base disabled:cursor-not-allowed disabled:opacity-60",
-                        compactGameplay && "h-11"
+                        "neon-input min-h-[48px] min-w-0 flex-1 rounded-2xl px-4 py-3 text-base disabled:cursor-not-allowed disabled:opacity-60 sm:h-12 sm:py-2",
+                        compactGameplay && "min-h-[44px] py-2.5 sm:h-11 sm:py-2"
                       )}
                     />
                     <Button
-                      className={cn("h-12 w-[7.5rem] shrink-0", compactGameplay && "h-11 w-full")}
+                      className={cn(
+                        "min-h-[48px] w-[7.5rem] shrink-0 sm:h-12",
+                        compactGameplay && "min-h-[44px] w-full sm:h-11"
+                      )}
                       type="submit"
                       disabled={!answer.trim() || inputsLocked || youEliminated || feedback.youAnsweredCurrent}
                     >

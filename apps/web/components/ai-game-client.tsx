@@ -1004,7 +1004,11 @@ export function AiGameClient({
           </span>
         </div>
       ) : null}
-      {!compactDuelUi ? <WorkingScratchpad answerInputLocked={inputsLocked} /> : null}
+      {!compactDuelUi ? (
+        <div className="hidden sm:block">
+          <WorkingScratchpad answerInputLocked={inputsLocked} />
+        </div>
+      ) : null}
       {hasMultipleChoiceOptions ? (
         <div className={cn("grid grid-cols-1 gap-2 sm:grid-cols-2", compactDuelUi && "gap-1.5 sm:grid-cols-1")}>
           {questionOptions.map((option, idx) => (
@@ -1013,8 +1017,8 @@ export function AiGameClient({
               type="button"
               variant="secondary"
               className={cn(
-                "relative min-h-[2.75rem] w-full justify-start text-left text-sm",
-                compactDuelUi && "min-h-[2.35rem] px-3 py-2 text-sm"
+                "relative min-h-[48px] w-full justify-start py-3 text-left text-sm sm:min-h-[2.75rem] sm:py-2",
+                compactDuelUi && "min-h-[44px] px-3 py-2.5 text-sm sm:min-h-[2.35rem] sm:py-2"
               )}
               disabled={inputsLocked || youEliminated}
               onClick={() => handleOptionSubmit(option)}
@@ -1047,13 +1051,17 @@ export function AiGameClient({
             spellCheck={false}
             enterKeyHint="go"
             className={cn(
-              "neon-input h-12 min-w-0 flex-1 rounded-2xl px-4 text-base disabled:cursor-not-allowed disabled:opacity-60",
-              compactDuelUi && "h-11",
-              compactTextEntryUi && "h-10 rounded-xl"
+              "neon-input min-h-[48px] min-w-0 flex-1 rounded-2xl px-4 py-3 text-base disabled:cursor-not-allowed disabled:opacity-60 sm:h-12 sm:py-2",
+              compactDuelUi && "min-h-[44px] py-2.5 sm:h-11 sm:py-2",
+              compactTextEntryUi && "min-h-[44px] rounded-xl py-2.5 sm:h-10 sm:py-2"
             )}
           />
           <Button
-            className={cn("h-12 w-[7.5rem] shrink-0", compactDuelUi && "h-11 w-full", compactTextEntryUi && "h-10")}
+            className={cn(
+              "min-h-[48px] w-[7.5rem] shrink-0 sm:h-12",
+              compactDuelUi && "min-h-[44px] w-full sm:h-11",
+              compactTextEntryUi && "min-h-[44px] sm:h-10"
+            )}
             type="submit"
             disabled={!answer.trim() || inputsLocked || youEliminated}
           >
@@ -1061,8 +1069,6 @@ export function AiGameClient({
           </Button>
         </div>
       ) : null}
-
-      {compactDuelUi ? <WorkingScratchpad answerInputLocked={inputsLocked} /> : null}
 
       <div className="sm:hidden">
         <UltimateAbilityButton
@@ -1218,7 +1224,7 @@ export function AiGameClient({
 
         <div
           className={cn(
-            "flex h-[100dvh] min-h-[100dvh] flex-col overflow-hidden overscroll-none"
+            "flex h-[100dvh] min-h-[100dvh] flex-col overflow-hidden overscroll-y-contain"
           )}
         >
           <div
@@ -1333,7 +1339,7 @@ export function AiGameClient({
 
           <div
             className={cn(
-              "flex min-h-0 flex-1 flex-col items-stretch justify-start px-3 py-3 sm:px-5 sm:py-4 md:justify-center md:py-10",
+              "qx-match-scroll flex min-h-0 flex-1 flex-col items-stretch justify-start px-3 py-3 sm:px-5 sm:py-4 md:justify-center md:py-10",
               compactDuelUi && "py-2.5 sm:py-3 md:py-4",
               compactTextEntryUi && "justify-center py-2"
             )}
@@ -1695,7 +1701,9 @@ export function AiGameClient({
                     </Button>
                   </div>
                 ) : null}
-                <WorkingScratchpad answerInputLocked={isPlayerInputLocked} />
+                <div className="hidden sm:block">
+                  <WorkingScratchpad answerInputLocked={isPlayerInputLocked} />
+                </div>
                 <label className="block space-y-2">
                   <span className="text-sm font-medium uppercase tracking-[0.2em] text-textSecondary">
                     Your Answer

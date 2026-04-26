@@ -45,9 +45,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full overflow-x-hidden">
+    <html lang="en" className="min-h-full overflow-x-clip">
       <body
-        className={`${inter.className} min-h-[100dvh] min-h-screen touch-manipulation antialiased`}
+        className={`${inter.className} min-h-[100dvh] min-h-screen overflow-x-clip touch-manipulation antialiased`}
       >
         <GlobalBackground />
         <div
