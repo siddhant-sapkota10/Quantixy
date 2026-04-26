@@ -11,7 +11,7 @@ export const TOPICS = [
 
 export type Topic = (typeof TOPICS)[number];
 
-export const DIFFICULTIES = ["easy", "medium", "hard"] as const;
+export const DIFFICULTIES = ["tiny", "easy", "medium", "hard"] as const;
 
 export type Difficulty = (typeof DIFFICULTIES)[number];
 

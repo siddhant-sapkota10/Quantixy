@@ -2,10 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { motion } from "framer-motion";
 import { Button } from "@/components/button";
-import { DEFAULT_AVATAR_ID, getAvatar, normalizeAvatarId, type AvatarId } from "@/lib/avatars";
 import {
   createPlayerProfileForUser,
   getGuestUsername,
@@ -24,9 +22,12 @@ import {
   validateDisplayName
 } from "@/lib/auth";
 import { getSupabaseClient } from "@/lib/supabase";
-import { getRankFromRating } from "@/lib/ranks";
-import { RankBadge } from "@/components/rank-badge";
 import { PageContent } from "@/components/page-content";
+import type { CoinShopStatus } from "@/lib/coin-shop";
+import { LobbyGuestHero } from "@/components/home/lobby-hero-section";
+import { HomeLobbyDashboard } from "@/components/home/home-lobby-dashboard";
+import type { HomeQuickLinkId } from "@/components/home/home-quick-links";
+import type { DailyLobbySnapshot } from "@/components/home/lobby-utils";
 
 type AuthMode = "login" | "signup";
 type HomeIdentityRow = {
@@ -36,9 +37,10 @@ type HomeIdentityRow = {
   avatar: string | null;
 };
 
-function getAvatarCardSrc(id: AvatarId) {
-  return `/assets/avatarCards/${id}.png`;
-}
+type WalletRow = {
+  coins: number | null;
+  xp: number | null;
+};
 
 function DisplayNameOnboardingModal({
   open,
@@ -611,11 +613,16 @@ function AuthModal({
 
 export function HomeHero() {
   const router = useRouter();
-  const { user, loading } = useSupabaseAuth();
+  const { user, session, loading } = useSupabaseAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [guestBusy, setGuestBusy] = useState(false);
-  const [routeBusy, setRouteBusy] = useState<"play" | "ai" | "profile" | "leaderboard" | null>(null);
+  const [routeBusy, setRouteBusy] = useState<
+    "play" | "ai" | "shop" | "loadout" | "profile" | "leaderboard" | null
+  >(null);
+  const [lobbyDaily, setLobbyDaily] = useState<DailyLobbySnapshot | null>(null);
+  const [lobbyShop, setLobbyShop] = useState<CoinShopStatus | null>(null);
+  const [lobbyLoading, setLobbyLoading] = useState(false);
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [guestError, setGuestError] = useState<string | null>(null);
   const [identityNonce, setIdentityNonce] = useState(0);
@@ -627,6 +634,8 @@ export function HomeHero() {
     displayName: string;
     avatarId: string | null;
     highestRating?: number;
+    coins?: number;
+    xp?: number;
   } | null>(null);
   const isGuest = isAnonymousUser(user);
   const suggestedGuestName = user ? getGuestUsername(user.id) : "";
@@ -681,6 +690,8 @@ export function HomeHero() {
 
         if (mounted && row) {
           let highestRating: number | undefined;
+          let coins: number | undefined;
+          let xp: number | undefined;
           try {
             const { data: ratingRow } = await supabase
               .from("ratings")
@@ -694,10 +705,25 @@ export function HomeHero() {
             // Non-critical — rank just won't show on home screen
           }
 
+          try {
+            const { data: walletRow } = await supabase
+              .from("player_wallets")
+              .select("coins, xp")
+              .eq("user_id", user.id)
+              .maybeSingle();
+            const wallet = walletRow as WalletRow | null;
+            coins = wallet?.coins ?? 0;
+            xp = wallet?.xp ?? 0;
+          } catch {
+            // Non-critical: rewards migration may not be applied yet.
+          }
+
           setAccountIdentity({
             displayName: row.display_name ?? row.username ?? "Player",
             avatarId: row.avatar ?? null,
             highestRating,
+            coins,
+            xp,
           });
 
           const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
@@ -728,6 +754,78 @@ export function HomeHero() {
       mounted = false;
     };
   }, [user, identityNonce]);
+
+  useEffect(() => {
+    if (!user || !session?.access_token) {
+      setLobbyDaily(null);
+      setLobbyShop(null);
+      setLobbyLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const token = session.access_token;
+
+    async function loadLobby() {
+      setLobbyLoading(true);
+      try {
+        const [dailyRes, shopRes] = await Promise.all([
+          fetch("/api/daily-rewards/status", {
+            method: "POST",
+            headers: { authorization: `Bearer ${token}` },
+          }),
+          fetch("/api/coin-shop/status", {
+            headers: { authorization: `Bearer ${token}` },
+          }),
+        ]);
+
+        if (cancelled) return;
+
+        if (dailyRes.ok) {
+          const d = (await dailyRes.json()) as {
+            hasCompletedMatchToday: boolean;
+            claimedToday: boolean;
+            canClaim: boolean;
+            currentStreak: number;
+          };
+          setLobbyDaily({
+            hasCompletedMatchToday: d.hasCompletedMatchToday,
+            claimedToday: d.claimedToday,
+            canClaim: d.canClaim,
+            currentStreak: d.currentStreak ?? 0,
+          });
+        } else {
+          setLobbyDaily(null);
+        }
+
+        if (shopRes.ok) {
+          const s = (await shopRes.json()) as CoinShopStatus & { error?: string };
+          if (!("error" in s && s.error)) {
+            setLobbyShop(s);
+          } else {
+            setLobbyShop(null);
+          }
+        } else {
+          setLobbyShop(null);
+        }
+      } catch {
+        if (!cancelled) {
+          setLobbyDaily(null);
+          setLobbyShop(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLobbyLoading(false);
+        }
+      }
+    }
+
+    void loadLobby();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, session?.access_token]);
 
   const handleOnboardingSave = async () => {
     if (!user || isAnonymousUser(user)) return;
@@ -801,6 +899,12 @@ export function HomeHero() {
     router.push("/play?mode=ai");
   };
 
+  const openDailyRewards = () => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("quantixy:open-daily-rewards"));
+    }
+  };
+
   const handleGuestContinue = async () => {
     try {
       setGuestBusy(true);
@@ -834,6 +938,21 @@ export function HomeHero() {
     }
   };
 
+  const handleQuickLink = (id: HomeQuickLinkId) => {
+    if (id === "upgrade") {
+      openAuthModal("signup");
+      return;
+    }
+    setRouteBusy(id);
+    const paths: Record<Exclude<HomeQuickLinkId, "upgrade">, string> = {
+      shop: "/shop",
+      loadout: "/loadout",
+      profile: "/profile",
+      leaderboard: "/leaderboard",
+    };
+    router.push(paths[id]);
+  };
+
   return (
     <>
       <DisplayNameOnboardingModal
@@ -848,338 +967,115 @@ export function HomeHero() {
         onSave={handleOnboardingSave}
         onLogout={() => void handleLogout()}
       />
-      <PageContent size="lg" className="w-full min-w-0">
+      <PageContent size="wide" variant="plain" className="w-full min-w-0">
         <motion.section
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, ease: "easeOut" }}
-          className="w-full"
+          className="w-full space-y-6 sm:space-y-8"
         >
-        <div className="space-y-3 text-center sm:space-y-4">
-          <span className="inline-flex rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-sky-200">
-            Multiplayer Math Arena
-          </span>
-          <h1 className="text-3xl font-black tracking-tight text-white sm:text-5xl md:text-5xl">
-           Quantixy
-          </h1>
-          <p className="text-base text-slate-300 sm:text-lg md:text-xl">Real-time multiplayer math</p>
-        </div>
-
-        <div className="mt-8 space-y-5 sm:mt-10">
           {loading ? (
-            <div className="flex justify-center py-8">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-sky-400/30 border-t-sky-400" />
+            <div className="q-card-subtle flex min-h-[16rem] items-center justify-center rounded-3xl">
+              <div className="h-10 w-10 animate-spin rounded-full border-2 border-sky-400/35 border-t-sky-400" />
             </div>
           ) : !user ? (
-            // No session — identity first
-            <div className="space-y-2.5">
-              {/* Hero guest CTA */}
-              <motion.button
-                onClick={handleGuestContinue}
-                disabled={guestBusy}
-                whileHover={guestBusy ? undefined : { scale: 1.01, y: -1 }}
-                whileTap={guestBusy ? undefined : { scale: 0.99 }}
-                transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                className="group w-full rounded-2xl border border-sky-500/30 bg-gradient-to-br from-sky-500/15 via-sky-500/5 to-transparent p-5 text-left transition-colors hover:border-sky-400/50 hover:from-sky-500/20 disabled:cursor-not-allowed disabled:opacity-55"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-sky-400/30 bg-sky-400/10 text-sky-300">
-                    <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-                    </svg>
+            <div className="space-y-6">
+              <LobbyGuestHero />
+              <div className="space-y-2.5">
+                <motion.button
+                  onClick={handleGuestContinue}
+                  disabled={guestBusy}
+                  whileHover={guestBusy ? undefined : { scale: 1.01, y: -1 }}
+                  whileTap={guestBusy ? undefined : { scale: 0.99 }}
+                  transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
+                  className="group w-full rounded-2xl border border-sky-500/30 bg-gradient-to-br from-sky-500/15 via-sky-500/5 to-transparent p-5 text-left transition-colors hover:border-sky-400/50 hover:from-sky-500/20 disabled:cursor-not-allowed disabled:opacity-55"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-sky-400/30 bg-sky-400/10 text-sky-300">
+                      <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-lg font-black text-white">Continue as Guest</p>
+                      <p className="text-sm text-slate-400">Jump in instantly — no account needed</p>
+                    </div>
+                    {guestBusy ? (
+                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-sky-400/30 border-t-sky-400" />
+                    ) : (
+                      <svg className="h-5 w-5 shrink-0 text-sky-400 opacity-50 transition-opacity group-hover:opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 18l6-6-6-6" />
+                      </svg>
+                    )}
                   </div>
-                  <div className="flex-1">
-                    <p className="text-lg font-black text-white">Continue as Guest</p>
-                    <p className="text-sm text-slate-400">Jump in instantly — no account needed</p>
-                  </div>
-                  {guestBusy ? (
-                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-sky-400/30 border-t-sky-400" />
-                  ) : (
-                    <svg className="h-5 w-5 shrink-0 text-sky-400 opacity-50 transition-opacity group-hover:opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M9 18l6-6-6-6" />
-                    </svg>
-                  )}
+                </motion.button>
+                <div className="grid gap-2.5 sm:grid-cols-2">
+                  <motion.button
+                    onClick={() => openAuthModal("signup")}
+                    whileHover={{ scale: 1.01, y: -1 }}
+                    whileTap={{ scale: 0.99 }}
+                    transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
+                    className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-slate-900/45 p-4 text-left transition-colors hover:border-white/[0.15] hover:bg-slate-900/65"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-slate-900/70 text-slate-300">
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM19 8v6M22 11h-6" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">Create Account</p>
+                      <p className="text-xs text-slate-500">Save progress across devices</p>
+                    </div>
+                  </motion.button>
+                  <motion.button
+                    onClick={() => openAuthModal("login")}
+                    whileHover={{ scale: 1.01, y: -1 }}
+                    whileTap={{ scale: 0.99 }}
+                    transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
+                    className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-slate-900/45 p-4 text-left transition-colors hover:border-white/[0.15] hover:bg-slate-900/65"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-slate-900/70 text-slate-300">
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">Log In</p>
+                      <p className="text-xs text-slate-500">Resume your account</p>
+                    </div>
+                  </motion.button>
                 </div>
-              </motion.button>
-
-              <div className="grid gap-2.5 sm:grid-cols-2">
-                <motion.button
-                  onClick={() => openAuthModal("signup")}
-                  whileHover={{ scale: 1.01, y: -1 }}
-                  whileTap={{ scale: 0.99 }}
-                  transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                  className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-slate-900/45 p-4 text-left transition-colors hover:border-white/[0.15] hover:bg-slate-900/65"
-                >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-slate-900/70 text-slate-300">
-                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM19 8v6M22 11h-6" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-white">Create Account</p>
-                    <p className="text-xs text-slate-500">Save progress across devices</p>
-                  </div>
-                </motion.button>
-
-                <motion.button
-                  onClick={() => openAuthModal("login")}
-                  whileHover={{ scale: 1.01, y: -1 }}
-                  whileTap={{ scale: 0.99 }}
-                  transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                  className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-slate-900/45 p-4 text-left transition-colors hover:border-white/[0.15] hover:bg-slate-900/65"
-                >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-slate-900/70 text-slate-300">
-                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-white">Log In</p>
-                    <p className="text-xs text-slate-500">Resume your account</p>
-                  </div>
-                </motion.button>
+                {guestError ? <p className="text-sm text-rose-300">{guestError}</p> : null}
               </div>
-
-              {guestError ? <p className="text-sm text-rose-300">{guestError}</p> : null}
             </div>
           ) : (
-            // Has session — premium lobby
-            <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr] lg:items-start">
-              {/* Left: PLAY */}
-              <div className="space-y-5">
-                <div className="space-y-2.5">
-                  <p className="text-left text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-500">Play</p>
-
-                  {/* Play Online — hero CTA */}
-                  <motion.button
-                    onClick={handlePlayNow}
-                    disabled={Boolean(routeBusy)}
-                    whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
-                    whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
-                    transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                    className="group w-full rounded-2xl border border-sky-500/30 bg-gradient-to-br from-sky-500/15 via-sky-500/5 to-transparent p-5 text-left transition-colors hover:border-sky-400/50 hover:from-sky-500/20 disabled:cursor-not-allowed disabled:opacity-55 sm:p-6"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-sky-400/30 bg-sky-400/10 text-sky-300">
-                        <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-                        </svg>
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-lg font-black text-white sm:text-xl">Play Online</p>
-                        <p className="text-sm text-slate-400">Compete against real players in live duels</p>
-                      </div>
-                      {routeBusy === "play" ? (
-                        <div className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-sky-400/30 border-t-sky-400" />
-                      ) : (
-                        <svg className="h-5 w-5 shrink-0 text-sky-400 opacity-50 transition-opacity group-hover:opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M9 18l6-6-6-6" />
-                        </svg>
-                      )}
-                    </div>
-                  </motion.button>
-
-                  {/* Practice vs AI */}
-                  <motion.button
-                    onClick={handlePlayVsAi}
-                    disabled={Boolean(routeBusy)}
-                    whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
-                    whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
-                    transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                    className="group w-full rounded-2xl border border-white/[0.07] bg-slate-900/40 p-4 text-left transition-colors hover:border-white/[0.13] hover:bg-slate-900/60 disabled:cursor-not-allowed disabled:opacity-55 sm:p-5"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-slate-900/70 text-slate-300">
-                        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                          <rect x="3" y="11" width="18" height="10" rx="2" />
-                          <path d="M9 11V7a3 3 0 016 0v4M12 15v2M8 15v.01M16 15v.01" />
-                        </svg>
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-base font-bold text-white">Practice vs AI</p>
-                        <p className="text-sm text-slate-500">Sharpen your skills offline</p>
-                      </div>
-                      {routeBusy === "ai" ? (
-                        <div className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-slate-500/30 border-t-slate-400" />
-                      ) : (
-                        <svg className="h-4 w-4 shrink-0 text-slate-500 opacity-60 transition-opacity group-hover:opacity-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M9 18l6-6-6-6" />
-                        </svg>
-                      )}
-                    </div>
-                  </motion.button>
-                </div>
-              </div>
-
-              {/* Right: IDENTITY + ACCOUNT */}
-              <div className="space-y-5">
-                <div className="space-y-2.5">
-                  <p className="text-left text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-500">You</p>
-                  <div className="flex items-center gap-3 rounded-2xl px-4 py-3">
-                    <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-sky-400/20 bg-slate-950/80">
-                      <Image
-                        src={getAvatarCardSrc(normalizeAvatarId(accountIdentity?.avatarId ?? DEFAULT_AVATAR_ID))}
-                        alt="Equipped avatar"
-                        fill
-                        sizes="44px"
-                        className="object-cover"
-                        priority={false}
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="truncate text-sm font-semibold text-white">
-                          {accountIdentity?.displayName ?? (isGuest ? suggestedGuestName : "Player")}
-                        </p>
-                        {!isGuest && accountIdentity?.highestRating !== undefined ? (
-                          <RankBadge rating={accountIdentity.highestRating} size="sm" />
-                        ) : null}
-                      </div>
-                      <p className="text-xs text-slate-500">
-                        {isGuest
-                          ? "Guest · progress not saved"
-                          : accountIdentity?.highestRating !== undefined
-                            ? `Rating ${accountIdentity.highestRating}`
-                            : "Loading profile…"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2.5">
-                  <p className="text-left text-[10px] font-semibold uppercase tracking-[0.25em] text-slate-500">Account</p>
-
-                  {isGuest ? (
-                    <>
-                      <div className="rounded-2xl px-4 py-3 text-sm text-amber-200">
-                        Playing as a guest — progress won&apos;t be saved across sessions.
-                      </div>
-                      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-1">
-                        <motion.button
-                          onClick={() => openAuthModal("signup")}
-                          whileHover={{ scale: 1.01, y: -1 }}
-                          whileTap={{ scale: 0.99 }}
-                          transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                          className="group flex flex-col gap-3 rounded-2xl border border-white/[0.07] bg-slate-900/40 p-4 text-left transition-colors hover:border-white/[0.13] hover:bg-slate-900/60"
-                        >
-                          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-slate-900/65 text-slate-300 transition-colors group-hover:border-sky-500/35 group-hover:bg-sky-500/10 group-hover:text-sky-300">
-                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM19 8v6M22 11h-6" />
-                            </svg>
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-white">Upgrade Account</p>
-                            <p className="text-xs text-slate-500">Save stats &amp; earn ranks</p>
-                          </div>
-                        </motion.button>
-
-                        <motion.button
-                          onClick={() => { setRouteBusy("leaderboard"); router.push("/leaderboard"); }}
-                          disabled={Boolean(routeBusy)}
-                          whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
-                          whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
-                          transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                          className="group flex flex-col gap-3 rounded-2xl border border-white/[0.07] bg-slate-900/40 p-4 text-left transition-colors hover:border-white/[0.13] hover:bg-slate-900/60 disabled:opacity-55"
-                        >
-                          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-slate-900/65 text-slate-300 transition-colors group-hover:border-yellow-500/35 group-hover:bg-yellow-500/10 group-hover:text-yellow-300">
-                            {routeBusy === "leaderboard" ? (
-                              <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-500/30 border-t-slate-400" />
-                            ) : (
-                              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M6 9H4.5a2.5 2.5 0 010-5H6M18 9h1.5a2.5 2.5 0 000-5H18M6 9v8a6 6 0 0012 0V9M6 9H18" />
-                              </svg>
-                            )}
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-white">Leaderboard</p>
-                            <p className="text-xs text-slate-500">See the top players</p>
-                          </div>
-                        </motion.button>
-                      </div>
-
-                      <button
-                        onClick={() => openAuthModal("login")}
-                        className="w-full py-1.5 text-xs font-medium uppercase tracking-[0.2em] text-slate-500 transition-colors hover:text-slate-300"
-                      >
-                        Already have an account? Log In
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-1">
-                        <motion.button
-                          onClick={() => { setRouteBusy("profile"); router.push("/profile"); }}
-                          disabled={Boolean(routeBusy)}
-                          whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
-                          whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
-                          transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                          className="group flex flex-col gap-3 rounded-2xl border border-white/[0.07] bg-slate-900/40 p-4 text-left transition-colors hover:border-white/[0.13] hover:bg-slate-900/60 disabled:opacity-55"
-                        >
-                          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-slate-900/65 text-slate-300 transition-colors group-hover:border-sky-500/35 group-hover:bg-sky-500/10 group-hover:text-sky-300">
-                            {routeBusy === "profile" ? (
-                              <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-500/30 border-t-slate-400" />
-                            ) : (
-                              <span className="relative h-7 w-7 overflow-hidden rounded-lg border border-white/10 bg-slate-950/60">
-                                <Image
-                                  src={getAvatarCardSrc(normalizeAvatarId(accountIdentity?.avatarId ?? DEFAULT_AVATAR_ID))}
-                                  alt="Equipped avatar"
-                                  fill
-                                  sizes="28px"
-                                  className="object-cover"
-                                  priority={false}
-                                />
-                              </span>
-                            )}
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-white">Profile</p>
-                            <p className="text-xs text-slate-500">Stats &amp; match history</p>
-                          </div>
-                        </motion.button>
-
-                        <motion.button
-                          onClick={() => { setRouteBusy("leaderboard"); router.push("/leaderboard"); }}
-                          disabled={Boolean(routeBusy)}
-                          whileHover={Boolean(routeBusy) ? undefined : { scale: 1.01, y: -1 }}
-                          whileTap={Boolean(routeBusy) ? undefined : { scale: 0.99 }}
-                          transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                          className="group flex flex-col gap-3 rounded-2xl border border-white/[0.07] bg-slate-900/40 p-4 text-left transition-colors hover:border-white/[0.13] hover:bg-slate-900/60 disabled:opacity-55"
-                        >
-                          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-slate-900/65 text-slate-300 transition-colors group-hover:border-yellow-500/35 group-hover:bg-yellow-500/10 group-hover:text-yellow-300">
-                            {routeBusy === "leaderboard" ? (
-                              <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-500/30 border-t-slate-400" />
-                            ) : (
-                              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M6 9H4.5a2.5 2.5 0 010-5H6M18 9h1.5a2.5 2.5 0 000-5H18M6 9v8a6 6 0 0012 0V9M6 9H18" />
-                              </svg>
-                            )}
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-white">Leaderboard</p>
-                            <p className="text-xs text-slate-500">See the top players</p>
-                          </div>
-                        </motion.button>
-                      </div>
-
-                      <button
-                        onClick={() => void handleLogout()}
-                        disabled={logoutBusy}
-                        className="group relative w-full overflow-hidden rounded-2xl border border-rose-400/25 bg-gradient-to-r from-rose-500/20 via-rose-500/10 to-transparent px-4 py-3 text-left text-xs font-black uppercase tracking-[0.24em] text-rose-100 shadow-[0_18px_50px_rgba(244,63,94,0.18)] transition-colors hover:border-rose-400/40 hover:from-rose-500/26 disabled:cursor-not-allowed disabled:opacity-55"
-                      >
-                        <span className="relative flex items-center justify-between gap-3">
-                          <span>{logoutBusy ? "Logging out…" : "Log Out"}</span>
-                          <span className="rounded-full border border-rose-200/15 bg-rose-950/30 px-2.5 py-1 text-[10px] font-bold tracking-[0.22em] text-rose-100/90">
-                            Exit
-                          </span>
-                        </span>
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
+            <HomeLobbyDashboard
+              user={user}
+              accountIdentity={accountIdentity}
+              isGuest={isGuest}
+              suggestedGuestName={suggestedGuestName}
+              lobbyDaily={lobbyDaily}
+              lobbyShop={lobbyShop}
+              lobbyLoading={lobbyLoading}
+              routeBusy={routeBusy}
+              logoutBusy={logoutBusy}
+              onPlayOnline={handlePlayNow}
+              onPracticeAi={handlePlayVsAi}
+              onOpenDailyRewards={openDailyRewards}
+              onQuickLink={handleQuickLink}
+              onLogout={() => void handleLogout()}
+              onNavigateShop={() => {
+                setRouteBusy("shop");
+                router.push("/shop");
+              }}
+              onNavigateLoadout={() => {
+                setRouteBusy("loadout");
+                router.push("/loadout");
+              }}
+              onOpenLogin={() => openAuthModal("login")}
+              getUserDisplayName={getUserDisplayName}
+            />
           )}
-        </div>
         </motion.section>
       </PageContent>
 

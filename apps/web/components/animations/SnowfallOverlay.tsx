@@ -13,7 +13,9 @@ const SNOWFLAKES = [
   { left: "88%", delay: 0.16, size: "text-lg" }
 ];
 
-export function SnowfallOverlay({ active }: { active: boolean }) {
+export function SnowfallOverlay({ active, reduced = false }: { active: boolean; reduced?: boolean }) {
+  const flakes = reduced ? SNOWFLAKES.slice(0, 3) : SNOWFLAKES;
+
   return (
     <AnimatePresence>
       {active && (
@@ -25,7 +27,7 @@ export function SnowfallOverlay({ active }: { active: boolean }) {
           exit={{ opacity: 0 }}
           transition={{ duration: 1.6, ease: "easeOut" }}
         >
-          {SNOWFLAKES.map((flake, index) => (
+          {flakes.map((flake, index) => (
             <motion.span
               key={`${flake.left}-${index}`}
               className={`absolute top-0 ${flake.size} text-sky-100/90`}
@@ -33,12 +35,12 @@ export function SnowfallOverlay({ active }: { active: boolean }) {
               initial={{ opacity: 0, y: -14, scale: 0.8 }}
               animate={{
                 opacity: [0, 1, 0.85, 0],
-                y: [0, 42, 92, 128],
-                x: [0, -4, 5, -3],
-                scale: [0.8, 1, 0.95, 0.88]
+                y: reduced ? [0, 36, 72] : [0, 42, 92, 128],
+                x: reduced ? [0, 2, 0] : [0, -4, 5, -3],
+                scale: reduced ? [0.85, 1, 0.9] : [0.8, 1, 0.95, 0.88]
               }}
               transition={{
-                duration: 1.45,
+                duration: reduced ? 0.9 : 1.45,
                 delay: flake.delay,
                 ease: "easeOut"
               }}

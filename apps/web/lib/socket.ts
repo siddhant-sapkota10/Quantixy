@@ -147,6 +147,13 @@ export type ServerToClientEvents = {
     opponentAvatar?: string;
     yourAvatarData?: ServerAvatarPayload;
     opponentAvatarData?: ServerAvatarPayload;
+    yourStreakEffect?: string;
+    opponentStreakEffect?: string;
+    yourEmotePack?: string;
+    yourHitEffect?: string;
+    opponentHitEffect?: string;
+    yourAvatarSkin?: string;
+    opponentAvatarSkin?: string;
     ratings?: {
       you: number;
       opponent: number;
@@ -435,8 +442,10 @@ export const createGameSocket = (): GameSocket => {
     transports: ["websocket", "polling"],
     autoConnect: true,
     reconnectionAttempts: 10,
-    reconnectionDelay: 1000,
-    reconnectionDelayMax: 5000,
-    timeout: 20000
+    reconnectionDelay: 650,
+    reconnectionDelayMax: 3500,
+    randomizationFactor: 0.45,
+    timeout: 15000,
+    forceNew: true
   });
 };

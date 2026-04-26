@@ -15,8 +15,8 @@ const config: Config = {
         accent: "#38c7e8",
         accentSoft: "#7dd8ee",
         accentPurple: "#7c5cff",
-        textPrimary: "#eef5ff",
-        textSecondary: "#9aa9bf"
+        textPrimary: "rgba(255, 255, 255, 0.98)",
+        textSecondary: "rgba(203, 213, 225, 0.72)"
       },
       boxShadow: {
         glow: "0 0 0 1px rgba(118,145,210,0.18), 0 20px 58px rgba(4,8,20,0.56), 0 0 22px rgba(56,199,232,0.12)",

@@ -23,6 +23,7 @@ const {
   getLeaderboard,
   getProfileSummary,
   getPlayerCosmetics,
+  markDailyMatchCompleted,
   saveMatch,
   updateRatingsAfterMatch,
   normalizeStreakEffectId,
@@ -2023,7 +2024,9 @@ async function finishGame(roomId, options = {}) {
         winnerPlayerId: winner?.playerId ?? null,
         player1RatingChange: playerOneDelta,
         player2RatingChange: playerTwoDelta
-      })
+      }),
+      markDailyMatchCompleted(playerOne.authUserId),
+      markDailyMatchCompleted(playerTwo.authUserId)
     ]);
   } catch (error) {
     console.error("[server] failed to persist match result", error);
@@ -2555,12 +2558,15 @@ async function resolveSocketPlayer(socket, topic, accessToken) {
   return {
     socketId: socket.id,
     playerId: player.id,
+    authUserId: authUser.id,
     name: player.display_name ?? player.username,
     rating: rating.rating,
     avatar: normalizeAvatarId(player.avatar),
     // Cosmetics — visual only, no gameplay effect
     streakEffect: cosmetics.streakEffect,
-    emotePack: cosmetics.emotePack
+    emotePack: cosmetics.emotePack,
+    hitEffect: cosmetics.hitEffect,
+    avatarSkin: cosmetics.avatarSkin
   };
 }
 
@@ -2684,6 +2690,10 @@ function createActiveGame(players, topic, difficulty, customRoomCode = null) {
     yourStreakEffect: players[0].streakEffect,
     opponentStreakEffect: players[1].streakEffect,
     yourEmotePack: players[0].emotePack,
+    yourHitEffect: players[0].hitEffect,
+    opponentHitEffect: players[1].hitEffect,
+    yourAvatarSkin: players[0].avatarSkin,
+    opponentAvatarSkin: players[1].avatarSkin,
     ...buildPlayerPowerState(game, players[0].socketId)
   });
 
@@ -2704,6 +2714,10 @@ function createActiveGame(players, topic, difficulty, customRoomCode = null) {
     yourStreakEffect: players[1].streakEffect,
     opponentStreakEffect: players[0].streakEffect,
     yourEmotePack: players[1].emotePack,
+    yourHitEffect: players[1].hitEffect,
+    opponentHitEffect: players[0].hitEffect,
+    yourAvatarSkin: players[1].avatarSkin,
+    opponentAvatarSkin: players[0].avatarSkin,
     ...buildPlayerPowerState(game, players[1].socketId)
   });
 

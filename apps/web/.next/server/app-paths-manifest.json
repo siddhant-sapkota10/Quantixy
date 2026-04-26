@@ -1,7 +1,8 @@
 {
-  "/_not-found/page": "app/_not-found/page.js",
+  "/api/coin-shop/status/route": "app/api/coin-shop/status/route.js",
   "/page": "app/page.js",
-  "/profile/page": "app/profile/page.js",
-  "/game/page": "app/game/page.js",
-  "/leaderboard/page": "app/leaderboard/page.js"
+  "/api/daily-rewards/status/route": "app/api/daily-rewards/status/route.js",
+  "/play/page": "app/play/page.js",
+  "/loadout/page": "app/loadout/page.js",
+  "/game/page": "app/game/page.js"
 }

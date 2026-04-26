@@ -22,6 +22,12 @@ const TOPIC_ALLOWED_FORMATS = {
 };
 
 const FORMAT_WEIGHTS_BY_DIFFICULTY = {
+  tiny: {
+    [QUESTION_FORMATS.MULTIPLE_CHOICE]: 1,
+    [QUESTION_FORMATS.TRUE_FALSE]: 1,
+    [QUESTION_FORMATS.RANK_ORDER]: 1,
+    [QUESTION_FORMATS.FILL_IN]: 1,
+  },
   // Kept intentionally close so the selector can rotate near-evenly.
   easy: {
     [QUESTION_FORMATS.MULTIPLE_CHOICE]: 1,
@@ -88,6 +94,7 @@ const FORMAT_VALIDATION = {
   fillInMaxAnswerLength: 14,
   fillInPromptMaxLength: 110,
   fillInMaxCognitiveStepsByDifficulty: {
+    tiny: 1,
     easy: 1,
     medium: 2,
     hard: 3,

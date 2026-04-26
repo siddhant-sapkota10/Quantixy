@@ -16,11 +16,12 @@ export type AiProfile = {
   accuracy: number;
 };
 
-export const AI_DIFFICULTIES = ["easy", "medium", "hard"] as const;
+export const AI_DIFFICULTIES = ["tiny", "easy", "medium", "hard"] as const;
 
 export type AiDifficulty = (typeof AI_DIFFICULTIES)[number];
 
 const AI_PROFILES: Record<AiDifficulty, AiProfile> = {
+  tiny: { minMs: 7800, maxMs: 18000, accuracy: 0.28 },
   easy: { minMs: 5200, maxMs: 12000, accuracy: 0.52 },
   medium: { minMs: 2600, maxMs: 6200, accuracy: 0.72 },
   hard: { minMs: 950, maxMs: 2600, accuracy: 0.9 },

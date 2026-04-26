@@ -167,7 +167,7 @@ export type DuelQuestion = {
   };
   unit?: string | null;
   gameplayDifficulty?: {
-    level: "easy" | "medium" | "hard" | string;
+    level: "tiny" | "easy" | "medium" | "hard" | string;
     rubric?: {
       readingLoad?: string;
       expectedSeconds?: [number, number];

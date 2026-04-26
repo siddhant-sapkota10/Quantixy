@@ -37,6 +37,7 @@ export type SoundName =
 
 const STORAGE_KEY = "mathbattle-muted";
 const USE_SOUND_FILES = process.env.NEXT_PUBLIC_USE_SOUND_FILES === "true";
+const PRELOAD_SOUND_NAMES: SoundName[] = ["correct", "wrong", "tick", "go", "win", "lose", "streak", "fast"];
 
 const SOUND_FILES: Record<SoundName, string> = {
   correct: "/sounds/correct.mp3",
@@ -104,6 +105,7 @@ const FALLBACK_TONES: Record<SoundName, { frequency: number; duration: number; t
 
 class SoundManager {
   private sounds = new Map<SoundName, HTMLAudioElement>();
+  private unavailableSounds = new Set<SoundName>();
   private muted = false;
   private initialized = false;
   private audioContext: AudioContext | null = null;
@@ -126,9 +128,10 @@ class SoundManager {
       return;
     }
 
-    for (const [name, path] of Object.entries(SOUND_FILES) as Array<[SoundName, string]>) {
+    for (const name of PRELOAD_SOUND_NAMES) {
+      const path = SOUND_FILES[name];
       const audio = new Audio(path);
-      audio.preload = "auto";
+      audio.preload = "metadata";
       // Attempt to warm the cache; safe no-op if blocked.
       try {
         audio.load();
@@ -138,11 +141,12 @@ class SoundManager {
       audio.addEventListener(
         "error",
         () => {
-          this.sounds.delete(name as SoundName);
+          this.sounds.delete(name);
+          this.unavailableSounds.add(name);
         },
         { once: true }
       );
-      this.sounds.set(name as SoundName, audio);
+      this.sounds.set(name, audio);
     }
   }
 
@@ -216,6 +220,11 @@ class SoundManager {
       return;
     }
 
+    if (this.unavailableSounds.has(name)) {
+      this.playFallback(name, options);
+      return;
+    }
+
     const source = this.sounds.get(name);
 
     if (!source) {
@@ -223,12 +232,18 @@ class SoundManager {
       return;
     }
 
-    const audio = source.cloneNode(true) as HTMLAudioElement;
+    const audio = source;
+    try {
+      audio.currentTime = 0;
+    } catch {
+      // Some mobile browsers reject seeking before metadata is ready.
+    }
     audio.volume = Math.max(0, Math.min(1, options.volume ?? 0.35));
     if (typeof options.rate === "number") {
       audio.playbackRate = Math.max(0.6, Math.min(1.6, options.rate));
     }
     void audio.play().catch(() => {
+      this.unavailableSounds.add(name);
       this.playFallback(name, options);
     });
   }

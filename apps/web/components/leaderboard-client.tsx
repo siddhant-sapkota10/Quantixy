@@ -123,7 +123,7 @@ export function LeaderboardClient() {
   const showMyRankCard = Boolean(myRank && !visiblePlayerIds.has(myRank.playerId));
 
   return (
-    <PageContent size="lg" className="w-full min-w-0">
+    <PageContent size="wide" variant="plain" className="w-full min-w-0 space-y-6">
       <div className="flex min-w-0 flex-col gap-4 sm:gap-6 md:gap-8">
         <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-end md:justify-between md:gap-6">
           <div className="min-w-0 flex-1 space-y-3">
@@ -131,11 +131,13 @@ export function LeaderboardClient() {
               Competitive Rankings
             </span>
             <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl md:text-5xl">Leaderboard</h1>
-            <p className="text-textSecondary">Live standings for named accounts. Guest practice accounts are hidden.</p>
+            <p className="max-w-xl text-base leading-relaxed text-textSecondary">
+              Live standings for named accounts. Guest practice accounts are hidden.
+            </p>
           </div>
 
           <div className="w-full min-w-0 max-w-full space-y-2 md:max-w-xs">
-            <span className="text-sm font-medium uppercase tracking-[0.2em] text-textSecondary">Filter Topic</span>
+            <span className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-200/85">Filter Topic</span>
             <Dropdown
               aria-label="Filter leaderboard by topic"
               value={selectedTopic}
@@ -145,8 +147,8 @@ export function LeaderboardClient() {
           </div>
         </div>
 
-        <div className="neon-panel-soft rounded-3xl">
-          <div className="hidden grid-cols-[68px_1fr_96px_1fr] gap-4 border-b border-white/[0.06] px-6 py-4 text-xs font-semibold uppercase tracking-[0.25em] text-textSecondary/65 sm:grid">
+        <div className="neon-panel-soft overflow-hidden rounded-3xl">
+          <div className="hidden grid-cols-[68px_1fr_96px_1fr] gap-4 border-b border-white/10 bg-slate-950/55 px-6 py-4 text-xs font-bold uppercase tracking-[0.25em] text-slate-200/90 sm:grid">
             <span>#</span>
             <span>Player</span>
             <span>Rating</span>
@@ -154,30 +156,30 @@ export function LeaderboardClient() {
           </div>
 
           {loading ? (
-            <div className="px-4 py-8 text-center text-slate-300 sm:px-6">Loading leaderboard...</div>
+            <div className="px-4 py-8 text-center text-slate-200/90 sm:px-6">Loading leaderboard...</div>
           ) : error ? (
-            <div className="px-4 py-8 text-center text-rose-300 sm:px-6">{error}</div>
+            <div className="px-4 py-8 text-center text-rose-200 sm:px-6">{error}</div>
           ) : entries.length === 0 ? (
-            <div className="px-4 py-8 text-center text-slate-300 sm:px-6">No ratings yet. Play a few matches first.</div>
+            <div className="px-4 py-8 text-center text-slate-200/88 sm:px-6">No ratings yet. Play a few matches first.</div>
           ) : (
             <div>
               {entries.map((entry, index) => {
                 const isTopThree = index < 3;
                 const isCurrentUser = myRank?.playerId === entry.playerId;
                 const rowTint = isCurrentUser
-                  ? "bg-cyan-400/[0.06]"
+                  ? "bg-cyan-400/[0.12] ring-1 ring-inset ring-cyan-300/20"
                   : isTopThree
-                    ? "bg-indigo-400/[0.055]"
-                    : "";
+                    ? "bg-indigo-500/[0.08]"
+                    : "bg-slate-950/35";
 
                 return (
-                  <div key={entry.playerId} className={`border-b border-white/[0.045] last:border-b-0 ${rowTint}`}>
+                  <div key={entry.playerId} className={`border-b border-white/10 last:border-b-0 ${rowTint}`}>
                     <div className="q-row-hover flex items-start gap-3 px-4 py-4 sm:hidden">
-                      <div className="flex w-12 shrink-0 flex-col items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03] px-2 py-2">
-                        <span className={`text-lg font-black tabular-nums ${isTopThree ? "text-cyan-200" : "text-slate-400"}`}>
+                      <div className="flex w-12 shrink-0 flex-col items-center justify-center rounded-2xl border border-white/10 bg-slate-900/70 px-2 py-2">
+                        <span className={`text-lg font-black tabular-nums ${isTopThree ? "text-cyan-100" : "text-slate-200/90"}`}>
                           {entry.rank}
                         </span>
-                        <span className="mt-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">Rank</span>
+                        <span className="mt-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-400/85">Rank</span>
                       </div>
 
                         <div className="min-w-0 flex-1">
@@ -205,19 +207,19 @@ export function LeaderboardClient() {
 
                         <div className="mt-3 flex items-center justify-between gap-3 text-sm">
                           <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Rating</p>
-                            <p className="mt-1 font-bold tabular-nums text-slate-100">{entry.rating}</p>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400/85">Rating</p>
+                            <p className="mt-1 font-bold tabular-nums text-white">{entry.rating}</p>
                           </div>
                           <div className="text-right">
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Topic</p>
-                            <p className="mt-1 text-slate-300">{formatTopicLabel(entry.topic as Topic)}</p>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400/85">Topic</p>
+                            <p className="mt-1 font-medium text-slate-200/90">{formatTopicLabel(entry.topic as Topic)}</p>
                           </div>
                         </div>
                       </div>
                     </div>
 
                     <div className="hidden grid-cols-[68px_1fr_96px_1fr] items-center gap-4 px-6 py-4 text-sm sm:grid">
-                      <span className={`text-sm font-bold tabular-nums ${isTopThree ? "text-cyan-200" : "text-slate-500"}`}>
+                      <span className={`text-sm font-bold tabular-nums ${isTopThree ? "text-cyan-100" : "text-slate-300"}`}>
                         {entry.rank}
                       </span>
 
@@ -243,8 +245,8 @@ export function LeaderboardClient() {
                         </span>
                       </span>
 
-                      <span className="font-bold tabular-nums text-slate-100">{entry.rating}</span>
-                      <span className="text-slate-400">{formatTopicLabel(entry.topic as Topic)}</span>
+                      <span className="font-bold tabular-nums text-white">{entry.rating}</span>
+                      <span className="font-medium text-slate-200/90">{formatTopicLabel(entry.topic as Topic)}</span>
                     </div>
                   </div>
                 );
@@ -254,8 +256,8 @@ export function LeaderboardClient() {
         </div>
 
         {showMyRankCard && myRank ? (
-          <div className="rounded-2xl px-4 py-4 sm:px-5">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-cyan-200">Your Standing</p>
+          <div className="rounded-2xl border border-cyan-300/30 bg-cyan-400/[0.1] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:px-5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-cyan-100">Your Standing</p>
             <div className="mt-2 flex items-center gap-3">
               <span className="text-2xl font-black tabular-nums text-cyan-100">#{myRank.rank}</span>
               <ProfileIconBadge icon={myRank} fallbackName={myRank.name} size="sm" />

@@ -41,6 +41,10 @@ type ProfileResponse = {
   profileIconImageUrl?: string | null;
   ownedEmotePacks?: string[];
   ownedAvatars?: string[];
+  wallet?: {
+    coins: number;
+    xp: number;
+  };
   summary: {
     totalMatches: number;
     wins: number;
@@ -115,6 +119,11 @@ type OpponentQueryRow = {
   display_name: string | null;
 };
 
+type WalletQueryRow = {
+  coins: number | null;
+  xp: number | null;
+};
+
 function deriveResultFromScores(yourScore: number, opponentScore: number): "win" | "loss" | "draw" {
   if (yourScore > opponentScore) return "win";
   if (yourScore < opponentScore) return "loss";
@@ -152,6 +161,7 @@ async function loadProfileFromSupabase(authUserId: string): Promise<ProfileRespo
   let profileIconText = sanitizeProfileIconText(player.display_name ?? player.username, player.display_name ?? player.username);
   let profileIconImageUrl: string | null = null;
   let ownedEmotePacks: string[] = ["starter"];
+  let wallet = { coins: 0, xp: 0 };
   const { data: cosmeticData, error: cosmeticError } = await supabase
     .from("players")
     .select("streak_effect, emote_pack")
@@ -197,6 +207,23 @@ async function loadProfileFromSupabase(authUserId: string): Promise<ProfileRespo
     }
   } catch {
     // If table/migration not applied yet, fall back to starter-only.
+  }
+
+  try {
+    const { data: walletRow, error: walletError } = await supabase
+      .from("player_wallets")
+      .select("coins, xp")
+      .eq("user_id", authUserId)
+      .maybeSingle();
+    if (!walletError && walletRow) {
+      const row = walletRow as WalletQueryRow;
+      wallet = {
+        coins: row.coins ?? 0,
+        xp: row.xp ?? 0,
+      };
+    }
+  } catch {
+    // If migration not applied yet, show a zero wallet.
   }
 
   // Owned avatars (premium) are sourced from user_avatars (auth user id, lowercase avatar_id).
@@ -303,6 +330,7 @@ async function loadProfileFromSupabase(authUserId: string): Promise<ProfileRespo
     emotePack,
     ownedEmotePacks,
     ownedAvatars,
+    wallet,
     summary: {
       totalMatches: matchRows.length,
       wins,
@@ -340,8 +368,8 @@ async function loadProfileFromSupabase(authUserId: string): Promise<ProfileRespo
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="q-card rounded-2xl px-4 py-4">
-      <p className="text-xs uppercase tracking-[0.25em] text-slate-400/70">{label}</p>
-      <p className="mt-3 text-2xl font-black text-white">{value}</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-300/85">{label}</p>
+      <p className="mt-3 text-2xl font-black tabular-nums text-white">{value}</p>
     </div>
   );
 }
@@ -498,6 +526,7 @@ export function ProfileClient() {
             Array.isArray(nextData.ownedAvatars) && nextData.ownedAvatars.length > 0
               ? nextData.ownedAvatars
               : (fallbackData.ownedAvatars ?? []),
+          wallet: nextData.wallet ?? fallbackData.wallet,
         });
       } catch (fetchError) {
         if (controller.signal.aborted) {
@@ -1026,7 +1055,7 @@ export function ProfileClient() {
   };
 
   return (
-    <PageContent size="xl" variant="plain" className="w-full min-w-0 space-y-6 sm:space-y-8 md:space-y-10">
+    <PageContent size="wide" variant="plain" className="w-full min-w-0 space-y-6 sm:space-y-8 md:space-y-10">
       <PurchaseSuccessModal
         open={purchaseModalOpen}
         item={purchaseItem}
@@ -1059,23 +1088,36 @@ export function ProfileClient() {
             <h1 className="break-words text-3xl font-black tracking-tight text-white sm:text-4xl md:text-5xl">
               {loading ? "Loading..." : currentDisplayName}
             </h1>
-            <p className="text-slate-300">
+            <p className="max-w-2xl leading-relaxed text-slate-200/88">
               Track your competitive progress, ratings, and recent matches.
             </p>
           </div>
 
-          <Button
-            variant="secondary"
-            className="w-full shrink-0 md:w-auto"
-            onClick={() => {
-              setNavPending(true);
-              router.push("/");
-            }}
-            loading={navPending}
-            loadingText="Opening..."
-          >
-            Back to Home
-          </Button>
+          <div className="flex w-full min-w-0 flex-col gap-3 md:w-auto md:flex-row md:flex-wrap md:justify-end">
+            <Button
+              variant="secondary"
+              className="w-full shrink-0 md:w-auto md:min-w-[10rem]"
+              onClick={() => {
+                setNavPending(true);
+                router.push("/");
+              }}
+              loading={navPending}
+              loadingText="Opening..."
+            >
+              Back to Home
+            </Button>
+            <Button
+              className="w-full shrink-0 md:w-auto md:min-w-[10rem]"
+              onClick={() => {
+                setNavPending(true);
+                router.push("/loadout");
+              }}
+              loading={navPending}
+              loadingText="Opening..."
+            >
+              Edit Gameplay Loadout
+            </Button>
+          </div>
         </div>
 
         {error ? (
@@ -1091,10 +1133,12 @@ export function ProfileClient() {
         ) : null}
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Coins" value={loading ? "..." : data?.wallet?.coins ?? 0} />
+          <StatCard label="XP" value={loading ? "..." : data?.wallet?.xp ?? 0} />
           <StatCard label="Total Matches" value={loading ? "..." : data?.summary.totalMatches ?? 0} />
           <StatCard label="Wins" value={loading ? "..." : data?.summary.wins ?? 0} />
-          <StatCard label="Losses" value={loading ? "..." : data?.summary.losses ?? 0} />
           <StatCard label="Win Rate" value={loading ? "..." : `${data?.summary.winRate ?? 0}%`} />
+          <StatCard label="Losses" value={loading ? "..." : data?.summary.losses ?? 0} />
         </div>
 
         <div className="q-card-strong rounded-3xl p-4 sm:p-6">
@@ -1255,131 +1299,19 @@ export function ProfileClient() {
           {profileIconError ? <p className="mt-4 text-sm text-rose-300">{profileIconError}</p> : null}
         </div>
 
-        <div>
-          <ProfileCharacterSelector
-            selectedId={selectedAvatarId}
-            previewId={previewAvatarId}
-            savingId={savingAvatarId}
-            disabled={loading || Boolean(savingAvatarId)}
-            ownedAvatarIds={[
-              ...(data?.ownedAvatars ?? []).map((id) => normalizeAvatarId(id)),
-              "flash",
-              "shadow",
-              "guardian",
-              "inferno",
-            ]}
-            onBuyPremiumAvatar={(avatarId) => void handleBuyAvatar(avatarId)}
-            onPreviewChange={setPreviewAvatarId}
-            onSelect={(avatarId) => void handleAvatarSelect(avatarId)}
-          />
-          {avatarError ? <p className="mt-4 text-sm text-rose-300">{avatarError}</p> : null}
-        </div>
-
-        {/* Cosmetics */}
         <div className="q-card-strong rounded-3xl p-4 sm:p-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="space-y-1">
-              <span className="inline-flex rounded-full border border-violet-400/30 bg-violet-400/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.3em] text-violet-300">
-                Cosmetics
-              </span>
-              <h2 className="text-2xl font-bold text-white">Emote Packs</h2>
-              <p className="max-w-2xl text-sm text-slate-400">
-                Pick the quick-send messages you want in matches. Starter is free; premium packs can be bought and equipped here.
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm uppercase tracking-[0.25em] text-slate-400/70">Gameplay Loadout</p>
+              <h2 className="mt-2 text-2xl font-bold text-white">Avatar, emotes, and battle effects moved to Loadout</h2>
+              <p className="mt-1 max-w-2xl text-sm text-slate-300">
+                Profile now focuses on stats, display name, public leaderboard icon, ratings, and match history.
               </p>
             </div>
-            <span className="w-fit rounded-full border border-amber-400/25 bg-amber-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-200">
-              Stripe Checkout
-            </span>
+            <Button className="w-full sm:w-auto" onClick={() => router.push("/loadout")}>
+              Edit Gameplay Loadout
+            </Button>
           </div>
-
-          <div className="mt-5 grid gap-3 lg:grid-cols-3">
-            {EMOTE_PACKS.map((pack) => {
-              const packId = pack.id as EmotePackId;
-              const selected = selectedEmotePack === packId;
-              const owned = pack.unlockedByDefault || isPackOwned(packId);
-              const locked = !owned;
-              const buying = buyingPack === packId;
-              const saving = savingEmotePack === packId;
-
-              return (
-                <div
-                  key={pack.id}
-                  className={`relative flex min-h-[15rem] flex-col rounded-2xl border p-4 transition ${
-                    selected
-                      ? "border-cyan-300/35 bg-cyan-400/[0.08] shadow-[0_0_28px_rgba(34,211,238,0.10),inset_0_1px_0_rgba(34,211,238,0.08)]"
-                      : locked
-                        ? "q-card-subtle"
-                        : "q-card-subtle"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-bold text-white">{pack.name}</p>
-                      <p className="mt-1 text-[11px] leading-relaxed text-slate-400">{pack.description}</p>
-                    </div>
-                    <span
-                      className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ${
-                        selected
-                          ? "border-cyan-300/40 bg-cyan-400/10 text-cyan-200"
-                          : owned
-                            ? "border-emerald-400/25 bg-emerald-500/10 text-emerald-200"
-                            : "border-amber-400/25 bg-amber-500/10 text-amber-200"
-                      }`}
-                    >
-                      {selected ? "Equipped" : owned ? "Owned" : "Locked"}
-                    </span>
-                  </div>
-
-                  <div className="q-card-subtle mt-4 rounded-2xl p-3">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500/70">Preview</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {pack.emoteIds.map((emoteId) => {
-                        const emote = EMOTES.find((e) => e.id === emoteId);
-                        return emote ? (
-                          <span
-                            key={`${pack.id}-${emoteId}`}
-                            title={emote.label}
-                            className="inline-flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-slate-200/85"
-                          >
-                            <span>{emote.icon}</span>
-                            <span>{emote.label}</span>
-                          </span>
-                        ) : null;
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="mt-auto pt-4">
-                    {locked ? (
-                      <Button
-                        className="w-full"
-                        disabled={loading || buying}
-                        loading={buying}
-                        loadingText="Starting..."
-                        onClick={() => void handleBuyEmotePack(packId)}
-                      >
-                        Buy
-                      </Button>
-                    ) : (
-                      <Button
-                        className="w-full"
-                        variant={selected ? "secondary" : "primary"}
-                        disabled={loading || Boolean(savingEmotePack) || selected}
-                        loading={saving}
-                        loadingText="Equipping..."
-                        onClick={() => void handleEmotePackSelect(packId)}
-                      >
-                        {selected ? "Equipped" : "Equip"}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {emotePackError ? <p className="mt-3 text-sm text-rose-300">{emotePackError}</p> : null}
-          {emoteShopError ? <p className="mt-3 text-sm text-rose-300">{emoteShopError}</p> : null}
         </div>
         <div className="grid gap-6 lg:grid-cols-[1.1fr_1.6fr]">
           <div className="q-card-strong rounded-3xl p-4 sm:p-6">

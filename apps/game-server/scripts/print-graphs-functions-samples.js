@@ -1,8 +1,7 @@
 /* eslint-disable no-console */
 
 const { generateQuestionBatch } = require("../../../packages/shared/question-engine");
-
-const DIFFICULTIES = ["easy", "medium", "hard"];
+const { DIFFICULTIES } = require("../../../packages/shared/difficulty-framework");
 
 function printDifficultySamples(difficulty) {
   const batch = generateQuestionBatch("graphs_functions", difficulty, 36, `gf:${difficulty}`);

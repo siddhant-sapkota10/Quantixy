@@ -1,0 +1,26 @@
+{
+  "name": "Quantixy",
+  "short_name": "Quantixy",
+  "description": "Real-time multiplayer math battles.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#050815",
+  "theme_color": "#050815",
+  "categories": ["games", "education"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/quantixytransparent.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

@@ -6,6 +6,8 @@ const DEFAULT_RATING = 1000;
 const VALID_AVATAR_IDS = new Set((AVATARS ?? []).map((avatar) => avatar.id));
 const VALID_STREAK_EFFECT_IDS = new Set((COSMETICS.streakEffects ?? []).map((e) => e.id));
 const VALID_EMOTE_PACK_IDS = new Set((COSMETICS.emotePacks ?? []).map((p) => p.id));
+const VALID_HIT_EFFECT_IDS = new Set(["none", "lightning_strike", "fire_burst", "pixel_glitch"]);
+const VALID_AVATAR_SKIN_IDS = new Set(["none", "flash_neon", "guardian_emerald"]);
 const GUEST_NAME_PATTERN = /^Guest-[A-F0-9]{4,}$/i;
 
 function deriveResultFromScores(yourScore, opponentScore) {
@@ -45,7 +47,17 @@ function normalizeEmotePackId(value) {
   return "starter";
 }
 
-const COSMETICS_DEFAULT = { streakEffect: "none", emotePack: "starter" };
+function normalizeHitEffectId(value) {
+  if (typeof value === "string" && VALID_HIT_EFFECT_IDS.has(value)) return value;
+  return "none";
+}
+
+function normalizeAvatarSkinId(value) {
+  if (typeof value === "string" && VALID_AVATAR_SKIN_IDS.has(value)) return value;
+  return "none";
+}
+
+const COSMETICS_DEFAULT = { streakEffect: "none", emotePack: "starter", hitEffect: "none", avatarSkin: "none" };
 
 /**
  * Fetch cosmetic fields for a player by their internal UUID.
@@ -59,7 +71,7 @@ const COSMETICS_DEFAULT = { streakEffect: "none", emotePack: "starter" };
 async function getPlayerCosmetics(playerId) {
   const { data, error } = await supabaseAdmin
     .from("players")
-    .select("streak_effect, emote_pack, auth_user_id")
+    .select("streak_effect, emote_pack, hit_effect, avatar_skin, auth_user_id")
     .eq("id", playerId)
     .maybeSingle();
 
@@ -73,6 +85,8 @@ async function getPlayerCosmetics(playerId) {
 
   const streakEffect = normalizeStreakEffectId(data?.streak_effect ?? null);
   let emotePack = normalizeEmotePackId(data?.emote_pack ?? null);
+  let hitEffect = normalizeHitEffectId(data?.hit_effect ?? null);
+  let avatarSkin = normalizeAvatarSkinId(data?.avatar_skin ?? null);
 
   // Ownership enforcement (paid packs only usable if owned).
   // Source of truth is public.user_emote_packs, written by Stripe webhook via service role.
@@ -96,7 +110,31 @@ async function getPlayerCosmetics(playerId) {
     }
   }
 
-  return { streakEffect, emotePack };
+  if (authUserId && (hitEffect !== "none" || avatarSkin !== "none")) {
+    const { data: ownedCosmetics, error: ownedCosmeticsError } = await supabaseAdmin
+      .from("user_cosmetic_items")
+      .select("item_type, item_id")
+      .eq("user_id", authUserId);
+
+    if (ownedCosmeticsError) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[persistence] user_cosmetic_items query failed, forcing base cosmetics:", ownedCosmeticsError.message);
+      }
+      hitEffect = "none";
+      avatarSkin = "none";
+    } else {
+      const ownedHitEffects = new Set((ownedCosmetics ?? []).filter((row) => row.item_type === "hit_effect").map((row) => row.item_id));
+      const ownedAvatarSkins = new Set((ownedCosmetics ?? []).filter((row) => row.item_type === "avatar_skin").map((row) => row.item_id));
+      if (hitEffect !== "none" && !ownedHitEffects.has(hitEffect)) {
+        hitEffect = "none";
+      }
+      if (avatarSkin !== "none" && !ownedAvatarSkins.has(avatarSkin)) {
+        avatarSkin = "none";
+      }
+    }
+  }
+
+  return { streakEffect, emotePack, hitEffect, avatarSkin };
 }
 
 function isNoRowsError(error) {
@@ -288,6 +326,20 @@ async function findOrCreatePlayerFromAuthUser(authUser) {
   }
 
   throw error;
+}
+
+async function markDailyMatchCompleted(authUserId) {
+  if (!authUserId) {
+    return;
+  }
+
+  const { error } = await supabaseAdmin.rpc("mark_daily_match_completed", {
+    p_user_id: authUserId
+  });
+
+  if (error && process.env.NODE_ENV !== "production") {
+    console.warn("[persistence] markDailyMatchCompleted failed:", error.message);
+  }
 }
 
 function buildProfileIconPayload(player) {
@@ -657,8 +709,11 @@ module.exports = {
   getLeaderboard,
   getProfileSummary,
   getPlayerCosmetics,
+  markDailyMatchCompleted,
   normalizeStreakEffectId,
-  normalizeEmotePackId
+  normalizeEmotePackId,
+  normalizeHitEffectId,
+  normalizeAvatarSkinId
 };
 
 

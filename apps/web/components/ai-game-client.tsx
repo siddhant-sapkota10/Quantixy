@@ -197,7 +197,8 @@ export function AiGameClient({
     height: 0,
     keyboardOpen: false,
     compact: false,
-    cramped: false
+    cramped: false,
+    reducedMotion: false
   });
 
   const {
@@ -219,6 +220,7 @@ export function AiGameClient({
       const keyboardOpen = baselineHeight - height > 160;
       const compact = height < 820 || width < 390;
       const cramped = height < 700 || keyboardOpen;
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
       setViewportState((previous) => {
         if (
@@ -226,26 +228,30 @@ export function AiGameClient({
           previous.height === height &&
           previous.keyboardOpen === keyboardOpen &&
           previous.compact === compact &&
-          previous.cramped === cramped
+          previous.cramped === cramped &&
+          previous.reducedMotion === reducedMotion
         ) {
           return previous;
         }
 
-        return { width, height, keyboardOpen, compact, cramped };
+        return { width, height, keyboardOpen, compact, cramped, reducedMotion };
       });
     };
 
     updateViewportState();
 
     const visualViewport = window.visualViewport;
+    const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     window.addEventListener("resize", updateViewportState);
     visualViewport?.addEventListener("resize", updateViewportState);
     visualViewport?.addEventListener("scroll", updateViewportState);
+    motionQuery.addEventListener("change", updateViewportState);
 
     return () => {
       window.removeEventListener("resize", updateViewportState);
       visualViewport?.removeEventListener("resize", updateViewportState);
       visualViewport?.removeEventListener("scroll", updateViewportState);
+      motionQuery.removeEventListener("change", updateViewportState);
     };
   }, []);
 
@@ -987,6 +993,7 @@ export function AiGameClient({
     (viewportState.cramped || (viewportState.width > 0 && viewportState.width < 480));
   const keyboardOpenInDuel = isDuelMode && !isFinished && viewportState.keyboardOpen;
   const compactTextEntryUi = compactDuelUi && !hasMultipleChoiceOptions;
+  const reduceBattleMotion = viewportState.reducedMotion || (isDuelMode && !isFinished && (compactDuelUi || crampedDuelUi));
 
   const duelAnswerForm = isPlaying ? (
     <form className={cn("flex w-full flex-col gap-2", crampedDuelUi && "gap-1.5")} onSubmit={handleSubmit}>
@@ -1040,7 +1047,7 @@ export function AiGameClient({
             spellCheck={false}
             enterKeyHint="go"
             className={cn(
-              "neon-input h-12 min-w-0 flex-1 rounded-2xl px-4 disabled:cursor-not-allowed disabled:opacity-60",
+              "neon-input h-12 min-w-0 flex-1 rounded-2xl px-4 text-base disabled:cursor-not-allowed disabled:opacity-60",
               compactDuelUi && "h-11",
               compactTextEntryUi && "h-10 rounded-xl"
             )}
@@ -1193,7 +1200,7 @@ export function AiGameClient({
   // ---------------------------------------------------------------------------
   if (isDuelMode && !isFinished) {
     return (
-      <section className="fixed inset-0 z-10 overflow-hidden text-white">
+      <section className="q-match-lock fixed inset-0 z-10 overflow-hidden text-white">
         <GameOverOverlay result={null} />
         <div
           className={cn(
@@ -1211,13 +1218,12 @@ export function AiGameClient({
 
         <div
           className={cn(
-            "flex min-h-[100dvh] flex-col",
-            compactDuelUi ? "overflow-y-auto overscroll-contain" : "h-[100dvh] overflow-hidden"
+            "flex h-[100dvh] min-h-[100dvh] flex-col overflow-hidden overscroll-none"
           )}
         >
           <div
             className={cn(
-              "shrink-0 px-3 pb-2 pt-2.5 sm:px-5 sm:pb-2.5 sm:pt-3",
+              "shrink-0 px-3 pb-2 pt-[calc(env(safe-area-inset-top,0px)+0.625rem)] sm:px-5 sm:pb-2.5 sm:pt-[calc(env(safe-area-inset-top,0px)+0.75rem)]",
               compactDuelUi && "pb-1.5 pt-2 sm:pb-2"
             )}
           >
@@ -1332,7 +1338,7 @@ export function AiGameClient({
               compactTextEntryUi && "justify-center py-2"
             )}
           >
-            <motion.div animate={animState.questionShakeControls} className="mx-auto flex w-full max-w-3xl flex-col gap-2 md:max-w-4xl lg:max-w-5xl">
+            <motion.div animate={reduceBattleMotion ? undefined : animState.questionShakeControls} className="mx-auto flex w-full max-w-3xl flex-col gap-2 md:max-w-4xl lg:max-w-5xl">
               <div
                 className={cn(
                   "q-card-strong relative rounded-[1.5rem] p-3 text-center sm:p-6 md:p-8",
@@ -1709,7 +1715,7 @@ export function AiGameClient({
                     }
                     autoComplete="off"
                     disabled={youEliminated || isPlayerInputLocked}
-                    className="neon-input w-full rounded-2xl px-4 py-4 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="neon-input w-full rounded-2xl px-4 py-4 text-base disabled:cursor-not-allowed disabled:opacity-60"
                   />
                 </label>
                 <div className="flex flex-col gap-2 sm:flex-row">

@@ -124,6 +124,21 @@ const TOPIC_CONFIG = {
 // ── Difficulty display config ──────────────────────────────────────────────────
 
 const DIFFICULTY_CONFIG = {
+  tiny: {
+    label: "Tiny",
+    description: "Single-digit sums — perfect for beginners",
+    icon: (
+      <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 3v4M12 17v4M5 12H3M21 12h-2" />
+        <circle cx="12" cy="12" r="4" />
+      </svg>
+    ),
+    border: "border-violet-500/50",
+    bg: "bg-violet-500/10",
+    text: "text-violet-200",
+    glow: "shadow-lg shadow-violet-500/15",
+    ring: "ring-violet-500/35",
+  },
   easy: {
     label: "Easy",
     description: "Warm up your brain",
@@ -170,6 +185,15 @@ const DIFFICULTY_CONFIG = {
 } satisfies Record<Difficulty, { label: string; description: string; icon: React.ReactNode; border: string; bg: string; text: string; glow: string; ring: string }>;
 
 const AI_DIFFICULTY_CONFIG = {
+  tiny: {
+    label: "Tiny Bot",
+    description: "Very slow, very forgiving",
+    border: "border-violet-500/50",
+    bg: "bg-violet-500/10",
+    text: "text-violet-200",
+    glow: "shadow-lg shadow-violet-500/15",
+    ring: "ring-violet-500/35",
+  },
   easy: {
     label: "Easy Bot",
     description: "Slower answers, more mistakes",
@@ -301,22 +325,23 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
   const showLoadout = !(mode === "pvp" && matchMode === "join-room");
 
   return (
-    <PageContent size="md" className="w-full min-w-0">
+    <PageContent size="wide" variant="plain" className="w-full min-w-0">
+      <div className="rounded-[1.35rem] border border-[var(--qx-border-soft)] bg-[var(--qx-panel)] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.55)] backdrop-blur-xl sm:rounded-3xl sm:p-8 md:p-10">
       {/* ── Header ── */}
       <div className="space-y-3 text-center sm:space-y-4">
         <span
-          className={`inline-flex rounded-full border px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] ${
+          className={`inline-flex rounded-full border px-4 py-1 text-[10px] font-black uppercase tracking-[0.28em] ${
             mode === "ai"
-              ? "border-purple-300/35 bg-purple-500/12 text-purple-100"
-              : "border-cyan-300/35 bg-cyan-400/12 text-cyan-100"
+              ? "border-[var(--qx-border-purple)] bg-purple-500/12 text-purple-100"
+              : "border-[var(--qx-border-accent)] bg-cyan-500/12 text-cyan-100"
           }`}
         >
-          {mode === "ai" ? "vs AI" : "Match Setup"}
+          {mode === "ai" ? "Vs AI" : "Match setup"}
         </span>
-        <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl md:text-5xl">
+        <h1 className="text-3xl font-black tracking-tight text-[var(--qx-text-primary)] sm:text-4xl md:text-5xl">
           Choose Your Battle
         </h1>
-        <p className="text-base text-textSecondary sm:text-lg">
+        <p className="text-base leading-relaxed text-[var(--qx-text-secondary)] sm:text-lg">
           {mode === "ai"
             ? "Pick a topic and face off against MathBot."
             : "Pick quick matchmaking or set up a private room with a friend."}
@@ -387,7 +412,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
                     } ${startPending ? "cursor-not-allowed opacity-55" : "active:scale-[0.975]"}`}
                   >
                     <span className="block text-xs font-black uppercase tracking-[0.18em]">{option.title}</span>
-                    <span className="mt-1 block text-[11px] leading-snug text-slate-400">{option.body}</span>
+                    <span className="mt-1 block text-[11px] leading-snug text-slate-200/78">{option.body}</span>
                   </button>
                 );
               })}
@@ -437,7 +462,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
                     className={`relative flex flex-col items-center gap-2 rounded-2xl border p-3 text-center transition-colors duration-150 sm:p-3.5 ${
                       isSelected
                         ? `${cfg.border} ${cfg.bg} ${cfg.text}`
-                        : "border-slate-500/20 bg-slate-950/48 text-slate-400 hover:border-slate-400/35 hover:bg-slate-900/62 hover:text-slate-200"
+                        : "border-slate-500/25 bg-slate-950/72 text-slate-300 hover:border-slate-400/40 hover:bg-slate-900/78 hover:text-white"
                     } ${startPending ? "cursor-not-allowed opacity-55" : "cursor-pointer"}`}
                   >
                     {cfg.icon}
@@ -479,7 +504,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
                     className={`relative flex flex-col items-center gap-3 rounded-2xl border p-4 text-center transition-colors duration-150 sm:p-5 ${
                       isSelected
                         ? `${cfg.border} ${cfg.bg} ${cfg.glow}`
-                        : "border-slate-500/20 bg-slate-950/48 hover:border-slate-400/35 hover:bg-slate-900/62"
+                        : "border-slate-500/25 bg-slate-950/72 hover:border-slate-400/40 hover:bg-slate-900/78"
                     } ${startPending ? "cursor-not-allowed opacity-55" : "cursor-pointer"}`}
                   >
                     <span className={isSelected ? cfg.text : "text-slate-500"}>
@@ -528,7 +553,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
                     className={`relative flex flex-col items-start gap-2 rounded-2xl border p-4 text-left transition-colors duration-150 sm:p-5 ${
                       isSelected
                         ? `${cfg.border} ${cfg.bg} ${cfg.glow}`
-                        : "border-slate-500/20 bg-slate-950/48 hover:border-slate-400/35 hover:bg-slate-900/62"
+                        : "border-slate-500/25 bg-slate-950/72 hover:border-slate-400/40 hover:bg-slate-900/78"
                     } ${startPending ? "cursor-not-allowed opacity-55" : "cursor-pointer"}`}
                   >
                     <p className={`text-sm font-bold ${isSelected ? cfg.text : "text-slate-300"}`}>
@@ -573,6 +598,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
             Back
           </Button>
         </div>
+      </div>
       </div>
     </PageContent>
   );

@@ -66,26 +66,28 @@ type Props = {
   ultimate: UltimateFxSnapshot;
   combatFx?: CombatFxKeys;
   neuralInputUnlockAt: number;
+  reduced?: boolean;
 };
 
 export function UltimateCombatFxLayer({
   ultimate,
   combatFx = INITIAL_COMBAT_FX,
-  neuralInputUnlockAt
+  neuralInputUnlockAt,
+  reduced = false
 }: Props) {
   const now = Date.now();
   const snap = ultimate;
 
-  const youFlash = snap.overclockUntil > now;
-  const oppFlash = snap.opponentOverclockUntil > now;
-  const youInferno = snap.infernoPendingUntil > now;
-  const oppInferno = snap.opponentInfernoPendingUntil > now;
-  const youFort = snap.fortressUntil > now;
-  const oppFort = snap.opponentFortressUntil > now;
-  const youArch = snap.architectUntil > now;
-  const youTitan = snap.titanOverpowerUntil > now;
-  const oppTitan = snap.opponentTitanOverpowerUntil > now;
-  const oppShadow = snap.opponentShadowCorruptUntil > now;
+  const youFlash = !reduced && snap.overclockUntil > now;
+  const oppFlash = !reduced && snap.opponentOverclockUntil > now;
+  const youInferno = !reduced && snap.infernoPendingUntil > now;
+  const oppInferno = !reduced && snap.opponentInfernoPendingUntil > now;
+  const youFort = !reduced && snap.fortressUntil > now;
+  const oppFort = !reduced && snap.opponentFortressUntil > now;
+  const youArch = !reduced && snap.architectUntil > now;
+  const youTitan = !reduced && snap.titanOverpowerUntil > now;
+  const oppTitan = !reduced && snap.opponentTitanOverpowerUntil > now;
+  const oppShadow = !reduced && snap.opponentShadowCorruptUntil > now;
   const neuralLock = neuralInputUnlockAt > now;
 
   const flashTier = Math.max(1, Math.min(5, combatFx.flashBoltTier || 1));

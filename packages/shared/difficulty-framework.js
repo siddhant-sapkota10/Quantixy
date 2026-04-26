@@ -4,7 +4,7 @@
  */
 const { GRAPH_TIMER_SECONDS } = require("./graphs-functions-config");
 
-/** @typedef {"easy"|"medium"|"hard"} Difficulty */
+/** @typedef {"tiny"|"easy"|"medium"|"hard"} Difficulty */
 /** @typedef {"arithmetic"|"algebra"|"fractions"|"percentages"|"ratios"|"geometry"|"graphs_functions"|"calculus"} Topic */
 
 const TOPICS = [
@@ -18,7 +18,7 @@ const TOPICS = [
   "calculus",
 ];
 
-const DIFFICULTIES = ["easy", "medium", "hard"];
+const DIFFICULTIES = ["tiny", "easy", "medium", "hard"];
 
 const LEGACY_TOPIC_ALIASES = {
   functions: "graphs_functions",
@@ -37,6 +37,7 @@ const GLOBAL_TUNING = {
   recentSubtypeHistory: 3,
   recentQuestionHistory: 18,
   matchDurationByDifficultySeconds: {
+    tiny: 54,
     easy: 60,
     medium: 78,
     hard: 96,
@@ -44,6 +45,15 @@ const GLOBAL_TUNING = {
 };
 
 const DIFFICULTY_PROFILE = {
+  tiny: {
+    expectedSolveSeconds: [1, 5],
+    maxSteps: 1,
+    abstractionBand: [0.05, 0.28],
+    notationBand: [0.05, 0.3],
+    visualBand: [0.0, 0.42],
+    mistakeBand: [0.06, 0.32],
+    scoreBand: [0.08, 0.28],
+  },
   easy: {
     expectedSolveSeconds: [2, 5],
     maxSteps: 1,
@@ -74,22 +84,30 @@ const DIFFICULTY_PROFILE = {
 };
 
 const TOPIC_TIMER_DEFAULTS = {
-  arithmetic: { easy: 6, medium: 9, hard: 12 },
-  algebra: { easy: 8, medium: 11, hard: 15 },
-  geometry: { easy: 8, medium: 12, hard: 16 },
-  fractions: { easy: 8, medium: 11, hard: 14 },
-  percentages: { easy: 8, medium: 11, hard: 14 },
-  ratios: { easy: 8, medium: 11, hard: 14 },
+  arithmetic: { tiny: 8, easy: 6, medium: 9, hard: 12 },
+  algebra: { tiny: 9, easy: 8, medium: 11, hard: 15 },
+  geometry: { tiny: 9, easy: 8, medium: 12, hard: 16 },
+  fractions: { tiny: 9, easy: 8, medium: 11, hard: 14 },
+  percentages: { tiny: 9, easy: 8, medium: 11, hard: 14 },
+  ratios: { tiny: 9, easy: 8, medium: 11, hard: 14 },
   graphs_functions: {
+    tiny: GRAPH_TIMER_SECONDS.tiny,
     easy: GRAPH_TIMER_SECONDS.easy,
     medium: GRAPH_TIMER_SECONDS.medium,
     hard: GRAPH_TIMER_SECONDS.hard,
   },
-  calculus: { easy: 10, medium: 14, hard: 18 },
+  calculus: { tiny: 11, easy: 10, medium: 14, hard: 18 },
 };
 
 const TOPIC_RULES = {
   arithmetic: {
+    tiny: {
+      allowedOperations: ["add", "sub"],
+      maxOperands: 2,
+      numberCeiling: 18,
+      maxExpressionLength: 14,
+      visualRequired: false,
+    },
     easy: {
       allowedOperations: ["add", "sub"],
       maxOperands: 2,
@@ -113,6 +131,13 @@ const TOPIC_RULES = {
     },
   },
   algebra: {
+    tiny: {
+      allowedOperations: ["add", "sub", "mul"],
+      maxOperands: 3,
+      numberCeiling: 20,
+      maxExpressionLength: 34,
+      visualRequired: false,
+    },
     easy: {
       allowedOperations: ["add", "sub", "mul"],
       maxOperands: 3,
@@ -136,6 +161,13 @@ const TOPIC_RULES = {
     },
   },
   fractions: {
+    tiny: {
+      allowedOperations: ["fraction_add", "fraction_sub", "fraction_of_whole"],
+      maxOperands: 2,
+      denominatorCeiling: 8,
+      maxExpressionLength: 34,
+      visualRequired: false,
+    },
     easy: {
       allowedOperations: ["fraction_add", "fraction_sub", "fraction_of_whole"],
       maxOperands: 2,
@@ -159,6 +191,13 @@ const TOPIC_RULES = {
     },
   },
   percentages: {
+    tiny: {
+      allowedOperations: ["percent_of", "fraction_percent"],
+      maxOperands: 2,
+      numberCeiling: 240,
+      maxExpressionLength: 38,
+      visualRequired: false,
+    },
     easy: {
       allowedOperations: ["percent_of", "fraction_percent"],
       maxOperands: 2,
@@ -182,6 +221,13 @@ const TOPIC_RULES = {
     },
   },
   ratios: {
+    tiny: {
+      allowedOperations: ["ratio_simplify", "ratio_scale"],
+      maxOperands: 3,
+      numberCeiling: 48,
+      maxExpressionLength: 38,
+      visualRequired: false,
+    },
     easy: {
       allowedOperations: ["ratio_simplify", "ratio_scale"],
       maxOperands: 3,
@@ -205,6 +251,13 @@ const TOPIC_RULES = {
     },
   },
   geometry: {
+    tiny: {
+      allowedOperations: ["perimeter", "angles"],
+      maxOperands: 3,
+      numberCeiling: 72,
+      maxExpressionLength: 48,
+      visualRequired: true,
+    },
     easy: {
       allowedOperations: ["perimeter", "angles"],
       maxOperands: 3,
@@ -228,6 +281,13 @@ const TOPIC_RULES = {
     },
   },
   graphs_functions: {
+    tiny: {
+      allowedOperations: ["read_point", "evaluate_function"],
+      maxOperands: 3,
+      numberCeiling: 36,
+      maxExpressionLength: 50,
+      visualRequired: false,
+    },
     easy: {
       allowedOperations: ["read_point", "evaluate_function"],
       maxOperands: 3,
@@ -251,6 +311,13 @@ const TOPIC_RULES = {
     },
   },
   calculus: {
+    tiny: {
+      allowedOperations: ["function_evaluation", "power_rule", "derivative_at_point"],
+      maxOperands: 3,
+      numberCeiling: 28,
+      maxExpressionLength: 56,
+      visualRequired: false,
+    },
     easy: {
       allowedOperations: ["function_evaluation", "power_rule", "derivative_at_point"],
       maxOperands: 3,

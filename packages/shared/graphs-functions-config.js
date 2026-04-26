@@ -4,6 +4,7 @@
  */
 
 const GRAPH_TIMER_SECONDS = {
+  tiny: 10,
   easy: 9,
   medium: 12,
   hard: 16,
@@ -22,12 +23,21 @@ const GRAPH_VISUAL_TUNING = {
 };
 
 const GRAPH_RANGE_PRESETS = {
+  tiny: { xMin: -4, xMax: 4, yMin: -4, yMax: 4, step: 1 },
   easy: { xMin: -5, xMax: 5, yMin: -5, yMax: 5, step: 1 },
   medium: { xMin: -6, xMax: 6, yMin: -6, yMax: 6, step: 1 },
   hard: { xMin: -8, xMax: 8, yMin: -8, yMax: 8, step: 1 },
 };
 
 const GRAPH_SUBTYPE_WEIGHTS = {
+  tiny: {
+    read_x_coordinate: 4,
+    read_y_coordinate: 4,
+    read_point_coordinate: 3,
+    read_y_intercept: 3,
+    evaluate_function: 3,
+    read_table: 3,
+  },
   easy: {
     read_x_coordinate: 4,
     read_y_coordinate: 4,

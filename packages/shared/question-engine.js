@@ -49,6 +49,27 @@ function pick(items) {
   return items[randomInt(0, items.length - 1)];
 }
 
+/** Three distinct small integers for multiple-choice distractors (tiny arithmetic). */
+function pickTinyArithmeticWrongs(correct, maxAbs = 24) {
+  const pool = [correct - 1, correct + 1, correct - 2, correct + 2, correct + 3];
+  const out = [];
+  const seen = new Set([correct]);
+  for (const n of pool) {
+    if (!Number.isFinite(n) || n < 0 || n > maxAbs) continue;
+    if (seen.has(n)) continue;
+    seen.add(n);
+    out.push(n);
+    if (out.length >= 3) return out;
+  }
+  for (let i = 0; i < 50 && out.length < 3; i += 1) {
+    const n = randomInt(0, Math.min(maxAbs, Math.max(12, correct + 4)));
+    if (seen.has(n)) continue;
+    seen.add(n);
+    out.push(n);
+  }
+  return out.slice(0, 3);
+}
+
 function pickWeighted(items) {
   const total = items.reduce((sum, item) => sum + (item.weight ?? 1), 0);
   let roll = Math.random() * total;
@@ -724,7 +745,7 @@ function validateGraphVisualData(question, difficulty) {
   if (yMax - yMin + 1 > GRAPH_VISUAL_TUNING.maxGridTicksPerAxis) return false;
 
   const showAxisNumbers = source.showAxisNumbers ?? graphSpec?.showAxisNumbers ?? true;
-  if (difficulty === "easy" && !showAxisNumbers) return false;
+  if ((difficulty === "easy" || difficulty === "tiny") && !showAxisNumbers) return false;
 
   const points = source.points ?? graphSpec?.points ?? [];
   const lines = source.lines ?? graphSpec?.lines ?? [];
@@ -747,7 +768,7 @@ function validateGraphVisualData(question, difficulty) {
     if (points.length !== 1) return false;
   }
 
-  if (difficulty === "easy" && (lines.length > 1 || points.length > 2)) return false;
+  if ((difficulty === "easy" || difficulty === "tiny") && (lines.length > 1 || points.length > 2)) return false;
 
   return true;
 }
@@ -764,11 +785,12 @@ function validateQuestionShape(topic, difficulty, question) {
   // Operator-count throttling is useful for raw arithmetic expressions,
   // but it over-penalizes symbolic prompts (e.g., f(x), f'(x)) in algebra/calculus.
   if (topic === "arithmetic") {
+    if (rules.difficulty === "tiny" && opCount > 1) return false;
     if (rules.difficulty === "easy" && opCount > 2) return false;
     if (rules.difficulty === "medium" && opCount > 4) return false;
   }
 
-  if (topic === "arithmetic" && difficulty === "easy") {
+  if (topic === "arithmetic" && (difficulty === "easy" || difficulty === "tiny")) {
     if (/[()]/.test(prompt)) return false;
     if (/\//.test(prompt) || /\u00f7/.test(prompt) || /x|\*/i.test(prompt)) return false;
   }
@@ -828,7 +850,8 @@ function validateQuestion(topic, difficulty, question) {
   if (hasMojibake(question.correctAnswer) || hasMojibake(question.explanation)) return false;
 
   const numericAnswer = parseNumberLoose(question.correctAnswer);
-  if (difficulty === "easy" && numericAnswer !== null && Math.abs(numericAnswer) > (rules.numberCeiling ?? 9999)) return false;
+  if ((difficulty === "easy" || difficulty === "tiny") && numericAnswer !== null && Math.abs(numericAnswer) > (rules.numberCeiling ?? 9999))
+    return false;
 
   const format = question.format ?? QUESTION_FORMATS.MULTIPLE_CHOICE;
   if (!Object.values(QUESTION_FORMATS).includes(format)) return false;
@@ -890,13 +913,17 @@ function fallbackQuestion(topic, difficulty) {
     }, rules);
   }
 
-  const a = randomInt(6, 16);
-  const b = randomInt(4, 14);
+  const isTiny = difficulty === "tiny";
+  const a = isTiny ? randomInt(1, 9) : randomInt(6, 16);
+  const b = isTiny ? randomInt(1, 9) : randomInt(4, 14);
   const correct = String(a + b);
+  const sum = a + b;
   return buildQuestionObject(topic, difficulty, "fallback-clean-add", {
     prompt: `${a} + ${b}`,
     correctAnswer: correct,
-    wrongAnswers: [String(a + b + 1), String(a + b - 1), String(a + b + 2)],
+    wrongAnswers: isTiny
+      ? [String(sum + 1), String(Math.max(0, sum - 1)), String(sum + 2)]
+      : [String(sum + 1), String(sum - 1), String(sum + 2)],
     explanation: `Add ${a} and ${b}.`,
     estimatedSolveTime: Math.max(2, rules.profile.expectedSolveSeconds[0]),
     renderMode: "plain_text",
@@ -914,6 +941,50 @@ function fallbackQuestion(topic, difficulty) {
 
 function arithmeticGenerators() {
   return {
+    tiny: [
+      {
+        subtype: "tiny-add",
+        weight: 5,
+        generate() {
+          const a = randomInt(1, 9);
+          const b = randomInt(1, 9);
+          const correct = a + b;
+          const wrongs = pickTinyArithmeticWrongs(correct, 24);
+          return {
+            prompt: `${a} + ${b}`,
+            correctAnswer: String(correct),
+            wrongAnswers: wrongs,
+            explanation: `Add ${a} and ${b} to get ${correct}.`,
+            estimatedSolveTime: randomInt(1, 3),
+            renderMode: "plain_text",
+            answerType: "int",
+            cognitive: { steps: 1, abstraction: 0.06, notationComplexity: 0.05, visualInterpretation: 0, mistakeLikelihood: 0.1 },
+            tags: ["arithmetic", "addition", "tiny"],
+          };
+        },
+      },
+      {
+        subtype: "tiny-subtract",
+        weight: 4,
+        generate() {
+          const b = randomInt(1, 9);
+          const correct = randomInt(1, 9);
+          const a = correct + b;
+          const wrongs = pickTinyArithmeticWrongs(correct, 24);
+          return {
+            prompt: `${a} - ${b}`,
+            correctAnswer: String(correct),
+            wrongAnswers: wrongs,
+            explanation: `Start at ${a} and take away ${b} to get ${correct}.`,
+            estimatedSolveTime: randomInt(1, 3),
+            renderMode: "plain_text",
+            answerType: "int",
+            cognitive: { steps: 1, abstraction: 0.07, notationComplexity: 0.06, visualInterpretation: 0, mistakeLikelihood: 0.11 },
+            tags: ["arithmetic", "subtraction", "tiny"],
+          };
+        },
+      },
+    ],
     easy: [
       {
         subtype: "single-step-add",
@@ -2278,6 +2349,7 @@ function graphsFunctionsGenerators() {
   };
 
   return {
+    tiny: weightedEntries("tiny", easyFactories),
     easy: weightedEntries("easy", easyFactories),
     medium: weightedEntries("medium", mediumFactories),
     hard: weightedEntries("hard", hardFactories),
@@ -2648,13 +2720,23 @@ const GENERATOR_BANK = {
   calculus: calculusGenerators(),
 };
 
+function resolveGeneratorFamilies(safeTopic, safeDifficulty) {
+  const bank = GENERATOR_BANK[safeTopic];
+  if (!bank) return GENERATOR_BANK.arithmetic.easy;
+  const direct = bank[safeDifficulty];
+  if (Array.isArray(direct) && direct.length > 0) return direct;
+  if (safeDifficulty === "tiny" && Array.isArray(bank.easy) && bank.easy.length > 0) return bank.easy;
+  if (Array.isArray(bank.easy) && bank.easy.length > 0) return bank.easy;
+  return GENERATOR_BANK.arithmetic.easy;
+}
+
 function generateQuestion(topic, difficulty, scopeKeyOrOptions = "global", maybeOptions = {}) {
   const context = parseGenerationContext(scopeKeyOrOptions, maybeOptions);
   const scopeKey = context.scopeKey;
   const safeTopic = normalizeTopic(topic);
   const safeDifficulty = normalizeDifficulty(difficulty);
   const rules = getRules(safeTopic, safeDifficulty);
-  const families = GENERATOR_BANK[safeTopic]?.[safeDifficulty] ?? GENERATOR_BANK.arithmetic.easy;
+  const families = resolveGeneratorFamilies(safeTopic, safeDifficulty);
 
   for (let attempt = 0; attempt < GLOBAL_TUNING.retryBudget; attempt += 1) {
     const family = pickSubtypeWithRotation(families, scopeKey, safeTopic, safeDifficulty);
@@ -2778,6 +2860,12 @@ function firstAnswer(question) {
 }
 
 const DIFFICULTY_GAMEPLAY_PROFILE = {
+  tiny: {
+    readingLoad: "minimal",
+    expectedSeconds: DIFFICULTY_PROFILE.tiny.expectedSolveSeconds,
+    maxSteps: DIFFICULTY_PROFILE.tiny.maxSteps,
+    pressure: "gentle",
+  },
   easy: {
     readingLoad: "low",
     expectedSeconds: DIFFICULTY_PROFILE.easy.expectedSolveSeconds,
@@ -2814,6 +2902,7 @@ const QUESTION_CURRICULUM = {
     TOPICS.map((topic) => [
       topic,
       {
+        tiny: (GENERATOR_BANK[topic].tiny ?? GENERATOR_BANK[topic].easy).map((x) => x.subtype),
         easy: GENERATOR_BANK[topic].easy.map((x) => x.subtype),
         medium: GENERATOR_BANK[topic].medium.map((x) => x.subtype),
         hard: GENERATOR_BANK[topic].hard.map((x) => x.subtype),

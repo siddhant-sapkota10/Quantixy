@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Quantixy icon">
+  <defs>
+    <radialGradient id="bg" cx="35%" cy="25%" r="80%">
+      <stop offset="0%" stop-color="#38c7e8"/>
+      <stop offset="48%" stop-color="#111c3b"/>
+      <stop offset="100%" stop-color="#050815"/>
+    </radialGradient>
+    <linearGradient id="mark" x1="90" x2="420" y1="84" y2="432">
+      <stop stop-color="#facc15"/>
+      <stop offset="52%" stop-color="#38c7e8"/>
+      <stop offset="100%" stop-color="#7c5cff"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <path fill="none" stroke="#ffffff" stroke-opacity=".12" stroke-width="2" d="M80 256h352M256 80v352M122 122l268 268M390 122 122 390"/>
+  <circle cx="256" cy="256" r="154" fill="none" stroke="#38c7e8" stroke-opacity=".35" stroke-width="10"/>
+  <path fill="url(#mark)" d="M169 159h174c18 0 31 17 26 34l-30 112h46l-22 48h-37l-18 66h-55l18-66h-73l-18 66h-55l18-66h-47l22-48h38l27-98h-47l22-48Zm67 48-27 98h73l27-98h-73Z"/>
+  <circle cx="374" cy="138" r="20" fill="#facc15"/>
+</svg>

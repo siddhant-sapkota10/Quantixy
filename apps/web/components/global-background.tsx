@@ -86,7 +86,11 @@ export function GlobalBackground() {
     if (pathname?.startsWith("/play")) return PAGE_THEMES.play;
     if (pathname?.startsWith("/leaderboard")) return PAGE_THEMES.leaderboard;
     if (pathname?.startsWith("/profile")) return PAGE_THEMES.profile;
-    if (pathname?.startsWith("/reset-password") || pathname?.startsWith("/shop")) {
+    if (
+      pathname?.startsWith("/reset-password") ||
+      pathname?.startsWith("/shop") ||
+      pathname?.startsWith("/loadout")
+    ) {
       return PAGE_THEMES.account;
     }
 

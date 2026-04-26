@@ -66,6 +66,12 @@ type LobbyPlayer = {
   isHost: boolean;
 };
 
+type HitEffectId = "none" | "lightning_strike" | "fire_burst" | "pixel_glitch";
+
+function normalizeHitEffectId(value: string | null | undefined): HitEffectId {
+  return value === "lightning_strike" || value === "fire_burst" || value === "pixel_glitch" ? value : "none";
+}
+
 type RoomLobbyState = {
   roomCode: string;
   topic: string;
@@ -427,6 +433,11 @@ type TimeoutDecisionPromptState = {
   token: number;
 };
 
+type SocketRecoveryState = {
+  active: boolean;
+  message: string;
+};
+
 export function GameClient({
   initialTopic,
   initialDifficulty,
@@ -450,6 +461,11 @@ export function GameClient({
   const [retryKey, setRetryKey] = useState(0);
   const [socket, setSocket] = useState<GameSocket | null>(null);
   const [status, setStatus] = useState<GameStatus>("connecting");
+  const statusRef = useRef<GameStatus>("connecting");
+  const [socketRecovery, setSocketRecovery] = useState<SocketRecoveryState>({
+    active: false,
+    message: ""
+  });
   const [scores, setScores] = useState<ScoreState>(initialScores);
   const [ratings, setRatings] = useState<RatingState>(initialRatings);
   const [eliminated, setEliminated] = useState({ you: false, opponent: false });
@@ -500,8 +516,13 @@ export function GameClient({
     height: 0,
     keyboardOpen: false,
     compact: false,
-    cramped: false
+    cramped: false,
+    reducedMotion: false
   });
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   // Opponent presence / activity state
   const [opponentActivity, setOpponentActivity] = useState<OpponentActivity>("idle");
@@ -545,6 +566,7 @@ export function GameClient({
       const keyboardOpen = baselineHeight - height > 160;
       const compact = height < 820 || width < 390;
       const cramped = height < 700 || keyboardOpen;
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
       setViewportState((previous) => {
         if (
@@ -552,26 +574,30 @@ export function GameClient({
           previous.height === height &&
           previous.keyboardOpen === keyboardOpen &&
           previous.compact === compact &&
-          previous.cramped === cramped
+          previous.cramped === cramped &&
+          previous.reducedMotion === reducedMotion
         ) {
           return previous;
         }
 
-        return { width, height, keyboardOpen, compact, cramped };
+        return { width, height, keyboardOpen, compact, cramped, reducedMotion };
       });
     };
 
     updateViewportState();
 
     const visualViewport = window.visualViewport;
+    const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     window.addEventListener("resize", updateViewportState);
     visualViewport?.addEventListener("resize", updateViewportState);
     visualViewport?.addEventListener("scroll", updateViewportState);
+    motionQuery.addEventListener("change", updateViewportState);
 
     return () => {
       window.removeEventListener("resize", updateViewportState);
       visualViewport?.removeEventListener("resize", updateViewportState);
       visualViewport?.removeEventListener("scroll", updateViewportState);
+      motionQuery.removeEventListener("change", updateViewportState);
     };
   }, []);
   /** Peak answer-streak reached by local player this match. */
@@ -590,6 +616,8 @@ export function GameClient({
   const [yourStreakEffect, setYourStreakEffect] = useState<StreakEffectId>("none");
   const [opponentStreakEffect, setOpponentStreakEffect] = useState<StreakEffectId>("none");
   const [yourEmotePack, setYourEmotePack] = useState<EmotePackId>("starter");
+  const [yourHitEffect, setYourHitEffect] = useState<HitEffectId>("none");
+  const [opponentHitEffect, setOpponentHitEffect] = useState<HitEffectId>("none");
 
   // Health bar system — client-side only, derived from pointScored events
   const MAX_HP = 150;
@@ -878,6 +906,7 @@ export function GameClient({
     setSocket(nextSocket);
     console.log("[client] connecting to Socket.io server");
     setStatus("connecting");
+    setSocketRecovery({ active: false, message: "" });
     setScores(initialScores);
     setRatings(initialRatings);
     // strikes removed (HP-only mistakes)
@@ -921,6 +950,8 @@ export function GameClient({
     setYourStreakEffect("none");
     setOpponentStreakEffect("none");
     setYourEmotePack("starter");
+    setYourHitEffect("none");
+    setOpponentHitEffect("none");
     setIsFinalPhase(false);
     setScoreImpactKey({ you: 0, opponent: 0 });
     setClutchMoment({ key: 0, side: null });
@@ -943,6 +974,7 @@ export function GameClient({
       if (!nextSocket.connected) {
         console.error("[client] connection timed out after 20 s");
         setStatus("failed");
+        setSocketRecovery({ active: false, message: "" });
       }
     }, 20000);
 
@@ -952,6 +984,7 @@ export function GameClient({
     const handleConnect = async () => {
       clearTimeout(connectionTimeout);
       connectErrorCount = 0;
+      setSocketRecovery({ active: false, message: "" });
       // Log which transport was negotiated (polling or websocket) to help debug.
       console.log(`[client] connected -> id=${nextSocket.id} transport=${nextSocket.io.engine.transport.name}`);
       const supabase = getSupabaseClient();
@@ -1005,9 +1038,46 @@ export function GameClient({
     const handleConnectError = (error: Error) => {
       connectErrorCount++;
       console.error(`[client] socket connect_error (attempt ${connectErrorCount})`, error.message);
+      setSocketRecovery({
+        active: true,
+        message: connectErrorCount >= 2 ? "Still trying to reach the arena..." : "Reconnecting to the arena..."
+      });
       if (connectErrorCount >= 3) {
         setStatus("failed");
+        setSocketRecovery({ active: false, message: "" });
       }
+    };
+
+    const handleDisconnect = (reason: string) => {
+      console.warn("[client] socket disconnected", reason);
+      if (statusRef.current === "playing" || statusRef.current === "countdown" || statusRef.current === "room-lobby") {
+        setSocketRecovery({
+          active: true,
+          message: "Connection dropped. Rejoining the arena..."
+        });
+      }
+    };
+
+    const handleReconnectAttempt = (attempt: number) => {
+      setSocketRecovery({
+        active: true,
+        message: `Reconnecting to the arena... attempt ${attempt}`
+      });
+    };
+
+    const handleReconnect = () => {
+      setSocketRecovery({
+        active: true,
+        message: "Reconnected. Resyncing match state..."
+      });
+      window.setTimeout(() => {
+        setSocketRecovery({ active: false, message: "" });
+      }, 1200);
+    };
+
+    const handleReconnectFailed = () => {
+      setSocketRecovery({ active: false, message: "" });
+      setStatus("failed");
     };
 
     const handleAuthRequired = (payload: { message?: string }) => {
@@ -1345,6 +1415,8 @@ export function GameClient({
       yourStreakEffect?: string;
       opponentStreakEffect?: string;
       yourEmotePack?: string;
+      yourHitEffect?: string;
+      opponentHitEffect?: string;
       ultimateType?: string;
       ultimateName?: string;
       ultimateCharge?: number;
@@ -1392,6 +1464,8 @@ export function GameClient({
       setYourStreakEffect(normalizeStreakEffectId(payload.yourStreakEffect));
       setOpponentStreakEffect(normalizeStreakEffectId(payload.opponentStreakEffect));
       setYourEmotePack(normalizeEmotePackId(payload.yourEmotePack));
+      setYourHitEffect(normalizeHitEffectId(payload.yourHitEffect));
+      setOpponentHitEffect(normalizeHitEffectId(payload.opponentHitEffect));
       if (payload.ratings) {
         setRatings(payload.ratings);
       }
@@ -3105,7 +3179,11 @@ export function GameClient({
     };
 
     nextSocket.on("connect", handleConnect);
+    nextSocket.on("disconnect", handleDisconnect);
     nextSocket.on("connect_error", handleConnectError);
+    nextSocket.io.on("reconnect_attempt", handleReconnectAttempt);
+    nextSocket.io.on("reconnect", handleReconnect);
+    nextSocket.io.on("reconnect_failed", handleReconnectFailed);
     nextSocket.on("authRequired", handleAuthRequired);
     nextSocket.on("roomCreated", handleRoomCreated);
     nextSocket.on("roomJoined", handleRoomJoined);
@@ -3145,7 +3223,11 @@ export function GameClient({
         ultimateActivateTimeoutRef.current = null;
       }
       nextSocket.off("connect", handleConnect);
+      nextSocket.off("disconnect", handleDisconnect);
       nextSocket.off("connect_error", handleConnectError);
+      nextSocket.io.off("reconnect_attempt", handleReconnectAttempt);
+      nextSocket.io.off("reconnect", handleReconnect);
+      nextSocket.io.off("reconnect_failed", handleReconnectFailed);
       nextSocket.off("authRequired", handleAuthRequired);
       nextSocket.off("roomCreated", handleRoomCreated);
       nextSocket.off("roomJoined", handleRoomJoined);
@@ -3173,6 +3255,7 @@ export function GameClient({
       nextSocket.off("gameOver", handleGameOver);
       nextSocket.off("rematchStatus", handleRematchStatus);
       nextSocket.off("opponentLeft", handleOpponentLeft);
+      nextSocket.removeAllListeners();
       nextSocket.disconnect();
       setSocket(null);
     };
@@ -3453,6 +3536,7 @@ export function GameClient({
   const compactGameplay = isInMatchShell && viewportState.compact;
   const crampedGameplay = isInMatchShell && viewportState.cramped;
   const keyboardOpenDuringGameplay = isActiveGameplay && viewportState.keyboardOpen;
+  const reduceBattleMotion = viewportState.reducedMotion || (isInMatchShell && (compactGameplay || crampedGameplay));
   const emotesEnabled = status === "playing" || status === "countdown" || status === "finished";
   const youEliminated = eliminated.you;
   const opponentEliminated = eliminated.opponent;
@@ -3869,7 +3953,7 @@ export function GameClient({
   // Dedicated in-match layout (competitive HUD + sticky action bar).
   if (isInMatchShell) {
     return (
-      <section className="fixed inset-0 z-10 overflow-hidden text-white">
+      <section className="q-match-lock fixed inset-0 z-10 overflow-hidden text-white">
         {/* Overlays */}
         <GameOverOverlay result={null} />
         <UltimateActivationOverlay cue={ultimateCue} />
@@ -3877,8 +3961,9 @@ export function GameClient({
           ultimate={ultimateFxSnapshot}
           combatFx={combatFx}
           neuralInputUnlockAt={neuralInputUnlockAt}
+          reduced={reduceBattleMotion}
         />
-        {isSystemCorruptActive ? (
+        {isSystemCorruptActive && !reduceBattleMotion ? (
           <motion.div
             key={`corrupt-ui-${Math.max(ultimate.shadowCorruptUntil, ultimate.opponentShadowCorruptUntil)}`}
             aria-hidden="true"
@@ -3909,6 +3994,20 @@ export function GameClient({
           </div>
         </div>
         <AnimatePresence>
+          {socketRecovery.active ? (
+            <motion.div
+              key="socket-recovery"
+              className="pointer-events-none absolute left-1/2 top-[calc(env(safe-area-inset-top,0px)+0.75rem)] z-50 -translate-x-1/2 rounded-full border border-amber-300/35 bg-slate-950/94 px-4 py-2 text-center text-[11px] font-black uppercase tracking-[0.18em] text-amber-100 shadow-[0_14px_34px_rgba(2,6,23,0.55)]"
+              initial={{ opacity: 0, y: -8, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.96 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+            >
+              {socketRecovery.message || "Reconnecting..."}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+        <AnimatePresence>
           {ultimateToast ? (
             <motion.div
               key={`ultimate-toast-${ultimateToast.id}`}
@@ -3936,14 +4035,13 @@ export function GameClient({
 
         <div
           className={cn(
-            "flex min-h-[100dvh] flex-col",
-            compactGameplay ? "overflow-y-auto overscroll-contain" : "h-[100dvh] overflow-hidden"
+            "flex h-[100dvh] min-h-[100dvh] flex-col overflow-hidden overscroll-none"
           )}
         >
           {/* Top HUD */}
           <div
             className={cn(
-              "shrink-0 px-3 pb-2 pt-2.5 sm:px-5 sm:pb-2.5 sm:pt-3",
+              "shrink-0 px-3 pb-2 pt-[calc(env(safe-area-inset-top,0px)+0.625rem)] sm:px-5 sm:pb-2.5 sm:pt-[calc(env(safe-area-inset-top,0px)+0.75rem)]",
               compactGameplay && "pb-1.5 pt-2 sm:pb-2"
             )}
           >
@@ -4003,7 +4101,12 @@ export function GameClient({
                       typeof latestYouRawDamage === "number" &&
                       latestYouRawDamage > 0 &&
                       youHitKey > 0
-                        ? { hitKey: youHitKey, amount: latestYouRawDamage, flashTier: youDamageFlashTier }
+                        ? {
+                            hitKey: youHitKey,
+                            amount: latestYouRawDamage,
+                            flashTier: youDamageFlashTier,
+                            hitEffect: opponentHitEffect,
+                          }
                         : null,
                   }}
                 />
@@ -4068,7 +4171,8 @@ export function GameClient({
                         ? {
                             hitKey: opponentHitKey,
                             amount: latestOpponentRawDamage,
-                            flashTier: opponentDamageFlashTier
+                            flashTier: opponentDamageFlashTier,
+                            hitEffect: yourHitEffect,
                           }
                         : null,
                   }}
@@ -4084,7 +4188,7 @@ export function GameClient({
               compactGameplay && "py-2.5 sm:py-3 md:py-4"
             )}
           >
-            <motion.div animate={animState.questionShakeControls} className="mx-auto w-full max-w-3xl md:max-w-4xl lg:max-w-5xl">
+            <motion.div animate={reduceBattleMotion ? undefined : animState.questionShakeControls} className="mx-auto w-full max-w-3xl md:max-w-4xl lg:max-w-5xl">
               <div className={cn("q-card-strong relative rounded-[1.5rem] p-3 text-center sm:p-6 md:p-8", compactGameplay && "sm:p-4 md:p-5")}>
                 <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-textSecondary/70">
                   {isCountdown ? "Countdown" : "Question"}
@@ -4122,7 +4226,7 @@ export function GameClient({
                 </div>
 
                 <FrostBurst active={animState.frostBurstActive} />
-                <SnowfallOverlay active={animState.snowfallActive} />
+                <SnowfallOverlay active={animState.snowfallActive} reduced={reduceBattleMotion} />
               </div>
             </motion.div>
           </div>
@@ -4209,7 +4313,7 @@ export function GameClient({
                       spellCheck={false}
                       enterKeyHint="go"
                       className={cn(
-                        "neon-input h-12 min-w-0 flex-1 rounded-2xl px-4 disabled:cursor-not-allowed disabled:opacity-60",
+                        "neon-input h-12 min-w-0 flex-1 rounded-2xl px-4 text-base disabled:cursor-not-allowed disabled:opacity-60",
                         compactGameplay && "h-11"
                       )}
                     />
