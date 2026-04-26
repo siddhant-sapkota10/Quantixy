@@ -51,6 +51,47 @@ function getGrantId(item: CoinShopItem) {
   return item.grantId;
 }
 
+function withEquippedItem(status: CoinShopStatus | null, item: LoadoutItem): CoinShopStatus | null {
+  if (!status) return status;
+
+  if (item.kind === "avatar") {
+    return {
+      ...status,
+      equipped: { ...status.equipped, avatar: normalizeAvatarId(item.id) },
+    };
+  }
+
+  if (item.kind === "emote_pack") {
+    return {
+      ...status,
+      equipped: { ...status.equipped, emotePack: item.id as EmotePackId },
+    };
+  }
+
+  if (item.kind === "hit_effect") {
+    return {
+      ...status,
+      equipped: { ...status.equipped, hitEffect: item.id },
+    };
+  }
+
+  if (item.kind === "avatar_skin") {
+    return {
+      ...status,
+      equipped: { ...status.equipped, avatarSkin: item.id },
+    };
+  }
+
+  if (item.kind === "title") {
+    return {
+      ...status,
+      equipped: { ...status.equipped, title: item.id },
+    };
+  }
+
+  return status;
+}
+
 function buildLoadoutItems(status: CoinShopStatus | null): Record<LoadoutKind, LoadoutItem[]> {
   const ownedAvatars = new Set(status?.owned.avatars ?? ["flash", "shadow", "guardian", "inferno"]);
   const ownedEmotes = new Set(status?.owned.emotePacks ?? ["starter"]);
@@ -183,8 +224,8 @@ function LoadoutCard({
       layout
       className={`relative flex min-h-[17rem] flex-col overflow-hidden rounded-3xl border p-4 shadow-[0_16px_44px_rgba(2,6,23,0.5)] transition-[border-color,box-shadow,transform] duration-200 ease-out ${
         item.equipped
-          ? "border-[rgba(56,189,248,0.45)] bg-gradient-to-b from-cyan-400/[0.12] to-slate-950/92 ring-1 ring-cyan-300/15"
-          : "border-white/11 bg-slate-950/88 hover:-translate-y-px hover:border-white/18 hover:shadow-[0_0_22px_rgba(56,189,248,0.1)]"
+          ? "border-[rgba(56,189,248,0.45)] bg-gradient-to-b from-cyan-400/[0.12] to-[var(--qx-card)] ring-1 ring-cyan-300/15"
+          : "border-white/11 bg-[var(--qx-card)] hover:-translate-y-px hover:border-white/18 hover:bg-[var(--qx-card-hover)] hover:shadow-[0_0_22px_rgba(56,189,248,0.1)]"
       }`}
       animate={
         item.equipped
@@ -255,7 +296,7 @@ export function LoadoutClient() {
   const load = async () => {
     if (!session?.access_token) {
       setLoading(false);
-      return;
+      return null;
     }
     setLoading(true);
     try {
@@ -266,8 +307,10 @@ export function LoadoutClient() {
       if (!response.ok) throw new Error(payload.error ?? "Unable to load loadout.");
       setStatus(payload);
       setError(null);
+      return payload;
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load loadout.");
+      return null;
     } finally {
       setLoading(false);
     }
@@ -276,6 +319,12 @@ export function LoadoutClient() {
   useEffect(() => {
     if (!authLoading) void load();
   }, [authLoading, session?.access_token]);
+
+  useEffect(() => {
+    if (!message) return;
+    const timer = window.setTimeout(() => setMessage(null), 1800);
+    return () => window.clearTimeout(timer);
+  }, [message]);
 
   const groups = useMemo(() => buildLoadoutItems(status), [status]);
   const equippedAvatar = groups.avatar.find((item) => item.equipped) ?? groups.avatar[0];
@@ -318,7 +367,9 @@ export function LoadoutClient() {
       }
       soundManager.play("uiClick", { volume: 0.2, rate: 1.15 });
       setMessage(`Equipped: ${item.name}`);
+      setStatus((current) => withEquippedItem(current, item));
       await load();
+      setStatus((current) => withEquippedItem(current, item));
     } catch (equipError) {
       soundManager.play("wrong", { volume: 0.18 });
       setError(equipError instanceof Error ? equipError.message : "Unable to equip item.");
@@ -340,8 +391,12 @@ export function LoadoutClient() {
   }
 
   return (
-    <PageContent size="wide" variant="plain" className="w-full space-y-8 sm:space-y-10">
-      <div className="relative overflow-hidden rounded-[1.35rem] border border-[var(--qx-border-soft)] bg-[var(--qx-panel)] p-4 shadow-[0_28px_90px_rgba(0,0,0,0.62),inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-xl sm:rounded-3xl sm:p-6">
+    <PageContent
+      size="wide"
+      variant="plain"
+      className="w-full max-w-[min(110rem,calc(100vw-1rem))] px-2 sm:px-4"
+    >
+      <div className="flex min-w-0 flex-col gap-8 sm:gap-10">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <span className="inline-flex rounded-full border border-cyan-300/32 bg-cyan-400/14 px-3 py-1 text-[10px] font-black uppercase tracking-[0.3em] text-cyan-50">
@@ -357,8 +412,7 @@ export function LoadoutClient() {
           </Link>
         </div>
 
-        <div className="q-section-divider mt-8 pt-8">
-          <div className="q-panel-strong rounded-[1.75rem] p-4 sm:p-5">
+        <div className="q-panel-strong rounded-[1.75rem] p-4 sm:p-5">
             <p className="text-xs font-black uppercase tracking-[0.26em] text-cyan-100/85">Current Loadout</p>
             <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-200/85">
               What you bring into online matches — change slots below anytime.
@@ -373,35 +427,37 @@ export function LoadoutClient() {
               ].map(([label, value]) => (
                 <div
                   key={label}
-                  className="rounded-2xl border border-white/12 bg-slate-950/88 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
+                  className="rounded-2xl border border-white/12 bg-[var(--qx-card)] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
                 >
                   <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-300/88">{label}</p>
                   <p className="mt-1 truncate text-sm font-black text-white">{value}</p>
                 </div>
               ))}
             </div>
+        </div>
+
+        {message ? (
+          <div className="fixed left-1/2 top-[5.75rem] z-[60] w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border border-emerald-300/24 bg-emerald-950/90 px-4 py-3 text-sm font-semibold text-emerald-100 shadow-[0_18px_48px_rgba(0,0,0,0.38)] backdrop-blur-xl">
+            {message}
           </div>
-        </div>
-      </div>
+        ) : null}
+        {error ? <div className="rounded-2xl border border-rose-300/20 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-100">{error}</div> : null}
 
-      {message ? <div className="rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-100">{message}</div> : null}
-      {error ? <div className="rounded-2xl border border-rose-300/20 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-100">{error}</div> : null}
-
-      {loading ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, index) => <div key={index} className="h-72 animate-pulse rounded-3xl border border-white/10 bg-white/[0.04]" />)}
-        </div>
-      ) : (
-        ([
+        {loading ? (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, index) => <div key={index} className="h-72 animate-pulse rounded-3xl border border-white/10 bg-white/[0.04]" />)}
+          </div>
+        ) : (
+          ([
           ["avatar", "Gameplay Avatar / Character", "Pick who you play as in matches."],
           ["avatar_skin", "Avatar Skin", "Optional visual layer on your equipped avatar."],
           ["emote_pack", "Emote Pack", "Quick reactions and flair during duels."],
           ["hit_effect", "Hit Effect", "Damage feedback when you land hits."],
           ["title", "Title / Badge", "Shown next to your name — more titles coming soon."],
-        ] as Array<[LoadoutKind, string, string]>).map(([kind, title, helper]) => (
+          ] as Array<[LoadoutKind, string, string]>).map(([kind, title, helper]) => (
           <section
             key={kind}
-            className="rounded-[2rem] border border-white/11 bg-slate-950/88 p-4 shadow-[0_20px_56px_rgba(2,6,23,0.48),inset_0_1px_0_rgba(255,255,255,0.04)] sm:p-6"
+            className="space-y-5 sm:space-y-6"
           >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div className="space-y-1">
@@ -413,7 +469,7 @@ export function LoadoutClient() {
                 {groups[kind].filter((item) => item.owned).length} owned
               </p>
             </div>
-            <div className="mt-6 grid gap-4 border-t border-white/10 pt-6 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-4 border-t border-white/10 pt-5 md:grid-cols-2 xl:grid-cols-3 sm:pt-6">
               {groups[kind].map((item) => (
                 <LoadoutCard
                   key={`${item.kind}:${item.id}`}
@@ -424,8 +480,9 @@ export function LoadoutClient() {
               ))}
             </div>
           </section>
-        ))
-      )}
+          ))
+        )}
+      </div>
     </PageContent>
   );
 }

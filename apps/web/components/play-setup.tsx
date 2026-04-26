@@ -362,7 +362,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
                   disabled={startPending}
                   className={`rounded-xl px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] transition-all duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 sm:text-xs ${
                     matchMode === m
-                      ? "bg-[linear-gradient(120deg,rgba(0,212,255,0.2),rgba(138,46,255,0.2))] text-cyan-100 shadow-[0_0_18px_rgba(0,212,255,0.2)]"
+                      ? "bg-[linear-gradient(120deg,rgba(34,211,238,0.18),rgba(139,92,246,0.18))] text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.14)]"
                       : "text-slate-400 hover:bg-indigo-500/12 hover:text-slate-200"
                   } ${startPending ? "cursor-not-allowed opacity-55" : "active:scale-[0.975]"}`}
                 >
@@ -407,7 +407,7 @@ export function PlaySetup({ mode = "pvp" }: PlaySetupProps) {
                     disabled={startPending}
                     className={`rounded-xl px-3 py-3 text-left transition-all duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
                       selected
-                        ? "bg-[linear-gradient(120deg,rgba(0,212,255,0.2),rgba(138,46,255,0.2))] text-cyan-100 shadow-[0_0_18px_rgba(0,212,255,0.2)]"
+                        ? "bg-[linear-gradient(120deg,rgba(34,211,238,0.18),rgba(139,92,246,0.18))] text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.14)]"
                         : "text-slate-400 hover:bg-indigo-500/12 hover:text-slate-200"
                     } ${startPending ? "cursor-not-allowed opacity-55" : "active:scale-[0.975]"}`}
                   >

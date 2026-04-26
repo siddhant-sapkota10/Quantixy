@@ -62,8 +62,8 @@ function DisplayNameOnboardingModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 px-4 pb-6 pt-10 sm:items-center sm:px-6 sm:pb-0 sm:pt-0">
-      <div className="max-h-[min(92dvh,720px)] w-full min-w-0 max-w-lg overflow-y-auto overscroll-contain rounded-2xl bg-black p-5 sm:rounded-[2rem] sm:p-6 md:p-8">
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-950/70 px-4 pb-6 pt-10 sm:items-center sm:px-6 sm:pb-0 sm:pt-0">
+      <div className="q-panel-strong max-h-[min(92dvh,720px)] w-full min-w-0 max-w-lg overflow-y-auto overscroll-contain rounded-2xl p-5 sm:rounded-[2rem] sm:p-6 md:p-8">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm uppercase tracking-[0.2em] text-slate-400">Welcome</p>
@@ -361,11 +361,11 @@ function AuthModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 px-4 pb-6 pt-10 sm:items-center sm:px-6 sm:pb-0 sm:pt-0">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/70 px-4 pb-6 pt-10 sm:items-center sm:px-6 sm:pb-0 sm:pt-0">
       <PageContent
         size="md"
         variant="plain"
-        className="max-h-[min(92dvh,720px)] w-full min-w-0 max-w-lg overflow-y-auto overscroll-contain rounded-2xl bg-black p-5 sm:rounded-[2rem] sm:p-6 md:p-8"
+        className="q-panel-strong max-h-[min(92dvh,720px)] w-full min-w-0 max-w-lg overflow-y-auto overscroll-contain rounded-2xl p-5 sm:rounded-[2rem] sm:p-6 md:p-8"
       >
         <div className="flex items-start justify-between gap-4">
           <div>

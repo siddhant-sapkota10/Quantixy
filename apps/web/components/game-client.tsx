@@ -3533,6 +3533,7 @@ export function GameClient({
   const compactGameplay = isInMatchShell && viewportState.compact;
   const crampedGameplay = isInMatchShell && viewportState.cramped;
   const keyboardOpenDuringGameplay = isActiveGameplay && viewportState.keyboardOpen;
+  const constrainedGameplay = crampedGameplay || keyboardOpenDuringGameplay;
   const reduceBattleMotion = viewportState.reducedMotion || (isInMatchShell && (compactGameplay || crampedGameplay));
   const emotesEnabled = status === "playing" || status === "countdown" || status === "finished";
   const youEliminated = eliminated.you;
@@ -4039,7 +4040,8 @@ export function GameClient({
           <div
             className={cn(
               "shrink-0 px-3 pb-2 pt-[calc(env(safe-area-inset-top,0px)+0.625rem)] sm:px-5 sm:pb-2.5 sm:pt-[calc(env(safe-area-inset-top,0px)+0.75rem)]",
-              compactGameplay && "pb-1.5 pt-2 sm:pb-2"
+              compactGameplay && "pb-1.5 pt-2 sm:pb-2",
+              keyboardOpenDuringGameplay && "hidden"
             )}
           >
             <div className={cn("q-card relative rounded-[1.55rem] p-2 sm:p-3", crampedGameplay && "sm:p-2.5")}>
@@ -4182,11 +4184,12 @@ export function GameClient({
           <div
             className={cn(
               "qx-match-scroll flex min-h-0 flex-1 flex-col items-stretch justify-start px-3 py-3 sm:px-5 sm:py-4 md:justify-center md:py-10",
-              compactGameplay && "py-2.5 sm:py-3 md:py-4"
+              compactGameplay && "py-2.5 sm:py-3 md:py-4",
+              constrainedGameplay && "justify-center py-2 sm:py-2"
             )}
           >
             <motion.div animate={reduceBattleMotion ? undefined : animState.questionShakeControls} className="mx-auto w-full max-w-3xl md:max-w-4xl lg:max-w-5xl">
-              <div className={cn("q-card-strong relative rounded-[1.5rem] p-3 text-center sm:p-6 md:p-8", compactGameplay && "sm:p-4 md:p-5")}>
+              <div className={cn("q-card-strong relative rounded-[1.5rem] p-3 text-center sm:p-6 md:p-8", compactGameplay && "sm:p-4 md:p-5", constrainedGameplay && "p-2.5 sm:p-3")}>
                 <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-textSecondary/70">
                   {isCountdown ? "Countdown" : "Question"}
                 </p>
@@ -4198,8 +4201,9 @@ export function GameClient({
                       question={currentQuestionData}
                       fallbackPrompt={currentQuestion}
                       compact
+                      fitViewport
                       promptClassName={
-                        crampedGameplay
+                        constrainedGameplay
                           ? "text-lg font-black tracking-tight text-white sm:text-2xl md:text-3xl"
                           : compactGameplay
                             ? "text-xl font-black tracking-tight text-white sm:text-3xl md:text-4xl"
@@ -4209,7 +4213,7 @@ export function GameClient({
                   )}
                 </div>
 
-                <div className={cn("mt-3 min-h-[2.25rem]", crampedGameplay && "min-h-[1.75rem]")}>
+                <div className={cn("mt-3 min-h-[2.25rem]", constrainedGameplay && "mt-2 min-h-[1.25rem]")}>
                   {primaryStatus ? (
                     <p className={`text-xs font-black uppercase tracking-[0.22em] ${primaryStatus.color}`}>
                       {primaryStatus.text}
@@ -4234,11 +4238,11 @@ export function GameClient({
               className={cn(
                 "shrink-0 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 sm:px-5",
                 compactGameplay && "pt-2",
-                keyboardOpenDuringGameplay && "pb-[calc(env(safe-area-inset-bottom,0px)+8px)]"
+                keyboardOpenDuringGameplay && "pb-[calc(env(safe-area-inset-bottom,0px)+8px)] pt-1"
               )}
             >
               <div className="mx-auto w-full max-w-3xl">
-                <div className={cn("mb-2 flex items-center justify-start sm:justify-center", crampedGameplay && "mb-1.5")}>
+                <div className={cn("mb-2 flex items-center justify-start sm:justify-center", constrainedGameplay && "hidden")}>
                 <EmoteBar
                   emotes={availableEmotes}
                   open={emoteBarOpen && emotesEnabled}
@@ -4261,7 +4265,7 @@ export function GameClient({
                   <WorkingScratchpad answerInputLocked={inputsLocked} />
                 </div>
                 {Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0 ? (
-                  <div className={cn("grid grid-cols-1 gap-2 sm:grid-cols-2", compactGameplay && "sm:grid-cols-1")}>
+                  <div className={cn("grid grid-cols-1 gap-2 sm:grid-cols-2", compactGameplay && "grid-cols-2 gap-1.5 sm:grid-cols-2")}>
                     {currentQuestionData.options.map((option, idx) => (
                       <Button
                         key={`${option}-${idx}`}
@@ -4269,7 +4273,7 @@ export function GameClient({
                         variant="secondary"
                         className={cn(
                           "relative min-h-[48px] w-full justify-start py-3 text-left text-sm sm:min-h-[2.75rem] sm:py-2",
-                          compactGameplay && "min-h-[44px] py-2.5 sm:min-h-[2.6rem]"
+                          compactGameplay && "min-h-[42px] px-2.5 py-2 text-center text-xs sm:min-h-[2.6rem] sm:text-sm"
                         )}
                         disabled={inputsLocked || youEliminated || feedback.youAnsweredCurrent}
                         onClick={() => handleOptionSubmit(option)}
@@ -4329,7 +4333,9 @@ export function GameClient({
                   </div>
                 ) : null}
 
-                {skipQuestionButton}
+                <div className={cn(constrainedGameplay && "hidden")}>
+                  {skipQuestionButton}
+                </div>
 
                 {/* Abilities row: keep things orderly (no empty placeholder box). */}
                 <div

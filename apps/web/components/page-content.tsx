@@ -24,15 +24,20 @@ export function PageContent({
   return (
     <div
       className={cn(
-        "q-content-focus mx-auto w-full min-w-0 shrink-0 px-4 sm:px-6",
+        "mx-auto w-full min-w-0 shrink-0 px-4 sm:px-6",
         SIZE_CLASS[size],
         variant === "panel"
-          ? "q-card-strong relative rounded-[1.75rem] p-4 sm:p-6"
+          ? "q-content-focus q-card-strong relative rounded-[1.75rem] p-4 sm:p-6"
           : null,
         className
       )}
     >
-      <div className={cn(variant === "panel" ? "relative z-[1] min-w-0" : "relative z-[1] min-w-0")}>
+      <div
+        className={cn(
+          "relative z-[1] min-w-0",
+          variant === "plain" ? "flex flex-col gap-8 sm:gap-10" : null
+        )}
+      >
         {children}
       </div>
     </div>

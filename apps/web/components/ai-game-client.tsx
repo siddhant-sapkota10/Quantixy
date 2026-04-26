@@ -178,6 +178,8 @@ export function AiGameClient({
   const hpRef = useRef({ you: DUEL_MAX_HP, opponent: DUEL_MAX_HP });
   const emoteLabelIdRef = useRef(0);
   const currentAnswerRef = useRef(""); // correct answer for the current question
+  const answerInputRef = useRef<HTMLInputElement | null>(null);
+  const [focusPulseKey, setFocusPulseKey] = useState(0);
   const currentQuestionDataRef = useRef<DuelQuestion | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const aiTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -274,6 +276,19 @@ export function AiGameClient({
   useEffect(() => { botShieldedMissRef.current = botShieldedMiss; }, [botShieldedMiss]);
   useEffect(() => { playerInputLockedUntilRef.current = playerInputLockedUntil; }, [playerInputLockedUntil]);
   useEffect(() => { hpRef.current = hp; }, [hp]);
+
+  const focusAnswerInput = useCallback((opts: { select?: boolean } = {}) => {
+    const el = answerInputRef.current;
+    if (!el || document.activeElement === el) return;
+    el.focus({ preventScroll: true });
+    if (opts.select) {
+      try {
+        el.select();
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
 
   const playFinalSecondCue = (secondsLeft: number) => {
     if (secondsLeft <= 0 || secondsLeft > FINAL_PHASE_SECONDS) {
@@ -528,6 +543,7 @@ export function AiGameClient({
     setCurrentQuestion(question);
     setCurrentQuestionData(questionData);
     setAnswer("");
+    setFocusPulseKey((key) => key + 1);
   }, [difficulty, topic]);
 
   const scheduleAiAttempt = useCallback(() => {
@@ -992,8 +1008,23 @@ export function AiGameClient({
     !isFinished &&
     (viewportState.cramped || (viewportState.width > 0 && viewportState.width < 480));
   const keyboardOpenInDuel = isDuelMode && !isFinished && viewportState.keyboardOpen;
+  const constrainedDuelUi = crampedDuelUi || keyboardOpenInDuel;
   const compactTextEntryUi = compactDuelUi && !hasMultipleChoiceOptions;
   const reduceBattleMotion = viewportState.reducedMotion || (isDuelMode && !isFinished && (compactDuelUi || crampedDuelUi));
+
+  useEffect(() => {
+    if (status !== "playing") return;
+    if (youEliminated || isPlayerInputLocked || hasMultipleChoiceOptions) return;
+    const t = window.setTimeout(() => focusAnswerInput(), 50);
+    return () => window.clearTimeout(t);
+  }, [
+    status,
+    youEliminated,
+    isPlayerInputLocked,
+    hasMultipleChoiceOptions,
+    focusPulseKey,
+    focusAnswerInput
+  ]);
 
   const duelAnswerForm = isPlaying ? (
     <form className={cn("flex w-full flex-col gap-2", crampedDuelUi && "gap-1.5")} onSubmit={handleSubmit}>
@@ -1010,7 +1041,7 @@ export function AiGameClient({
         </div>
       ) : null}
       {hasMultipleChoiceOptions ? (
-        <div className={cn("grid grid-cols-1 gap-2 sm:grid-cols-2", compactDuelUi && "gap-1.5 sm:grid-cols-1")}>
+        <div className={cn("grid grid-cols-1 gap-2 sm:grid-cols-2", compactDuelUi && "grid-cols-2 gap-1.5 sm:grid-cols-2")}>
           {questionOptions.map((option, idx) => (
             <Button
               key={`${option}-${idx}`}
@@ -1018,7 +1049,7 @@ export function AiGameClient({
               variant="secondary"
               className={cn(
                 "relative min-h-[48px] w-full justify-start py-3 text-left text-sm sm:min-h-[2.75rem] sm:py-2",
-                compactDuelUi && "min-h-[44px] px-3 py-2.5 text-sm sm:min-h-[2.35rem] sm:py-2"
+                compactDuelUi && "min-h-[42px] px-2.5 py-2 text-center text-xs sm:min-h-[2.35rem] sm:py-2 sm:text-sm"
               )}
               disabled={inputsLocked || youEliminated}
               onClick={() => handleOptionSubmit(option)}
@@ -1032,6 +1063,7 @@ export function AiGameClient({
       {!hasMultipleChoiceOptions ? (
         <div className={cn("flex items-stretch gap-2", compactDuelUi && "flex-col", compactTextEntryUi && "gap-1.5")}>
           <input
+            ref={answerInputRef}
             type="text"
             autoFocus
             value={answer}
@@ -1230,7 +1262,8 @@ export function AiGameClient({
           <div
             className={cn(
               "shrink-0 px-3 pb-2 pt-[calc(env(safe-area-inset-top,0px)+0.625rem)] sm:px-5 sm:pb-2.5 sm:pt-[calc(env(safe-area-inset-top,0px)+0.75rem)]",
-              compactDuelUi && "pb-1.5 pt-2 sm:pb-2"
+              compactDuelUi && "pb-1.5 pt-2 sm:pb-2",
+              keyboardOpenInDuel && "hidden"
             )}
           >
             {compactDuelUi ? compactDuelHud : (
@@ -1341,7 +1374,8 @@ export function AiGameClient({
             className={cn(
               "qx-match-scroll flex min-h-0 flex-1 flex-col items-stretch justify-start px-3 py-3 sm:px-5 sm:py-4 md:justify-center md:py-10",
               compactDuelUi && "py-2.5 sm:py-3 md:py-4",
-              compactTextEntryUi && "justify-center py-2"
+              compactTextEntryUi && "justify-center py-2",
+              constrainedDuelUi && "justify-center py-2 sm:py-2"
             )}
           >
             <motion.div animate={reduceBattleMotion ? undefined : animState.questionShakeControls} className="mx-auto flex w-full max-w-3xl flex-col gap-2 md:max-w-4xl lg:max-w-5xl">
@@ -1349,7 +1383,8 @@ export function AiGameClient({
                 className={cn(
                   "q-card-strong relative rounded-[1.5rem] p-3 text-center sm:p-6 md:p-8",
                   compactDuelUi && "p-2.5 sm:p-3",
-                  compactTextEntryUi && "p-2.5"
+                  compactTextEntryUi && "p-2.5",
+                  constrainedDuelUi && "p-2.5 sm:p-3"
                 )}
               >
                 <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-textSecondary/70">
@@ -1369,8 +1404,9 @@ export function AiGameClient({
                       question={currentQuestionData}
                       fallbackPrompt={currentQuestion}
                       compact
+                      fitViewport
                       promptClassName={
-                        crampedDuelUi
+                        constrainedDuelUi
                           ? "text-base font-black tracking-tight text-white sm:text-xl md:text-2xl"
                         : compactDuelUi
                           ? "text-lg font-black tracking-tight text-white sm:text-2xl md:text-3xl"
@@ -1379,7 +1415,7 @@ export function AiGameClient({
                     />
                   )}
                 </div>
-                <div className={cn("mt-3 min-h-[2.25rem]", compactDuelUi && "mt-2 min-h-0", compactTextEntryUi && "mt-1", crampedDuelUi && "min-h-[1.5rem]")}>
+                <div className={cn("mt-3 min-h-[2.25rem]", compactDuelUi && "mt-2 min-h-0", compactTextEntryUi && "mt-1", constrainedDuelUi && "min-h-[1.25rem]")}>
                   {canUseYourUltimate ? (
                     <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-200">Ultimate Ready</p>
                   ) : null}
@@ -1397,7 +1433,7 @@ export function AiGameClient({
             className={cn(
               "shrink-0 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 sm:px-5",
               compactDuelUi && "hidden",
-              keyboardOpenInDuel && "pb-[calc(env(safe-area-inset-bottom,0px)+8px)]"
+              keyboardOpenInDuel && "pb-[calc(env(safe-area-inset-bottom,0px)+8px)] pt-1"
             )}
           >
             <div className="mx-auto w-full max-w-3xl">
@@ -1415,6 +1451,111 @@ export function AiGameClient({
               {duelAnswerForm}
             </div>
           </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (!isDuelMode && !isFinished) {
+    return (
+      <section className="q-match-lock fixed inset-0 z-10 overflow-hidden text-white">
+        <div className="flex h-[100dvh] min-h-[100dvh] flex-col overflow-hidden overscroll-y-contain">
+          <div className="shrink-0 px-3 pb-2 pt-[calc(env(safe-area-inset-top,0px)+0.625rem)] sm:px-5 sm:pt-[calc(env(safe-area-inset-top,0px)+0.75rem)]">
+            <div className="q-card flex items-center justify-between gap-3 rounded-[1.35rem] px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="truncate text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200">
+                  {topicLabel} / {difficultyLabel}
+                </p>
+                <div className="mt-1 flex items-center gap-3">
+                  <span className="text-2xl font-black tabular-nums text-sky-200">{scores.you}</span>
+                  <span className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">You</span>
+                  <span className="text-2xl font-black tabular-nums text-rose-200">{scores.opponent}</span>
+                  <span className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">{BOT_NAME}</span>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="rounded-full border border-sky-300/18 bg-sky-500/10 px-3 py-1 text-[10px] font-black tracking-[0.24em] text-sky-200">
+                  {timerLabel}
+                </span>
+                <SoundToggle
+                  muted={muted}
+                  onToggle={() => {
+                    const next = !muted;
+                    soundManager.setMuted(next);
+                    setMuted(next);
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="qx-match-scroll flex min-h-0 flex-1 flex-col items-stretch justify-center px-3 py-2 sm:px-5">
+            <div className="mx-auto w-full max-w-3xl">
+              <div className="q-card-strong relative rounded-[1.5rem] p-3 text-center sm:p-5">
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-textSecondary/70">
+                  {isCountdown ? "Countdown" : "Question"}
+                </p>
+                <div className="mt-2 flex min-h-[4rem] items-center justify-center">
+                  {isCountdown ? (
+                    <CountdownDisplay value={countdownValue} />
+                  ) : (
+                    <QuestionContent
+                      question={currentQuestionData}
+                      fallbackPrompt={currentQuestion}
+                      compact
+                      fitViewport
+                      promptClassName="text-lg font-black tracking-tight text-white sm:text-3xl md:text-4xl"
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {isPlaying ? (
+            <div className="shrink-0 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+10px)] pt-2 sm:px-5">
+              <form className="mx-auto flex w-full max-w-3xl flex-col gap-2" onSubmit={handleSubmit}>
+                {hasMultipleChoiceOptions ? (
+                  <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
+                    {questionOptions.map((option, idx) => (
+                      <Button
+                        key={`${option}-${idx}`}
+                        type="button"
+                        variant="secondary"
+                        className="min-h-[42px] px-2.5 py-2 text-center text-xs sm:min-h-[2.6rem] sm:text-sm"
+                        disabled={youEliminated}
+                        onClick={() => handleOptionSubmit(option)}
+                      >
+                        {option}
+                      </Button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex items-stretch gap-2">
+                    <input
+                      ref={answerInputRef}
+                      type="text"
+                      value={answer}
+                      onChange={(e) => setAnswer(e.target.value)}
+                      placeholder={currentQuestionData?.inputMode === "text" ? "Type text or symbol answer" : "Type your answer"}
+                      autoComplete="off"
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      enterKeyHint="go"
+                      className="neon-input min-h-[46px] min-w-0 flex-1 rounded-2xl px-4 py-2.5 text-base"
+                    />
+                    <Button className="min-h-[46px] w-[7rem] shrink-0" type="submit" disabled={!answer.trim()}>
+                      Submit
+                    </Button>
+                  </div>
+                )}
+                <p className="text-center text-[10px] font-black uppercase tracking-[0.2em] text-textSecondary">
+                  Mistakes: {mistakes.you}
+                </p>
+              </form>
+            </div>
+          ) : null}
         </div>
       </section>
     );
@@ -1709,6 +1850,7 @@ export function AiGameClient({
                     Your Answer
                   </span>
                   <input
+                    ref={answerInputRef}
                     type="text"
                     value={answer}
                     onChange={(e) => setAnswer(e.target.value)}

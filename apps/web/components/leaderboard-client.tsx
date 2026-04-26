@@ -124,7 +124,7 @@ export function LeaderboardClient() {
 
   return (
     <PageContent size="wide" variant="plain" className="w-full min-w-0 space-y-6">
-      <div className="flex min-w-0 flex-col gap-4 sm:gap-6 md:gap-8">
+      <div className="flex min-w-0 flex-col gap-8 sm:gap-10">
         <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-end md:justify-between md:gap-6">
           <div className="min-w-0 flex-1 space-y-3">
             <span className="neon-badge inline-flex rounded-full px-4 py-1 text-xs font-medium uppercase tracking-[0.3em]">

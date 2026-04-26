@@ -1055,7 +1055,7 @@ export function ProfileClient() {
   };
 
   return (
-    <PageContent size="wide" variant="plain" className="w-full min-w-0 space-y-6 sm:space-y-8 md:space-y-10">
+    <PageContent size="wide" variant="plain" className="w-full min-w-0">
       <PurchaseSuccessModal
         open={purchaseModalOpen}
         item={purchaseItem}
@@ -1079,7 +1079,7 @@ export function ProfileClient() {
             : undefined
         }
       />
-      <div className="flex min-w-0 flex-col gap-8">
+      <div className="flex min-w-0 flex-col gap-8 sm:gap-10">
         <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-end md:justify-between md:gap-6">
           <div className="min-w-0 flex-1 space-y-3">
             <span className="inline-flex rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.3em] text-sky-200">
@@ -1132,7 +1132,7 @@ export function ProfileClient() {
           </div>
         ) : null}
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <StatCard label="Coins" value={loading ? "..." : data?.wallet?.coins ?? 0} />
           <StatCard label="XP" value={loading ? "..." : data?.wallet?.xp ?? 0} />
           <StatCard label="Total Matches" value={loading ? "..." : data?.summary.totalMatches ?? 0} />

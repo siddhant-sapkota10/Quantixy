@@ -109,7 +109,7 @@ export function CoinTopupClient() {
         />
 
         <div className="relative space-y-4 sm:space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/12 bg-slate-900/88 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:px-6 sm:py-6">
+          <div className="q-panel flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/12 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:px-6 sm:py-6">
             <div className="min-w-0">
               <span className="inline-flex rounded-full border border-amber-300/28 bg-amber-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.3em] text-amber-100">
                 Coins
@@ -147,7 +147,7 @@ export function CoinTopupClient() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.22, ease: "easeOut" }}
                   className={[
-                    "relative overflow-hidden rounded-3xl border bg-slate-950/70 p-4 shadow-[0_18px_55px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.04)]",
+                    "relative overflow-hidden rounded-3xl border bg-[var(--qx-card)] p-4 shadow-[0_18px_55px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.04)]",
                     pack.highlight ? "border-amber-300/35" : "border-white/10",
                   ].join(" ")}
                 >

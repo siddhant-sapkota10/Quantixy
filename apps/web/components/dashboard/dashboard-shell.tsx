@@ -21,7 +21,7 @@ export function DashboardShell({ children, className }: { children: ReactNode; c
       )}
     >
       <header className="sticky top-0 z-50 border-b border-[var(--qx-border-soft)] bg-[rgba(2,6,23,0.82)] backdrop-blur-xl">
-        <div className="mx-auto grid max-w-[min(92rem,calc(100vw-1rem))] grid-cols-[minmax(0,auto)_1fr_minmax(0,auto)] items-center gap-2 px-3 py-2 pt-[max(0.35rem,env(safe-area-inset-top))] sm:gap-3 sm:px-6 sm:py-2.5 lg:px-10 xl:px-12">
+        <div className="mx-auto grid max-w-[min(110rem,calc(100vw-1rem))] grid-cols-[minmax(0,auto)_1fr_minmax(0,auto)] items-center gap-2 px-3 py-2 pt-[max(0.35rem,env(safe-area-inset-top))] sm:gap-3 sm:px-6 sm:py-2.5 lg:px-10 xl:px-12">
           <Link
             href="/"
             aria-label="Quantixy home"
@@ -46,7 +46,7 @@ export function DashboardShell({ children, className }: { children: ReactNode; c
             aria-label="Main navigation"
             className="hidden min-w-0 justify-self-center md:flex"
           >
-            <div className="flex max-w-[min(52rem,calc(100vw-12rem))] flex-wrap justify-center gap-0.5 rounded-2xl border border-[var(--qx-border-soft)] bg-[rgba(6,12,28,0.92)] p-1 shadow-[0_18px_48px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl">
+            <div className="flex max-w-[min(64rem,calc(100vw-12rem))] flex-wrap justify-center gap-0.5 rounded-2xl border border-[var(--qx-border-soft)] bg-[rgba(6,12,28,0.92)] p-1 shadow-[0_18px_48px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl">
               {DASHBOARD_NAV.map((item) => {
                 const active = isDashboardNavActive(pathname, item.href);
                 return (

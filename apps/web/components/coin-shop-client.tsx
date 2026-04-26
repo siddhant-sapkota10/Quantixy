@@ -283,7 +283,7 @@ export function CoinShopClient() {
         />
 
         <div className="relative space-y-5">
-          <div className="relative overflow-hidden rounded-[1.8rem] border border-white/12 bg-slate-900/88 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:p-6 lg:p-8">
+          <div className="q-panel relative overflow-hidden rounded-[1.8rem] border border-white/12 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:p-6 lg:p-8">
             {burstKey > 0 ? (
               <motion.div
                 key={burstKey}
@@ -309,10 +309,10 @@ export function CoinShopClient() {
               </div>
 
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-                <div className="rounded-2xl border border-amber-300/20 bg-gradient-to-br from-amber-400/16 to-slate-950/50 px-4 py-3">
+                <div className="rounded-2xl border border-amber-300/20 bg-gradient-to-br from-amber-400/12 to-[var(--qx-card)] px-4 py-3">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-200">Coins</p>
-                    <span className="rounded-full border border-amber-200/20 bg-amber-950/30 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.18em] text-amber-100">
+                    <span className="rounded-full border border-amber-200/20 bg-[rgba(60,20,0,0.18)] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.18em] text-amber-100">
                       Wallet
                     </span>
                   </div>

@@ -31,7 +31,7 @@ export function PurchaseSuccessModal({
         >
           {/* Backdrop */}
           <motion.div
-            className="absolute inset-0 bg-black/80"
+            className="absolute inset-0 bg-slate-950/80"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -40,7 +40,7 @@ export function PurchaseSuccessModal({
 
           {/* Modal */}
           <motion.div
-            className="relative w-full max-w-lg overflow-hidden rounded-[2rem] bg-black"
+            className="q-panel-strong relative w-full max-w-lg overflow-hidden rounded-[2rem]"
             initial={{ opacity: 0, y: 24, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 18, scale: 0.98 }}

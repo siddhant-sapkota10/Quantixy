@@ -24,13 +24,13 @@ export type Rank = RankData & RankVisuals & { id: RankId };
 // ─── Visual mapping (Tailwind classes must be string literals for purging) ────
 
 const RANK_VISUALS: Record<RankId, RankVisuals> = {
-  bronze:   { bgClass: "bg-amber-900/50",  textClass: "text-amber-400",  borderClass: "border-amber-600/50",  progressClass: "bg-amber-500"  },
+  bronze:   { bgClass: "bg-amber-500/10",  textClass: "text-amber-300",  borderClass: "border-amber-400/25",  progressClass: "bg-amber-400"  },
   // Silver uses slightly elevated slate so it reads as a rank, not generic UI text
-  silver:   { bgClass: "bg-slate-600/35",  textClass: "text-slate-200",  borderClass: "border-slate-400/40",  progressClass: "bg-slate-300"  },
-  gold:     { bgClass: "bg-yellow-500/20", textClass: "text-yellow-300", borderClass: "border-yellow-500/40", progressClass: "bg-yellow-400" },
-  platinum: { bgClass: "bg-cyan-500/20",   textClass: "text-cyan-300",   borderClass: "border-cyan-500/40",   progressClass: "bg-cyan-400"   },
-  diamond:  { bgClass: "bg-indigo-500/20", textClass: "text-indigo-300", borderClass: "border-indigo-500/40", progressClass: "bg-indigo-400" },
-  master:   { bgClass: "bg-pink-500/20",   textClass: "text-pink-300",   borderClass: "border-pink-500/40",   progressClass: "bg-pink-400"   },
+  silver:   { bgClass: "bg-slate-400/10",  textClass: "text-slate-200",  borderClass: "border-white/12",      progressClass: "bg-slate-200"  },
+  gold:     { bgClass: "bg-yellow-500/12", textClass: "text-yellow-200", borderClass: "border-yellow-400/25", progressClass: "bg-yellow-300" },
+  platinum: { bgClass: "bg-cyan-500/10",   textClass: "text-cyan-200",   borderClass: "border-cyan-400/25",   progressClass: "bg-cyan-300"   },
+  diamond:  { bgClass: "bg-violet-500/10", textClass: "text-violet-200", borderClass: "border-violet-400/25", progressClass: "bg-violet-300" },
+  master:   { bgClass: "bg-pink-500/10",   textClass: "text-pink-200",   borderClass: "border-pink-400/25",   progressClass: "bg-pink-300"   },
 };
 
 // ─── Data ─────────────────────────────────────────────────────────────────────

@@ -194,7 +194,7 @@ export function DailyRewardsPopup() {
         <div className="fixed inset-0 z-[2147483000] isolate flex items-end justify-center px-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] pt-[calc(env(safe-area-inset-top,0px)+1rem)] sm:items-center sm:px-6 sm:pb-6">
           <motion.div
             aria-hidden="true"
-            className="absolute inset-0 bg-black"
+            className="absolute inset-0 bg-slate-950"
             initial={{ opacity: 0 }}
             animate={{ opacity: 0.92 }}
             exit={{ opacity: 0 }}

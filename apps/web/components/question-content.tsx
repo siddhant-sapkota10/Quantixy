@@ -9,6 +9,7 @@ type QuestionContentProps = {
   fallbackPrompt?: string;
   promptClassName?: string;
   compact?: boolean;
+  fitViewport?: boolean;
 };
 
 export function QuestionContent({
@@ -16,6 +17,7 @@ export function QuestionContent({
   fallbackPrompt = "Get ready...",
   promptClassName = "text-2xl font-black tracking-tight text-white sm:text-4xl md:text-5xl",
   compact = false,
+  fitViewport = false,
 }: QuestionContentProps) {
   const prompt = question?.prompt ?? fallbackPrompt;
   const hasVisual = Boolean(question?.diagramSpec);
@@ -32,25 +34,25 @@ export function QuestionContent({
   const tableRows = question?.visualData?.tables ?? [];
 
   return (
-    <div className={compact ? "space-y-3" : "space-y-4"}>
+    <div className={`${compact ? "space-y-3" : "space-y-4"} ${fitViewport ? "qx-question-fit" : ""}`}>
       {graphFirst && hasVisual ? (
-        <div className="neon-panel-soft mx-auto w-full max-w-[60rem] overflow-hidden rounded-2xl px-2 py-2 sm:px-3 sm:py-3">
+        <div className="qx-question-visual neon-panel-soft mx-auto w-full max-w-[60rem] overflow-hidden rounded-2xl px-2 py-2 sm:px-3 sm:py-3">
           <QuestionVisual spec={question?.diagramSpec} compact={compact} />
         </div>
       ) : null}
 
-      <p className={compactPromptClass}>
+      <p className={`${compactPromptClass} qx-question-prompt`}>
         <MathExpression text={displayText} />
       </p>
 
       {!graphFirst && hasVisual ? (
-        <div className="neon-panel-soft mx-auto w-full max-w-[60rem] overflow-hidden rounded-2xl px-2 py-2 sm:px-3 sm:py-3">
+        <div className="qx-question-visual neon-panel-soft mx-auto w-full max-w-[60rem] overflow-hidden rounded-2xl px-2 py-2 sm:px-3 sm:py-3">
           <QuestionVisual spec={question?.diagramSpec} compact={compact} />
         </div>
       ) : null}
 
       {renderMode === "table" && tableRows.length > 0 ? (
-        <div className="mx-auto w-full max-w-md overflow-hidden rounded-xl border border-slate-700/80 bg-slate-950/60">
+        <div className="qx-question-table mx-auto w-full max-w-md overflow-hidden rounded-xl border border-slate-700/80 bg-slate-950/60">
           <table className="w-full table-fixed border-collapse text-sm text-slate-100 sm:text-base">
             <thead>
               <tr className="bg-slate-900/80">

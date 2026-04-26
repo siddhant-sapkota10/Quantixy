@@ -7,9 +7,10 @@
   /* Quantixy neon dashboard tokens */
   --qx-page-0: #020617;
   --qx-page-1: #030712;
-  --qx-panel: rgba(6, 12, 28, 0.88);
-  --qx-card: rgba(8, 16, 36, 0.82);
-  --qx-card-hover: rgba(10, 22, 48, 0.9);
+  /* Surfaces (keep same hue family as background; depth comes from opacity/blur, not brightness). */
+  --qx-panel: rgba(7, 17, 31, 0.78);       /* ~ #07111f */
+  --qx-card: rgba(11, 22, 40, 0.72);       /* ~ #0b1628 */
+  --qx-card-hover: rgba(11, 22, 40, 0.84);
   --qx-cyan: #22d3ee;
   --qx-cyan-2: #38bdf8;
   --qx-blue: #0ea5e9;
@@ -31,7 +32,7 @@
   --surface-card: var(--qx-card);
   --surface-muted: rgba(15, 23, 42, 0.58);
   --q-panel: var(--qx-panel);
-  --q-panel-strong: rgba(8, 13, 32, 0.9);
+  --q-panel-strong: rgba(7, 17, 31, 0.84);
   --border-soft: var(--qx-border-soft);
   --border-active: var(--qx-border-accent);
   --text-main: var(--qx-text-primary);
@@ -69,14 +70,17 @@ body {
   min-height: 100vh;
   min-height: 100dvh;
   overflow-x: clip;
-  background: radial-gradient(ellipse 120% 80% at 50% -20%, rgba(34, 211, 238, 0.06), transparent 45%),
-    linear-gradient(180deg, var(--qx-page-1) 0%, var(--qx-page-0) 55%, #000 100%);
+  background:
+    radial-gradient(ellipse 120% 80% at 50% -20%, rgba(34, 211, 238, 0.045), transparent 48%),
+    radial-gradient(ellipse 90% 70% at 88% 18%, rgba(139, 92, 246, 0.035), transparent 55%),
+    linear-gradient(180deg, var(--qx-page-1) 0%, var(--qx-page-0) 58%, #000 100%);
   color: var(--q-text);
 }
 
 .qx-dashboard-main {
   width: 100%;
-  max-width: min(92rem, calc(100vw - 1rem));
+  /* Wider desktop canvas to avoid huge dead gutters */
+  max-width: min(110rem, calc(100vw - 1rem));
   margin-inline: auto;
   padding-inline: clamp(1rem, 3.2vw, 4rem);
   padding-top: clamp(0.75rem, 2vw, 1.25rem);
@@ -360,6 +364,50 @@ select {
     overflow-y: auto;
     overscroll-behavior-y: contain;
     touch-action: pan-y;
+  }
+
+  .q-match-lock .qx-match-scroll {
+    overflow-y: hidden;
+  }
+
+  .qx-question-fit {
+    max-height: min(26dvh, 15rem);
+    overflow: hidden;
+  }
+
+  .qx-question-fit .qx-question-prompt {
+    overflow-wrap: anywhere;
+    text-wrap: balance;
+    font-size: clamp(1rem, 4.3dvh, 2.75rem) !important;
+    line-height: 1.08;
+  }
+
+  .qx-question-fit .qx-question-visual {
+    max-height: min(17dvh, 9rem);
+  }
+
+  .qx-question-fit .qx-question-table table {
+    font-size: clamp(0.7rem, 2.1dvh, 0.95rem);
+  }
+
+  .qx-question-fit .qx-question-table th,
+  .qx-question-fit .qx-question-table td {
+    padding-block: 0.35rem;
+  }
+
+  @media (max-height: 700px), (max-width: 420px) {
+    .qx-question-fit {
+      max-height: min(22dvh, 10rem);
+    }
+
+    .qx-question-fit .qx-question-prompt {
+      font-size: clamp(0.92rem, 3.7dvh, 1.55rem) !important;
+      line-height: 1.05;
+    }
+
+    .qx-question-fit .qx-question-visual {
+      max-height: min(13dvh, 6rem);
+    }
   }
 
   .q-match-lock input,

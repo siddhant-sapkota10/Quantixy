@@ -1,1 +1,26 @@
-{}
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/game/page": "app/game/page.js",
+  "/auth/callback/page": "app/auth/callback/page.js",
+  "/leaderboard/page": "app/leaderboard/page.js",
+  "/profile/page": "app/profile/page.js",
+  "/reset-password/page": "app/reset-password/page.js",
+  "/page": "app/page.js",
+  "/play/page": "app/play/page.js",
+  "/shop/cancel/page": "app/shop/cancel/page.js",
+  "/loadout/page": "app/loadout/page.js",
+  "/shop/coins/cancel/page": "app/shop/coins/cancel/page.js",
+  "/shop/coins/success/page": "app/shop/coins/success/page.js",
+  "/shop/coins/page": "app/shop/coins/page.js",
+  "/shop/success/page": "app/shop/success/page.js",
+  "/shop/page": "app/shop/page.js",
+  "/api/daily-rewards/claim/route": "app/api/daily-rewards/claim/route.js",
+  "/api/daily-rewards/status/route": "app/api/daily-rewards/status/route.js",
+  "/api/coin-shop/status/route": "app/api/coin-shop/status/route.js",
+  "/api/coin-shop/equip/route": "app/api/coin-shop/equip/route.js",
+  "/api/stripe/checkout/route": "app/api/stripe/checkout/route.js",
+  "/api/coin-shop/purchase/route": "app/api/coin-shop/purchase/route.js",
+  "/api/stripe/create-checkout-session/route": "app/api/stripe/create-checkout-session/route.js",
+  "/api/stripe/webhook/route": "app/api/stripe/webhook/route.js",
+  "/api/stripe/confirm/route": "app/api/stripe/confirm/route.js"
+}
