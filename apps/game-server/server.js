@@ -62,7 +62,8 @@ const EMOTE_BURST_WINDOW_MS = 5000;
 const EMOTE_BURST_LIMIT = 3;
 const COUNTDOWN_STEPS = ["3", "2", "1", "GO"];
 const COUNTDOWN_INTERVAL_MS = 1000;
-const FAST_ANSWER_MS = 2000;
+const LIGHTNING_ANSWER_MS = 1000;
+const FAST_ANSWER_MS = 1500;
 const ULTIMATE_MAX_CHARGE = 100;
 const ULTIMATE_TIME_CHARGE_PER_SECOND = 1.4;
 const ULTIMATE_CORRECT_CHARGE = 18;
@@ -72,6 +73,7 @@ const ULTIMATE_DEFAULT_DURATION_MS = 6000;
 const MAX_HP = 150;
 const HP_BASE_PER_POINT = 8;
 const HP_FAST_BONUS = 4;
+const HP_LIGHTNING_BONUS = 6;
 const HP_STREAK_3_BONUS = 2;
 const HP_STREAK_5_BONUS = 4;
 // HP penalty for mistakes (replaces strikes system).
@@ -688,10 +690,10 @@ function clearMatchEffects(game) {
   clearUltimateEffects(game);
 }
 
-function calcDamage(points, fast, streak) {
+function calcDamage(points, speedTier, streak) {
   if (!Number.isFinite(points) || points <= 0) return 0;
   const base = points * HP_BASE_PER_POINT;
-  const fastBonus = fast ? HP_FAST_BONUS : 0;
+  const fastBonus = speedTier === "lightning" ? HP_LIGHTNING_BONUS : speedTier === "fast" ? HP_FAST_BONUS : 0;
   const streakBonus = streak >= 5 ? HP_STREAK_5_BONUS : streak >= 3 ? HP_STREAK_3_BONUS : 0;
   return base + fastBonus + streakBonus;
 }
@@ -2110,9 +2112,14 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
   clearPlayerQuestionTimer(game, playerSocketId);
 
   // Each player answers their own independent question — every correct answer earns points.
-  const fastAnswer =
-    typeof questionState.questionSentAt === "number" &&
-    Date.now() - questionState.questionSentAt <= FAST_ANSWER_MS;
+  const answerMs = typeof questionState.questionSentAt === "number" ? Date.now() - questionState.questionSentAt : null;
+  const speedTier =
+    typeof answerMs === "number" && answerMs <= LIGHTNING_ANSWER_MS
+      ? "lightning"
+      : typeof answerMs === "number" && answerMs <= FAST_ANSWER_MS
+        ? "fast"
+        : "normal";
+  const fastAnswer = speedTier === "fast" || speedTier === "lightning";
   const awardedPoints = pointsAwarded;
   let overclockCombo = 0;
   let overclockBonusDamage = 0;
@@ -2128,7 +2135,7 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
 
   // Apply HP damage to opponent (server authoritative KO condition).
   const opponent = getOpponent(game, playerSocketId);
-  const baseDamage = opponent ? calcDamage(awardedPoints, fastAnswer, game.streaks[playerSocketId] ?? 0) : 0;
+  const baseDamage = opponent ? calcDamage(awardedPoints, speedTier, game.streaks[playerSocketId] ?? 0) : 0;
   let damage = opponent ? baseDamage : 0;
   let knockedOutOpponent = false;
   let knockedOutAttacker = false;
@@ -2228,6 +2235,10 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     opponentStreak: game.streaks[playerTwoSocketId],
     fastAnswer: scorerSocketId === playerOneSocketId ? fastAnswer : false,
     opponentFastAnswer: scorerSocketId === playerTwoSocketId ? fastAnswer : false,
+    answerMs: scorerSocketId === playerOneSocketId ? answerMs : null,
+    opponentAnswerMs: scorerSocketId === playerTwoSocketId ? answerMs : null,
+    speedTier: scorerSocketId === playerOneSocketId ? speedTier : "normal",
+    opponentSpeedTier: scorerSocketId === playerTwoSocketId ? speedTier : "normal",
     pointsAwarded: scorerSocketId === playerOneSocketId ? awardedPoints : 0,
     overclockCombo: scorerSocketId === playerOneSocketId ? overclockCombo : 0,
     /** Always the scorer's Flash combo value (for victim damage-number scaling on both clients). */
@@ -2261,6 +2272,10 @@ function handleCorrectAnswer(roomId, playerSocketId, pointsAwarded = 1) {
     opponentStreak: game.streaks[playerOneSocketId],
     fastAnswer: scorerSocketId === playerTwoSocketId ? fastAnswer : false,
     opponentFastAnswer: scorerSocketId === playerOneSocketId ? fastAnswer : false,
+    answerMs: scorerSocketId === playerTwoSocketId ? answerMs : null,
+    opponentAnswerMs: scorerSocketId === playerOneSocketId ? answerMs : null,
+    speedTier: scorerSocketId === playerTwoSocketId ? speedTier : "normal",
+    opponentSpeedTier: scorerSocketId === playerOneSocketId ? speedTier : "normal",
     pointsAwarded: scorerSocketId === playerTwoSocketId ? awardedPoints : 0,
     overclockCombo: scorerSocketId === playerTwoSocketId ? overclockCombo : 0,
     scorerOverclockCombo: overclockCombo,

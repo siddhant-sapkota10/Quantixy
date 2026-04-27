@@ -6,6 +6,14 @@ import { getStreakEffectVisuals, type StreakEffectId } from "@/lib/cosmetics";
 import { RankBadge } from "@/components/rank-badge";
 
 type HitType = "normal" | "streak" | "ultimate";
+type HitEffectId = "none" | "lightning_strike" | "fire_burst" | "pixel_glitch";
+
+function formatDamageLabel(amount: number, hitType: HitType, flashTier: number) {
+  if (hitType === "ultimate" || flashTier >= 2) return `-${Math.round(amount)} CRIT`;
+  if (flashTier > 0) return `-${Math.round(amount)} FAST`;
+  if (hitType === "streak") return `-${Math.round(amount)} STREAK`;
+  return `-${Math.round(amount)}`;
+}
 
 type PlayerPanelProps = {
   label: string;
@@ -39,6 +47,10 @@ type PlayerPanelProps = {
   hitIntensity?: number;
   /** Flash Overclock tier on the attacker's last hit (0 = none) — scales floating damage pop. */
   damageFlashTier?: number;
+  /** Equipped cosmetic hit effect from the attacker. Visual only. */
+  hitEffect?: HitEffectId | string;
+  /** Whether this player's ultimate is currently ready. */
+  ultimateReady?: boolean;
   /** One-shot key: pulse when ultimate becomes ready. */
   ultReadyCueKey?: number;
   /** Status effects for richer ultimate visibility. */
@@ -66,6 +78,92 @@ type PlayerPanelProps = {
   ultimateName?: string;
 };
 
+function HitEffectBurst({ effect }: { effect: HitEffectId | string | undefined }) {
+  if (!effect || effect === "none") return null;
+
+  if (effect === "lightning_strike") {
+    return (
+      <motion.div
+        className="pointer-events-none absolute left-1/2 top-1 z-10 h-24 w-28 -translate-x-1/2"
+        initial={{ opacity: 0, scale: 0.7, y: -8 }}
+        animate={{ opacity: [0, 1, 0.95, 0], scale: [0.7, 1.08, 1, 0.94], y: [-8, 1, 6, 13] }}
+        transition={{ duration: 0.58, ease: "easeOut" }}
+      >
+        <motion.div
+          className="absolute left-1/2 top-10 h-16 w-16 -translate-x-1/2 rounded-full border border-cyan-200/75"
+          initial={{ opacity: 0.75, scale: 0.28 }}
+          animate={{ opacity: [0.75, 0.42, 0], scale: [0.28, 1.1, 1.55] }}
+          transition={{ duration: 0.42, ease: "easeOut" }}
+        />
+        <div className="absolute left-12 top-0 h-20 w-2 rotate-[18deg] rounded-full bg-cyan-100 shadow-[0_0_22px_rgba(125,211,252,1)]" />
+        <div className="absolute left-6 top-9 h-12 w-2 -rotate-[34deg] rounded-full bg-yellow-100 shadow-[0_0_18px_rgba(253,224,71,0.95)]" />
+        <div className="absolute left-16 top-11 h-10 w-1.5 rotate-[48deg] rounded-full bg-sky-200 shadow-[0_0_16px_rgba(56,189,248,0.85)]" />
+      </motion.div>
+    );
+  }
+
+  if (effect === "fire_burst") {
+    return (
+      <motion.div
+        className="pointer-events-none absolute left-1/2 top-0 z-10 h-28 w-32 -translate-x-1/2"
+        initial={{ opacity: 0, scale: 0.42, y: 4 }}
+        animate={{ opacity: [0, 1, 0.9, 0], scale: [0.42, 1.08, 1.18, 1.32], y: [4, -2, -5, -10] }}
+        transition={{ duration: 0.64, ease: "easeOut" }}
+      >
+        <motion.div
+          className="absolute left-1/2 top-10 h-20 w-20 -translate-x-1/2 rounded-full"
+          initial={{ scale: 0.25, opacity: 0 }}
+          animate={{ scale: [0.25, 1.05, 1.68], opacity: [0, 0.95, 0] }}
+          transition={{ duration: 0.56, ease: "easeOut" }}
+          style={{
+            background:
+              "radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(254,240,138,0.98) 16%, rgba(251,146,60,0.8) 34%, rgba(251,113,133,0.5) 54%, rgba(127,29,29,0) 76%)",
+            boxShadow: "0 0 32px rgba(251,146,60,0.55)",
+          }}
+        />
+        <motion.div
+          className="absolute left-1/2 top-12 h-24 w-24 -translate-x-1/2 rounded-full border-2 border-orange-200/85"
+          initial={{ scale: 0.22, opacity: 0.95 }}
+          animate={{ scale: [0.22, 1.12, 1.58], opacity: [0.95, 0.42, 0] }}
+          transition={{ duration: 0.44, ease: "easeOut" }}
+        />
+        {[0, 1, 2, 3, 4, 5, 6, 7].map((spark) => {
+          const angle = (spark / 8) * Math.PI * 2;
+          const x = Math.round(Math.cos(angle) * 42);
+          const y = Math.round(Math.sin(angle) * 28) - 8;
+          return (
+            <motion.span
+              key={spark}
+              className="absolute left-1/2 top-14 h-2.5 w-2.5 rounded-full bg-amber-200 shadow-[0_0_12px_rgba(251,191,36,0.9)]"
+              initial={{ opacity: 0, x: 0, y: 0, scale: 0.6 }}
+              animate={{ opacity: [0, 1, 0], x, y, scale: [0.6, 1, 0.25] }}
+              transition={{ duration: 0.58, ease: "easeOut", delay: spark * 0.018 }}
+            />
+          );
+        })}
+      </motion.div>
+    );
+  }
+
+  if (effect === "pixel_glitch") {
+    return (
+      <motion.div
+        className="pointer-events-none absolute left-1/2 top-2 z-10 h-20 w-32 -translate-x-1/2"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: [0, 1, 0.85, 0], x: [0, -6, 7, -3, 0] }}
+        transition={{ duration: 0.56, ease: "linear" }}
+      >
+        <span className="absolute left-2 top-1 h-3 w-20 bg-cyan-300/90 shadow-[0_0_16px_rgba(34,211,238,0.85)]" />
+        <span className="absolute left-12 top-8 h-3 w-16 bg-fuchsia-300/85 shadow-[0_0_16px_rgba(217,70,239,0.8)]" />
+        <span className="absolute left-0 top-14 h-2.5 w-24 bg-white/78" />
+        <span className="absolute left-20 top-4 h-10 w-4 bg-lime-300/70 shadow-[0_0_12px_rgba(190,242,100,0.7)]" />
+      </motion.div>
+    );
+  }
+
+  return null;
+}
+
 export function PlayerPanel({
   label,
   score,
@@ -90,6 +188,8 @@ export function PlayerPanel({
   hitType = "normal",
   hitIntensity = 0.35,
   damageFlashTier = 0,
+  hitEffect = "none",
+  ultimateReady = false,
   ultReadyCueKey = 0,
   overclockUntil = 0,
   blackoutUntil = 0,
@@ -335,11 +435,18 @@ export function PlayerPanel({
         ) : null}
 
         <motion.div
-          key={pulseKey}
+          key={`${pulseKey}-${hitKey}`}
           initial={{ scale: 1 }}
           animate={{
-            scale: highlighted ? [1, 1.04, 1] : 1,
-            boxShadow: highlighted
+            x: latestDamage && latestDamage > 0 ? [0, -3, 3, 0] : 0,
+            scale: latestDamage && latestDamage > 0 ? [1, 0.99, 1] : highlighted ? [1, 1.04, 1] : ultimateReady ? [1, 1.018, 1] : 1,
+            boxShadow: ultimateReady
+              ? [
+                  "0 0 14px rgba(52,211,153,0.12)",
+                  "0 0 34px rgba(52,211,153,0.3)",
+                  "0 0 14px rgba(52,211,153,0.12)"
+                ]
+              : highlighted
               ? [
                   "0 0 0 rgba(56, 189, 248, 0)",
                   "0 0 24px rgba(56, 189, 248, 0.28)",
@@ -347,8 +454,8 @@ export function PlayerPanel({
                 ]
               : "0 0 0 rgba(56, 189, 248, 0)"
           }}
-          transition={{ duration: 0.45, ease: "easeOut" }}
-          className="q-card-subtle w-full min-h-[11.5rem] rounded-2xl p-3 text-center sm:min-h-[12.25rem] sm:p-4"
+          transition={{ duration: latestDamage && latestDamage > 0 ? 0.18 : ultimateReady ? 1.1 : 0.45, repeat: ultimateReady && !(latestDamage && latestDamage > 0) ? Number.POSITIVE_INFINITY : 0, ease: "easeOut" }}
+          className="q-card-subtle w-full min-h-[14rem] rounded-2xl p-3 text-center sm:min-h-[15.25rem] sm:p-4"
         >
           <p className="truncate px-1 text-xs uppercase tracking-[0.2em] text-slate-400/70">{label}</p>
           {/* Rank badge */}
@@ -370,8 +477,21 @@ export function PlayerPanel({
               </p>
             ) : null}
           </div>
-          <div className="mt-2 flex h-11 items-center justify-center sm:h-12">
-            <p className="text-3xl font-bold text-white tabular-nums sm:text-4xl">{score}</p>
+          <motion.div
+            className="mt-2 flex h-24 items-center justify-center sm:h-28"
+            animate={{ scale: ultimateReady ? [1, 1.04, 1] : [1, 1.015, 1] }}
+            transition={{ duration: ultimateReady ? 1.05 : 2.8, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+          >
+            {avatar ? (
+              <span className="text-6xl drop-shadow-[0_0_24px_rgba(34,211,238,0.25)] sm:text-7xl" aria-hidden="true">
+                {avatar}
+              </span>
+            ) : (
+              <p className="text-4xl font-bold text-white tabular-nums sm:text-5xl">{score}</p>
+            )}
+          </motion.div>
+          <div className="mt-2 flex items-center justify-center">
+            <p className="rounded-full border border-white/10 bg-slate-950/45 px-3 py-1 text-2xl font-black text-white tabular-nums sm:text-3xl">{score}</p>
           </div>
         </motion.div>
 
@@ -704,6 +824,12 @@ export function PlayerPanel({
               exit={{ opacity: 0 }}
               transition={{ duration: 0.42, ease: "easeOut" }}
             />
+          ) : null}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {latestDamage !== null && latestDamage > 0 && hitKey > 0 ? (
+            <HitEffectBurst key={`hit-effect-${hitKey}`} effect={hitEffect} />
           ) : null}
         </AnimatePresence>
 

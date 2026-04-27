@@ -23,6 +23,7 @@ import {
 import { getPowerUpMeta, POWER_UPS, type PowerUpId } from "@/lib/powerups";
 import { MatchChampionCard } from "@/components/match-champion-card";
 import { MatchResultPanel } from "@/components/MatchResultPanel";
+import type { MatchRewardsClaimResponse } from "@/lib/match-rewards";
 
 // Feature flag — set to true to re-enable the powerup system in live matches.
 // While false, powerup UI is hidden and powerup socket events are no-ops.
@@ -45,6 +46,7 @@ import {
   UltimateActivationOverlay,
   type UltimateActivationCue
 } from "@/components/animations/UltimateActivationOverlay";
+import { BattlefieldEffects } from "@/components/animations/BattlefieldEffects";
 import { UltimateCombatFxLayer, type UltimateFxSnapshot } from "@/components/animations/UltimateCombatFxLayer";
 import { ULTIMATE_VFX, normalizeUltimateType, type UltimateType } from "@/lib/ultimate-vfx";
 import { cn } from "@/lib/utils";
@@ -67,6 +69,41 @@ type LobbyPlayer = {
 };
 
 type HitEffectId = "none" | "lightning_strike" | "fire_burst" | "pixel_glitch";
+type AnswerFeedback = {
+  key: number;
+  kind: "correct" | "wrong";
+  option?: string;
+  text: string;
+};
+type QuestionFlash = {
+  key: number;
+  kind: "correct" | "wrong" | "new";
+};
+type SpeedTier = "normal" | "fast" | "lightning";
+type MomentCallout = {
+  key: number;
+  text: string;
+  side?: "you" | "opponent" | "center";
+  tone: "cyan" | "rose" | "amber" | "violet";
+};
+
+const SPEED_THRESHOLDS_MS = {
+  lightning: 1000,
+  fast: 1500,
+} as const;
+
+const STREAK_TIERS = [
+  { min: 7, label: "DOMINATING", tone: "violet" },
+  { min: 5, label: "UNSTOPPABLE", tone: "amber" },
+  { min: 3, label: "ON FIRE", tone: "rose" },
+  { min: 2, label: "COMBO", tone: "cyan" },
+] as const;
+
+const LOW_HP_THRESHOLD = 25;
+const LAST_STAND_HP = 15;
+const FINISH_THEM_HP = 10;
+const CLUTCH_HP = 20;
+const MOMENT_CALLOUT_MS = 1050;
 
 function normalizeHitEffectId(value: string | null | undefined): HitEffectId {
   return value === "lightning_strike" || value === "fire_burst" || value === "pixel_glitch" ? value : "none";
@@ -402,12 +439,21 @@ const statusHeading: Record<GameStatus, string> = {
  * Calculate HP damage from a scored point.
  * Base 8 per point + bonuses for fast answer and streak level.
  */
-function calcDamage(points: number, fast: boolean, streak: number): number {
+function calcDamage(points: number, speedTier: SpeedTier, streak: number): number {
   if (points <= 0) return 0;
   const base = points * 8;
-  const fastBonus = fast ? 4 : 0;
+  const fastBonus = speedTier === "lightning" ? 6 : speedTier === "fast" ? 4 : 0;
   const streakBonus = streak >= 5 ? 4 : streak >= 3 ? 2 : 0;
   return base + fastBonus + streakBonus;
+}
+
+function normalizeSpeedTier(value: unknown, fallbackFast = false): SpeedTier {
+  if (value === "lightning" || value === "fast" || value === "normal") return value;
+  return fallbackFast ? "fast" : "normal";
+}
+
+function getStreakTier(streak: number) {
+  return STREAK_TIERS.find((tier) => streak >= tier.min) ?? null;
 }
 
 const statusCopy: Record<GameStatus, string> = {
@@ -477,12 +523,26 @@ export function GameClient({
   const ultimateRef = useRef(initialUltimate);
   const [currentQuestion, setCurrentQuestion] = useState("Waiting for the first question...");
   const [currentQuestionData, setCurrentQuestionData] = useState<DuelQuestion | null>(null);
+  const [questionMotionKey, setQuestionMotionKey] = useState(0);
+  const [questionFlash, setQuestionFlash] = useState<QuestionFlash | null>(null);
+  const [answerFeedback, setAnswerFeedback] = useState<AnswerFeedback | null>(null);
+  const [momentCallout, setMomentCallout] = useState<MomentCallout | null>(null);
+  const [workpadOpen, setWorkpadOpen] = useState(false);
   const [answer, setAnswer] = useState("");
   const [timeoutDecisionPrompt, setTimeoutDecisionPrompt] = useState<TimeoutDecisionPromptState>({
     open: false,
     token: 0
   });
   const answerInputRef = useRef<HTMLInputElement | null>(null);
+  const lastSubmittedAnswerRef = useRef("");
+  const answerFeedbackIdRef = useRef(0);
+  const momentCalloutIdRef = useRef(0);
+  const lowHpCalloutRefs = useRef({
+    youLastStand: false,
+    opponentLastStand: false,
+    finishThem: false,
+    clutch: false,
+  });
   const [focusPulseKey, setFocusPulseKey] = useState(0);
   const [yourName, setYourName] = useState("You");
   const [opponentName, setOpponentName] = useState("Opponent");
@@ -507,6 +567,12 @@ export function GameClient({
   const emoteTimestampsRef = useRef<number[]>([]);
   const seenEmoteMessageIdsRef = useRef<Set<string>>(new Set());
   const currentMatchRoomIdRef = useRef<string | null>(null);
+  /** Number of questions answered correctly by local player this match. */
+  const correctAnswersRef = useRef(0);
+  /** Unique token for this match — roomId for PvP, client-generated UUID for AI. */
+  const matchTokenRef = useRef<string | null>(null);
+  /** Rewards claimed after game-over. */
+  const [matchRewards, setMatchRewards] = useState<MatchRewardsClaimResponse | null>(null);
   const [opponentEmoteFlashKey, setOpponentEmoteFlashKey] = useState(0);
   /** Token (server-side generation counter) of the question currently on screen.
    *  Sent back with every submitAnswer so the server can reject stale submissions. */
@@ -517,8 +583,15 @@ export function GameClient({
     keyboardOpen: false,
     compact: false,
     cramped: false,
-    reducedMotion: false
+    reducedMotion: false,
+    /** True on tablet/laptop landscape where side-by-side workpad layout fits. */
+    tabletLandscape: false,
+    /** True on tablet portrait where bottom-drawer workpad makes sense. */
+    tabletPortrait: false,
+    /** True on narrow mobile where we use a floating workpad button. */
+    mobileLayout: false,
   });
+  const [workpadSheetOpen, setWorkpadSheetOpen] = useState(false);
 
   useEffect(() => {
     statusRef.current = status;
@@ -568,6 +641,17 @@ export function GameClient({
       const cramped = height < 700 || keyboardOpen;
       const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+      // Tablet landscape: wide enough for side-by-side workpad, oriented landscape
+      // Covers iPad Air/Pro/mini landscape and most laptops up to 1535px
+      const isLandscape = width > height;
+      const tabletLandscape = isLandscape && width >= 820 && height >= 500 && !keyboardOpen;
+
+      // Tablet portrait: taller than wide with good screen real estate
+      const tabletPortrait = !isLandscape && width >= 600 && height >= 768 && !keyboardOpen;
+
+      // Mobile: narrow screens where floating workpad button is preferred
+      const mobileLayout = width < 600;
+
       setViewportState((previous) => {
         if (
           previous.width === width &&
@@ -575,12 +659,15 @@ export function GameClient({
           previous.keyboardOpen === keyboardOpen &&
           previous.compact === compact &&
           previous.cramped === cramped &&
-          previous.reducedMotion === reducedMotion
+          previous.reducedMotion === reducedMotion &&
+          previous.tabletLandscape === tabletLandscape &&
+          previous.tabletPortrait === tabletPortrait &&
+          previous.mobileLayout === mobileLayout
         ) {
           return previous;
         }
 
-        return { width, height, keyboardOpen, compact, cramped, reducedMotion };
+        return { width, height, keyboardOpen, compact, cramped, reducedMotion, tabletLandscape, tabletPortrait, mobileLayout };
       });
     };
 
@@ -634,6 +721,8 @@ export function GameClient({
   const [latestOpponentDamage, setLatestOpponentDamage] = useState<number | null>(null);
   const [youHitType, setYouHitType] = useState<"normal" | "streak" | "ultimate">("normal");
   const [opponentHitType, setOpponentHitType] = useState<"normal" | "streak" | "ultimate">("normal");
+  const [latestYouSpeedTier, setLatestYouSpeedTier] = useState<SpeedTier>("normal");
+  const [latestOpponentSpeedTier, setLatestOpponentSpeedTier] = useState<SpeedTier>("normal");
   const [youHitIntensity, setYouHitIntensity] = useState(0.35);
   const [opponentHitIntensity, setOpponentHitIntensity] = useState(0.35);
   /** Flash combo tier for floating damage on the victim panel (0 = none). */
@@ -763,9 +852,10 @@ export function GameClient({
   };
 
   const triggerScreenShake = (strength: number) => {
+    if (viewportState.reducedMotion) return;
     const s = Math.max(0, Math.min(1, strength));
     if (s <= 0) return;
-    const amp = 2 + s * 4; // 2..6px
+    const amp = 1.4 + s * 3.2; // subtle 1.4..4.6px
     const x = (Math.random() * 2 - 1) * amp;
     const y = (Math.random() * 2 - 1) * (amp * 0.7);
     setShakeVector({ x, y });
@@ -817,6 +907,39 @@ export function GameClient({
     window.setTimeout(() => {
       setUltimateToast((previous) => (previous?.id === id ? null : previous));
     }, 950);
+  };
+
+  const pushQuestionFlash = (kind: QuestionFlash["kind"]) => {
+    const key = Date.now();
+    setQuestionFlash({ key, kind });
+    window.setTimeout(() => {
+      setQuestionFlash((previous) => (previous?.key === key ? null : previous));
+    }, kind === "new" ? 420 : 520);
+  };
+
+  const pushAnswerFeedback = (kind: AnswerFeedback["kind"], option?: string) => {
+    const key = ++answerFeedbackIdRef.current;
+    setAnswerFeedback({
+      key,
+      kind,
+      option,
+      text: kind === "correct" ? "HIT CONFIRMED" : "MISS",
+    });
+    window.setTimeout(() => {
+      setAnswerFeedback((previous) => (previous?.key === key ? null : previous));
+    }, 780);
+  };
+
+  const pushMomentCallout = (
+    text: string,
+    tone: MomentCallout["tone"],
+    side: MomentCallout["side"] = "center",
+  ) => {
+    const key = ++momentCalloutIdRef.current;
+    setMomentCallout({ key, text, tone, side });
+    window.setTimeout(() => {
+      setMomentCallout((previous) => (previous?.key === key ? null : previous));
+    }, MOMENT_CALLOUT_MS);
   };
 
   useEffect(() => {
@@ -1439,8 +1562,12 @@ export function GameClient({
       setRoomStartPending(false);
       setCopyRoomPending(false);
       setLeavePending(false);
-      currentMatchRoomIdRef.current =
-        payload.roomId ?? payload.room ?? payload.roomInfo?.id ?? currentMatchRoomIdRef.current;
+      const incomingRoomId = payload.roomId ?? payload.room ?? payload.roomInfo?.id ?? null;
+      currentMatchRoomIdRef.current = incomingRoomId ?? currentMatchRoomIdRef.current;
+      // Reset per-match counters
+      correctAnswersRef.current = 0;
+      matchTokenRef.current = incomingRoomId ?? `ai-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      setMatchRewards(null);
       setYourName(payload.yourName ?? "You");
       setOpponentName(payload.opponentName ?? payload.opponent?.name ?? "Opponent");
       const nextYourAvatarId = normalizeAvatarId(payload.yourAvatarData?.id ?? payload.yourAvatar);
@@ -1530,6 +1657,8 @@ export function GameClient({
       setOpponentHitKey(0);
       setLatestYouDamage(null);
       setLatestOpponentDamage(null);
+      setLatestYouSpeedTier("normal");
+      setLatestOpponentSpeedTier("normal");
       setYouDamageFlashTier(0);
       setOpponentDamageFlashTier(0);
       if (youFlashTierClearRef.current) clearTimeout(youFlashTierClearRef.current);
@@ -1579,6 +1708,8 @@ export function GameClient({
         setOpponentHitKey(0);
         setLatestYouDamage(null);
         setLatestOpponentDamage(null);
+        setLatestYouSpeedTier("normal");
+        setLatestOpponentSpeedTier("normal");
         setYouDamageFlashTier(0);
         setOpponentDamageFlashTier(0);
         if (youFlashTierClearRef.current) clearTimeout(youFlashTierClearRef.current);
@@ -1600,6 +1731,12 @@ export function GameClient({
       if (payload.value === "GO") {
         setEmoteBarOpen(false);
       }
+      lowHpCalloutRefs.current = {
+        youLastStand: false,
+        opponentLastStand: false,
+        finishThem: false,
+        clutch: false,
+      };
       setRematchRequested(false);
       setOpponentRematchRequested(false);
       setRematchProgress({ requestedPlayers: 0, requiredPlayers: 2 });
@@ -1632,6 +1769,10 @@ export function GameClient({
       currentQuestionTokenRef.current = token;
       setCurrentQuestion(questionData?.prompt || question || "Get ready...");
       setCurrentQuestionData(questionData);
+      setQuestionMotionKey((key) => key + 1);
+      pushQuestionFlash("new");
+      setAnswerFeedback(null);
+      lastSubmittedAnswerRef.current = "";
       setTimeoutDecisionPrompt({ open: false, token: 0 });
       setAnswer("");
       setFocusPulseKey((k) => k + 1);
@@ -1769,6 +1910,14 @@ export function GameClient({
       console.log("[client] incorrectAnswer received", payload);
       setTimeoutDecisionPrompt((prev) => ({ ...prev, open: false }));
       soundManager.play("wrong");
+      pushQuestionFlash("wrong");
+      pushAnswerFeedback("wrong", lastSubmittedAnswerRef.current);
+      if (!viewportState.reducedMotion) {
+        animState.questionShakeControls.start({
+          x: [0, -7, 6, -4, 3, 0],
+          transition: { duration: 0.24, ease: "easeOut" },
+        });
+      }
       syncUltimateFromPayload(payload);
       if (payload.neuralMindShock) {
         triggerShadowMindShock();
@@ -1894,6 +2043,10 @@ export function GameClient({
       opponentStreak?: number;
       fastAnswer?: boolean;
       opponentFastAnswer?: boolean;
+      answerMs?: number | null;
+      opponentAnswerMs?: number | null;
+      speedTier?: SpeedTier;
+      opponentSpeedTier?: SpeedTier;
       pointsAwarded?: number;
       guardianMitigatedDamage?: number;
       guardianStoredDamage?: number;
@@ -1952,6 +2105,8 @@ export function GameClient({
       const nextScores = payload.scores ?? payload.playerScores;
       const streakValue = payload.streak ?? 0;
       const opponentStreakValue = payload.opponentStreak ?? 0;
+      const yourSpeedTier = normalizeSpeedTier(payload.speedTier, payload.fastAnswer);
+      const opponentSpeedTier = normalizeSpeedTier(payload.opponentSpeedTier, payload.opponentFastAnswer);
       // Track peak streaks for end-of-match summary
       if (streakValue > peakYouStreakRef.current) peakYouStreakRef.current = streakValue;
       if (opponentStreakValue > peakOpponentStreakRef.current) peakOpponentStreakRef.current = opponentStreakValue;
@@ -1963,8 +2118,15 @@ export function GameClient({
       const newOpponentScore = nextScores?.opponent ?? payload.opponent ?? 0;
       const youScored = newYouScore > prevScores.you;
       const opponentScored = newOpponentScore > prevScores.opponent;
+      if (youScored) correctAnswersRef.current += 1;
       if (newYouScore > prevScores.you) triggerScoreGlow("you");
       if (newOpponentScore > prevScores.opponent) triggerScoreGlow("opponent");
+      if (previousFeedback.youStreak >= 2 && streakValue === 0 && previousFeedback.youStreak > streakValue) {
+        pushMomentCallout("COMBO BREAKER", "rose", "you");
+      }
+      if (previousFeedback.opponentStreak >= 2 && opponentStreakValue === 0 && previousFeedback.opponentStreak > opponentStreakValue) {
+        pushMomentCallout("COMBO BREAKER", "cyan", "opponent");
+      }
 
       const rawHp = payload.hp;
       // Narrow to a typed object so TS knows `you` / `opponent` are numbers (not only when inlined).
@@ -1983,6 +2145,13 @@ export function GameClient({
       if (youScored) {
         // Instant feedback: correct answer tick
         soundManager.play("correct", { volume: 0.28, rate: 1.05 });
+        pushQuestionFlash("correct");
+        pushAnswerFeedback("correct", lastSubmittedAnswerRef.current);
+        if (yourSpeedTier === "lightning") {
+          pushCombatEvent("you", { text: "LIGHTNING", color: "#fde68a", className: "bg-amber-950/90 text-amber-100", duration: 0.95 });
+        } else if (yourSpeedTier === "fast") {
+          pushCombatEvent("you", { text: "FAST", color: "#bae6fd", className: "bg-sky-950/90 text-sky-100", duration: 0.9 });
+        }
         const nowFx = Date.now();
         const pfx = payload as Record<string, number | undefined>;
         const overclockCombo = pfx.overclockCombo ?? 0;
@@ -2050,8 +2219,15 @@ export function GameClient({
           });
         }
         const youPointsDelta = newYouScore - prevScores.you;
-        const dmgDealt = calcDamage(youPointsDelta, payload.fastAnswer ?? false, streakValue);
-        const flashTierForOpp = overclockCombo > 0 ? Math.max(1, Math.round(overclockCombo / 100)) : 0;
+        const dmgDealt = calcDamage(youPointsDelta, yourSpeedTier, streakValue);
+        const flashTierForOpp =
+          overclockCombo > 0
+            ? Math.max(1, Math.round(overclockCombo / 100))
+            : yourSpeedTier === "lightning"
+              ? 2
+              : yourSpeedTier === "fast"
+                ? 1
+                : 0;
         if (dmgDealt > 0) {
           setOpponentDamageFlashTier(flashTierForOpp);
           if (opponentFlashTierClearRef.current) clearTimeout(opponentFlashTierClearRef.current);
@@ -2070,19 +2246,13 @@ export function GameClient({
           const t = setTimeout(() => {
             setOpponentHitType(type);
             setOpponentHitIntensity(intensity);
+            setLatestOpponentSpeedTier(yourSpeedTier);
             if (!authoritativeHp) {
               setOpponentDamageTaken((prev) => prev + dmgDealt);
             }
             setLatestOpponentDamage(dmgDealt);
             setOpponentHitKey((prev) => prev + 1);
             playHitSound(type, intensity);
-            if (type !== "normal") {
-              triggerScreenShake(
-                type === "ultimate"
-                  ? Math.min(1, intensity * (infernoStacks > 0 ? 1.05 : 0.95))
-                  : Math.min(1, intensity * 0.65)
-              );
-            }
           }, delayMs);
           hitDelayTimeoutsRef.current.add(t);
           setTimeout(() => hitDelayTimeoutsRef.current.delete(t), delayMs + 20);
@@ -2100,7 +2270,14 @@ export function GameClient({
         const nowO = Date.now();
         const pfxO = payload as Record<string, number | undefined>;
         const scorerOc = (payload as { scorerOverclockCombo?: number }).scorerOverclockCombo ?? 0;
-        const flashTierYou = scorerOc > 0 ? Math.max(1, Math.round(scorerOc / 100)) : 0;
+        const flashTierYou =
+          scorerOc > 0
+            ? Math.max(1, Math.round(scorerOc / 100))
+            : opponentSpeedTier === "lightning"
+              ? 2
+              : opponentSpeedTier === "fast"
+                ? 1
+                : 0;
         const opponentArchitectNodesGained = pfxO.architectNodesGained ?? 0;
         if ((pfxO.opponentArchitectUntil ?? 0) > nowO && opponentArchitectNodesGained > 0) {
           pushCombatEvent("opponent", {
@@ -2159,7 +2336,7 @@ export function GameClient({
           });
         }
         const oppPointsDelta = newOpponentScore - prevScores.opponent;
-        const dmgTaken = calcDamage(oppPointsDelta, payload.opponentFastAnswer ?? false, opponentStreakValue);
+        const dmgTaken = calcDamage(oppPointsDelta, opponentSpeedTier, opponentStreakValue);
         if (dmgTaken > 0) {
           setYouDamageFlashTier(flashTierYou);
           if (youFlashTierClearRef.current) clearTimeout(youFlashTierClearRef.current);
@@ -2178,19 +2355,13 @@ export function GameClient({
           const t = setTimeout(() => {
             setYouHitType(type);
             setYouHitIntensity(intensity);
+            setLatestYouSpeedTier(opponentSpeedTier);
             if (!authoritativeHp) {
               setYouDamageTaken((prev) => prev + dmgTaken);
             }
             setLatestYouDamage(dmgTaken);
             setYouHitKey((prev) => prev + 1);
             playHitSound(type, intensity);
-            if (type !== "normal") {
-              triggerScreenShake(
-                type === "ultimate"
-                  ? Math.min(1, intensity * (infernoStacks > 0 ? 1.05 : 0.95))
-                  : Math.min(1, intensity * 0.65)
-              );
-            }
           }, delayMs);
           hitDelayTimeoutsRef.current.add(t);
           setTimeout(() => hitDelayTimeoutsRef.current.delete(t), delayMs + 20);
@@ -3121,6 +3292,80 @@ export function GameClient({
       } else {
         soundManager.play(result === "loss" ? "lose" : "win", { volume: 0.34, rate: 1.0, allowOverlap: true });
       }
+
+      // Claim match rewards — calculate client-side, persist for authenticated users
+      {
+        const isKo = payload.endCondition === "ko";
+        const isAiMatch = !currentMatchRoomIdRef.current || currentMatchRoomIdRef.current.startsWith("ai-");
+        const claimToken = matchTokenRef.current;
+        import("@/lib/match-rewards").then(({ calculateMatchRewards, computeLevel }) => {
+          const breakdown = calculateMatchRewards({
+            result,
+            correctAnswers: correctAnswersRef.current,
+            peakStreak: peakYouStreakRef.current,
+            isKo,
+            isAiMatch,
+          });
+          const supabase = getSupabaseClient();
+          supabase.auth.getSession().then(({ data: { session } }) => {
+            if (!session?.access_token || !claimToken) {
+              // Guest: show rewards visually without persisting
+              setMatchRewards({
+                xpAwarded: breakdown.totalXp,
+                coinsAwarded: breakdown.totalCoins,
+                levelBefore: 1,
+                levelAfter: 1,
+                leveledUp: false,
+                wallet: { xp: breakdown.totalXp, coins: breakdown.totalCoins, level: 1 },
+                breakdown,
+              });
+              return;
+            }
+            fetch("/api/match-rewards/claim", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${session.access_token}`,
+              },
+              body: JSON.stringify({
+                matchToken: claimToken,
+                result,
+                correctAnswers: correctAnswersRef.current,
+                peakStreak: peakYouStreakRef.current,
+                isKo,
+                isAiMatch,
+              }),
+            })
+              .then((res) => {
+                if (res.ok) return res.json();
+                if (res.status === 409) return null; // already claimed, no-op
+                return null;
+              })
+              .then((data) => {
+                if (data && typeof data.xpAwarded === "number") {
+                  setMatchRewards(data as import("@/lib/match-rewards").MatchRewardsClaimResponse);
+                } else {
+                  // API failed — still show client-side rewards (don't show wallet totals)
+                  const { level } = computeLevel(breakdown.totalXp);
+                  setMatchRewards({
+                    xpAwarded: breakdown.totalXp,
+                    coinsAwarded: breakdown.totalCoins,
+                    levelBefore: level,
+                    levelAfter: level,
+                    leveledUp: false,
+                    wallet: { xp: breakdown.totalXp, coins: breakdown.totalCoins, level },
+                    breakdown,
+                  });
+                }
+              })
+              .catch(() => {
+                // Silently ignore network errors
+              });
+          });
+        }).catch(() => {
+          // Dynamic import failed — skip rewards display
+        });
+      }
     };
 
     const handleRematchStatus = (payload: {
@@ -3283,6 +3528,7 @@ export function GameClient({
       ultimate.shadowCorruptUntil > Date.now() || ultimate.opponentShadowCorruptUntil > Date.now();
     const emitSubmit = () => {
       console.log(`[client] submitAnswer emitted -> ${trimmedAnswer} token=${currentQuestionTokenRef.current}`);
+      lastSubmittedAnswerRef.current = trimmedAnswer;
       socket.emit("submitAnswer", { answer: trimmedAnswer, token: currentQuestionTokenRef.current });
       setAnswer("");
     };
@@ -3545,6 +3791,10 @@ export function GameClient({
   const toDisplayHp = (value: number) => Math.max(0, Math.min(DISPLAY_MAX_HP, (value / MAX_HP) * DISPLAY_MAX_HP));
   const youDisplayHP = toDisplayHp(youHP);
   const opponentDisplayHP = toDisplayHp(opponentHP);
+  const youLowHp = isActiveGameplay && youDisplayHP > 0 && youDisplayHP <= LOW_HP_THRESHOLD;
+  const opponentLowHp = isActiveGameplay && opponentDisplayHP > 0 && opponentDisplayHP <= LOW_HP_THRESHOLD;
+  const bothClutchHp =
+    isActiveGameplay && youDisplayHP > 0 && opponentDisplayHP > 0 && youDisplayHP <= CLUTCH_HP && opponentDisplayHP <= CLUTCH_HP;
   const latestYouRawDamage = latestYouDamage;
   const latestOpponentRawDamage = latestOpponentDamage;
   const showHP = isInMatchShell || isFinished;
@@ -3572,6 +3822,28 @@ export function GameClient({
       ) : null}
     </Button>
   ) : null;
+
+  useEffect(() => {
+    if (!isActiveGameplay) return;
+    const flags = lowHpCalloutRefs.current;
+    if (bothClutchHp && !flags.clutch) {
+      flags.clutch = true;
+      pushMomentCallout("CLUTCH?", "violet", "center");
+      return;
+    }
+    if (youDisplayHP > 0 && youDisplayHP <= LAST_STAND_HP && !flags.youLastStand) {
+      flags.youLastStand = true;
+      pushMomentCallout("LAST STAND", "rose", "you");
+    }
+    if (opponentDisplayHP > 0 && opponentDisplayHP <= LAST_STAND_HP && !flags.opponentLastStand) {
+      flags.opponentLastStand = true;
+      pushMomentCallout("LAST STAND", "amber", "opponent");
+    }
+    if (opponentDisplayHP > 0 && opponentDisplayHP <= FINISH_THEM_HP && !flags.finishThem) {
+      flags.finishThem = true;
+      pushMomentCallout("FINISH THEM", "amber", "opponent");
+    }
+  }, [isActiveGameplay, youDisplayHP, opponentDisplayHP, bothClutchHp]);
   const isSystemCorruptActive =
     ultimate.shadowCorruptUntil > Date.now() || ultimate.opponentShadowCorruptUntil > Date.now();
   const isTitanOverpowerActive = ultimate.titanOverpowerUntil > Date.now();
@@ -3594,6 +3866,11 @@ export function GameClient({
   const architectCanRelease =
     ultimate.type === "perfect_sequence" &&
     ultimate.architectUntil > Date.now();
+
+  // Close mobile workpad sheet when inputs lock or game ends
+  useEffect(() => {
+    if (inputsLocked || !isActiveGameplay) setWorkpadSheetOpen(false);
+  }, [inputsLocked, isActiveGameplay]);
 
   // Keep the answer input always ready in live matches.
   useEffect(() => {
@@ -3715,15 +3992,9 @@ export function GameClient({
   })();
 
   const getStreakLabel = (streak: number) => {
-    if (streak >= 5) {
-      return "UNSTOPPABLE";
-    }
-
-    if (streak >= 3) {
-      return "ON FIRE";
-    }
-
-    return null;
+    const tier = getStreakTier(streak);
+    if (!tier) return null;
+    return tier.label === "COMBO" ? `x${streak} COMBO` : tier.label;
   };
 
   const yourStreakLabel = getStreakLabel(feedback.youStreak);
@@ -3954,6 +4225,22 @@ export function GameClient({
       <section className="q-match-lock fixed inset-0 z-10 overflow-hidden text-white">
         {/* Overlays */}
         <GameOverOverlay result={null} />
+        <BattlefieldEffects
+          reduced={reduceBattleMotion}
+          compact={compactGameplay || crampedGameplay || viewportState.mobileLayout}
+          dimmed={workpadOpen || workpadSheetOpen || viewportState.tabletLandscape}
+          particleCount={
+            viewportState.mobileLayout ? 6
+            : compactGameplay || crampedGameplay ? 9
+            : viewportState.tabletLandscape ? 12
+            : 18
+          }
+          animationSpeed={showFinalPhase ? 1.25 : 0.85}
+          rippleIntensity={showFinalPhase || ultimateCue ? 1.18 : 0.82}
+          hitPulseKey={youHitKey + opponentHitKey}
+          questionPulseKey={questionFlash?.key ?? questionMotionKey}
+          ultimatePulseKey={ultimateCue?.id ?? 0}
+        />
         <UltimateActivationOverlay cue={ultimateCue} />
         <UltimateCombatFxLayer
           ultimate={ultimateFxSnapshot}
@@ -4030,10 +4317,41 @@ export function GameClient({
             </motion.div>
           ) : null}
         </AnimatePresence>
+        <AnimatePresence>
+          {momentCallout ? (
+            <motion.div
+              key={`moment-${momentCallout.key}`}
+              className={cn(
+                "pointer-events-none absolute z-40 rounded-full border px-4 py-2 text-[11px] font-black uppercase tracking-[0.24em] shadow-[0_14px_36px_rgba(2,6,23,0.48)]",
+                momentCallout.side === "you"
+                  ? "left-[12%] top-[34%]"
+                  : momentCallout.side === "opponent"
+                    ? "right-[12%] top-[34%]"
+                    : "left-1/2 top-[31%] -translate-x-1/2",
+                momentCallout.tone === "rose" && "border-rose-300/45 bg-rose-950/88 text-rose-100",
+                momentCallout.tone === "amber" && "border-amber-300/45 bg-amber-950/88 text-amber-100",
+                momentCallout.tone === "violet" && "border-violet-300/45 bg-violet-950/88 text-violet-100",
+                momentCallout.tone === "cyan" && "border-cyan-300/45 bg-cyan-950/88 text-cyan-100"
+              )}
+              initial={{ opacity: 0, y: 10, scale: 0.9 }}
+              animate={reduceBattleMotion ? { opacity: 1 } : { opacity: [0, 1, 1, 0], y: [10, 0, -4, -12], scale: [0.9, 1.04, 1, 0.96] }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 1.05, ease: "easeOut" }}
+            >
+              {momentCallout.text}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+        <div
+          className="pointer-events-none absolute inset-0 z-10"
+          style={{
+            background: `linear-gradient(90deg, ${youLowHp ? "rgba(127,29,29,0.22)" : "transparent"} 0%, transparent 24%, transparent 76%, ${opponentLowHp ? "rgba(127,29,29,0.22)" : "transparent"} 100%)`,
+          }}
+        />
 
         <div
           className={cn(
-            "flex h-[100dvh] min-h-[100dvh] flex-col overflow-hidden overscroll-y-contain"
+            "relative z-10 flex h-[100dvh] min-h-[100dvh] flex-col overflow-hidden overscroll-y-contain"
           )}
         >
           {/* Top HUD */}
@@ -4056,8 +4374,8 @@ export function GameClient({
 
               <div
                 className={cn(
-                  "relative grid items-stretch gap-2 md:grid-cols-[minmax(0,1fr)_8.5rem_minmax(0,1fr)] md:gap-3",
-                  crampedGameplay && "gap-1.5 md:grid-cols-[minmax(0,1fr)_7rem_minmax(0,1fr)]"
+                  "relative grid items-stretch gap-2 md:grid-cols-[minmax(0,1fr)_7.5rem_minmax(0,1fr)] md:gap-3",
+                  crampedGameplay && "gap-1.5 md:grid-cols-[minmax(0,1fr)_6.5rem_minmax(0,1fr)]"
                 )}
               >
                 <MatchChampionCard
@@ -4095,6 +4413,10 @@ export function GameClient({
                     burning:
                       ultimate.opponentInfernoPendingUntil > Date.now() &&
                       ultimate.opponentNovaBonusRemaining > 0,
+                    streakCount: feedback.youStreak,
+                    lowHp: youLowHp,
+                    attackPulseKey: opponentHitKey,
+                    attackEffect: yourHitEffect,
                     combatEvents: youCombatEvents,
                     damageFloat:
                       typeof latestYouRawDamage === "number" &&
@@ -4104,6 +4426,7 @@ export function GameClient({
                             hitKey: youHitKey,
                             amount: latestYouRawDamage,
                             flashTier: youDamageFlashTier,
+                            speedTier: latestYouSpeedTier,
                             hitEffect: opponentHitEffect,
                           }
                         : null,
@@ -4162,6 +4485,10 @@ export function GameClient({
                     burning:
                       ultimate.infernoPendingUntil > Date.now() &&
                       ultimate.novaBonusRemaining > 0,
+                    streakCount: feedback.opponentStreak,
+                    lowHp: opponentLowHp,
+                    attackPulseKey: youHitKey,
+                    attackEffect: opponentHitEffect,
                     combatEvents: opponentCombatEvents,
                     damageFloat:
                       typeof latestOpponentRawDamage === "number" &&
@@ -4171,6 +4498,7 @@ export function GameClient({
                             hitKey: opponentHitKey,
                             amount: latestOpponentRawDamage,
                             flashTier: opponentDamageFlashTier,
+                            speedTier: latestOpponentSpeedTier,
                             hitEffect: yourHitEffect,
                           }
                         : null,
@@ -4180,264 +4508,431 @@ export function GameClient({
             </div>
           </div>
 
-          {/* Middle: Question zone */}
-          <div
-            className={cn(
-              "qx-match-scroll flex min-h-0 flex-1 flex-col items-stretch justify-start px-3 py-3 sm:px-5 sm:py-4 md:justify-center md:py-10",
-              compactGameplay && "py-2.5 sm:py-3 md:py-4",
-              constrainedGameplay && "justify-center py-2 sm:py-2"
-            )}
-          >
-            <motion.div animate={reduceBattleMotion ? undefined : animState.questionShakeControls} className="mx-auto w-full max-w-3xl md:max-w-4xl lg:max-w-5xl">
-              <div className={cn("q-card-strong relative rounded-[1.5rem] p-3 text-center sm:p-6 md:p-8", compactGameplay && "sm:p-4 md:p-5", constrainedGameplay && "p-2.5 sm:p-3")}>
-                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-textSecondary/70">
-                  {isCountdown ? "Countdown" : "Question"}
-                </p>
-                <div className="mt-3 flex items-center justify-center">
-                  {isCountdown ? (
-                    <CountdownDisplay value={countdownValue} />
-                  ) : (
-                    <QuestionContent
-                      question={currentQuestionData}
-                      fallbackPrompt={currentQuestion}
-                      compact
-                      fitViewport
-                      promptClassName={
-                        constrainedGameplay
-                          ? "text-lg font-black tracking-tight text-white sm:text-2xl md:text-3xl"
-                          : compactGameplay
-                            ? "text-xl font-black tracking-tight text-white sm:text-3xl md:text-4xl"
-                            : "text-xl font-black tracking-tight text-white sm:text-4xl md:text-5xl lg:text-6xl"
-                      }
-                    />
-                  )}
-                </div>
+          {/* Main gameplay area — question + answers in left col, workpad in right col */}
+          <div className="flex min-h-0 flex-1 overflow-hidden">
 
-                <div className={cn("mt-3 min-h-[2.25rem]", constrainedGameplay && "mt-2 min-h-[1.25rem]")}>
-                  {primaryStatus ? (
-                    <p className={`text-xs font-black uppercase tracking-[0.22em] ${primaryStatus.color}`}>
-                      {primaryStatus.text}
-                    </p>
-                  ) : null}
-                  {secondaryStatus ? (
-                    <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                      {secondaryStatus}
-                    </p>
-                  ) : null}
-                </div>
-
-                <FrostBurst active={animState.frostBurstActive} />
-                <SnowfallOverlay active={animState.snowfallActive} reduced={reduceBattleMotion} />
-              </div>
-            </motion.div>
-          </div>
-
-          {/* Bottom: Sticky action bar */}
-          {isActiveGameplay ? (
+            {/* Left / sole col: question card then answer form, scrollable */}
             <div
               className={cn(
-                "shrink-0 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 sm:px-5",
-                compactGameplay && "pt-2",
-                keyboardOpenDuringGameplay && "pb-[calc(env(safe-area-inset-bottom,0px)+8px)] pt-1"
+                "flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-6 sm:px-5 sm:pt-8",
+                compactGameplay && "pt-3 sm:pt-4",
+                constrainedGameplay && "pt-2 sm:pt-2",
+                keyboardOpenDuringGameplay && "pb-2 pt-1"
               )}
             >
-              <div className="mx-auto w-full max-w-3xl">
-                <div className={cn("mb-2 flex items-center justify-start sm:justify-center", constrainedGameplay && "hidden")}>
-                <EmoteBar
-                  emotes={availableEmotes}
-                  open={emoteBarOpen && emotesEnabled}
-                  onToggle={() => setEmoteBarOpen((o) => !o)}
-                  onSend={handleSendEmote}
-                  coolingDown={emoteCoolingDown}
-                  cooldownUntil={emoteCooldownUntil}
-                  disabled={!emotesEnabled}
-                />
-              </div>
-                <form className={cn("flex w-full flex-col gap-2", crampedGameplay && "gap-1.5")} onSubmit={handleSubmit}>
-                {isNeuralJamSilenced ? (
-                  <div className="flex items-center justify-start sm:justify-center">
-                    <span className="rounded-full border border-violet-300/35 bg-violet-500/12 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-violet-100">
-                      JAMMED
-                    </span>
-                  </div>
-                ) : null}
-                <div className="hidden sm:block">
-                  <WorkingScratchpad answerInputLocked={inputsLocked} />
-                </div>
-                {Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0 ? (
-                  <div className={cn("grid grid-cols-1 gap-2 sm:grid-cols-2", compactGameplay && "grid-cols-2 gap-1.5 sm:grid-cols-2")}>
-                    {currentQuestionData.options.map((option, idx) => (
-                      <Button
-                        key={`${option}-${idx}`}
-                        type="button"
-                        variant="secondary"
+              {/* Question card — always at the top of the column */}
+              <motion.div
+                animate={reduceBattleMotion ? undefined : animState.questionShakeControls}
+                className="mx-auto w-full max-w-2xl"
+              >
+                <motion.div
+                  key={`question-card-${questionMotionKey}`}
+                  className={cn(
+                    "q-card-strong relative overflow-hidden rounded-[1.5rem] p-4 text-center sm:p-6",
+                    compactGameplay && "p-3 sm:p-4",
+                    constrainedGameplay && "p-2.5 sm:p-3",
+                    questionFlash?.kind === "correct" && "ring-2 ring-emerald-300/55",
+                    questionFlash?.kind === "wrong" && "ring-2 ring-rose-300/55"
+                  )}
+                  initial={reduceBattleMotion ? false : { opacity: 0, y: 12, scale: 0.985 }}
+                  animate={
+                    reduceBattleMotion
+                      ? undefined
+                      : {
+                          opacity: 1,
+                          y: 0,
+                          scale: 1,
+                          boxShadow:
+                            questionFlash?.kind === "correct"
+                              ? "0 0 34px rgba(52,211,153,0.22), 0 18px 52px rgba(2,6,23,0.5)"
+                              : questionFlash?.kind === "wrong"
+                                ? "0 0 34px rgba(251,113,133,0.22), 0 18px 52px rgba(2,6,23,0.5)"
+                                : showFinalPhase
+                                  ? "0 0 30px rgba(251,113,133,0.16), 0 18px 52px rgba(2,6,23,0.5)"
+                                  : "0 18px 52px rgba(2,6,23,0.5)",
+                        }
+                  }
+                  transition={{ duration: 0.22, ease: "easeOut" }}
+                >
+                  <motion.div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0"
+                    animate={{
+                      opacity: showFinalPhase ? [0.08, isFinalSeconds ? 0.22 : 0.16, 0.08] : 0.04,
+                    }}
+                    transition={{ duration: isFinalSeconds ? 0.55 : 1.2, repeat: showFinalPhase ? Number.POSITIVE_INFINITY : 0, ease: "easeInOut" }}
+                    style={{
+                      background:
+                        questionFlash?.kind === "correct"
+                          ? "radial-gradient(ellipse at center, rgba(52,211,153,0.24) 0%, transparent 66%)"
+                          : questionFlash?.kind === "wrong"
+                            ? "radial-gradient(ellipse at center, rgba(251,113,133,0.24) 0%, transparent 66%)"
+                            : "radial-gradient(ellipse at center, rgba(56,189,248,0.10) 0%, transparent 70%)",
+                    }}
+                  />
+                  <AnimatePresence>
+                    {answerFeedback ? (
+                      <motion.div
+                        key={answerFeedback.key}
                         className={cn(
-                          "relative min-h-[48px] w-full justify-start py-3 text-left text-sm sm:min-h-[2.75rem] sm:py-2",
-                          compactGameplay && "min-h-[42px] px-2.5 py-2 text-center text-xs sm:min-h-[2.6rem] sm:text-sm"
+                          "pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] shadow-[0_12px_30px_rgba(2,6,23,0.45)] sm:text-xs",
+                          answerFeedback.kind === "correct"
+                            ? "border-emerald-300/45 bg-emerald-950/88 text-emerald-100"
+                            : "border-rose-300/45 bg-rose-950/88 text-rose-100"
                         )}
-                        disabled={inputsLocked || youEliminated || feedback.youAnsweredCurrent}
-                        onClick={() => handleOptionSubmit(option)}
+                        initial={{ opacity: 0, y: 8, scale: 0.9 }}
+                        animate={{ opacity: [0, 1, 1, 0], y: [8, 0, -8, -16], scale: [0.9, 1.02, 1, 0.96] }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.78, ease: "easeOut" }}
                       >
-                        {option}
-                        {isNeuralJamSilenced && !isJamActive ? (
-                          <span className="pointer-events-none absolute inset-0 bg-violet-950/55 bg-[repeating-linear-gradient(0deg,transparent_0px,transparent_2px,rgba(167,139,250,0.07)_2px,rgba(167,139,250,0.07)_4px)]" />
-                        ) : null}
-                      </Button>
-                    ))}
+                        {answerFeedback.text}
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-textSecondary/70">
+                    {isCountdown ? "Countdown" : "Question"}
+                  </p>
+                  <div className="mt-3 flex items-center justify-center">
+                    {isCountdown ? (
+                      <CountdownDisplay value={countdownValue} />
+                    ) : (
+                      <QuestionContent
+                        question={currentQuestionData}
+                        fallbackPrompt={currentQuestion}
+                        compact
+                        fitViewport
+                        promptClassName={
+                          constrainedGameplay
+                            ? "text-lg font-black tracking-tight text-white sm:text-xl md:text-2xl"
+                            : compactGameplay
+                              ? "text-lg font-black tracking-tight text-white sm:text-2xl md:text-3xl"
+                              : "text-xl font-black tracking-tight text-white sm:text-3xl md:text-4xl"
+                        }
+                      />
+                    )}
                   </div>
-                ) : null}
+                  {(primaryStatus || secondaryStatus) ? (
+                    <div className={cn("mt-3", constrainedGameplay && "mt-2")}>
+                      {primaryStatus ? (
+                        <p className={`text-xs font-black uppercase tracking-[0.22em] ${primaryStatus.color}`}>
+                          {primaryStatus.text}
+                        </p>
+                      ) : null}
+                      {secondaryStatus ? (
+                        <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                          {secondaryStatus}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <FrostBurst active={animState.frostBurstActive} />
+                  <SnowfallOverlay active={animState.snowfallActive} reduced={reduceBattleMotion} />
+                </motion.div>
+              </motion.div>
 
-                {!(Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0) ? (
-                  <div className={cn("flex items-stretch gap-2", compactGameplay && "flex-col")}>
-                    <input
-                      ref={answerInputRef}
-                      type="text"
-                      autoFocus
-                      value={answer}
-                      onChange={(event) => handleAnswerChange(event.target.value)}
-                      placeholder={
-                        isJamActive
-                          ? "Signal jam active - prep your answer..."
-                          : isNeuralJamSilenced
-                            ? isOpponentNeuralJamVictim
-                              ? "Neural jam — opponent locked your inputs..."
-                              : "Neural jam — inputs unlock shortly..."
-                            : youEliminated
-                              ? "Eliminated"
-                              : feedback.youAnsweredCurrent
-                                ? "Waiting..."
-                                : currentQuestionData?.inputMode === "text"
-                                  ? "Type text or symbol answer..."
-                                  : "Type answer..."
-                      }
-                      disabled={inputsLocked || youEliminated || feedback.youAnsweredCurrent}
-                      autoCapitalize="off"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      enterKeyHint="go"
-                      className={cn(
-                        "neon-input min-h-[48px] min-w-0 flex-1 rounded-2xl px-4 py-3 text-base disabled:cursor-not-allowed disabled:opacity-60 sm:h-12 sm:py-2",
-                        compactGameplay && "min-h-[44px] py-2.5 sm:h-11 sm:py-2"
-                      )}
-                    />
-                    <Button
-                      className={cn(
-                        "min-h-[48px] w-[7.5rem] shrink-0 sm:h-12",
-                        compactGameplay && "min-h-[44px] w-full sm:h-11"
-                      )}
-                      type="submit"
-                      disabled={!answer.trim() || inputsLocked || youEliminated || feedback.youAnsweredCurrent}
-                    >
-                      Submit
-                    </Button>
-                  </div>
-                ) : null}
-
-                <div className={cn(constrainedGameplay && "hidden")}>
-                  {skipQuestionButton}
-                </div>
-
-                {/* Abilities row: keep things orderly (no empty placeholder box). */}
+              {/* Answer form — directly below question, same column */}
+              {isActiveGameplay ? (
                 <div
                   className={cn(
-                    "grid gap-2",
-                    POWERUPS_ENABLED ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-2",
-                    compactGameplay && "grid-cols-1"
+                    "mx-auto mt-4 w-full sm:mt-5",
+                    compactGameplay && "mt-3 sm:mt-3",
+                    constrainedGameplay && "mt-2 sm:mt-2",
+                    viewportState.tabletLandscape ? "max-w-none" : "max-w-2xl"
                   )}
                 >
-                  {POWERUPS_ENABLED ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (feedback.youPowerUpAvailable) {
-                          handleUsePowerUp(feedback.youPowerUpAvailable);
-                        }
-                      }}
-                      disabled={
-                        !feedback.youPowerUpAvailable ||
-                        feedback.youPowerUpUsed ||
-                        youEliminated ||
-                        feedback.youAnsweredCurrent
-                      }
-                      className={`h-11 w-full rounded-2xl border px-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
-                        feedback.youPowerUpAvailable && !feedback.youPowerUpUsed
-                          ? "border-sky-300/35 bg-sky-500/10 text-sky-100 hover:border-sky-300/55 active:scale-[0.99]"
-                          : feedback.youPowerUpUsed
-                            ? "border-white/[0.05] bg-slate-950/38 text-slate-500"
-                            : "border-white/[0.05] bg-slate-950/30 text-slate-500"
-                      }`}
-                      aria-label="Power-up"
-                    >
-                      {feedback.youPowerUpAvailable ? (
-                        (() => {
-                          const meta = getPowerUpMeta(feedback.youPowerUpAvailable);
-                          return (
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="truncate text-[11px] font-black uppercase tracking-[0.18em]">
-                                  {meta?.icon ?? "✨"} {meta?.name ?? "Power-Up"}
-                                </p>
-                                <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                                  {feedback.youPowerUpUsed ? "Used" : "Ready"}
-                                </p>
-                              </div>
-                              <span className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-300">
-                                Tap
-                              </span>
-                            </div>
-                          );
-                        })()
-                      ) : (
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-[11px] font-black uppercase tracking-[0.18em]">✨ Power-Up</p>
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">None</p>
-                        </div>
-                      )}
-                    </button>
-                  ) : null}
+                  <div className={cn("mb-1.5 flex items-center justify-start", constrainedGameplay && "hidden")}>
+                    <EmoteBar
+                      emotes={availableEmotes}
+                      open={emoteBarOpen && emotesEnabled}
+                      onToggle={() => setEmoteBarOpen((o) => !o)}
+                      onSend={handleSendEmote}
+                      coolingDown={emoteCoolingDown}
+                      cooldownUntil={emoteCooldownUntil}
+                      disabled={!emotesEnabled}
+                    />
+                  </div>
+                  <form className={cn("flex w-full flex-col gap-2", crampedGameplay && "gap-1.5")} onSubmit={handleSubmit}>
+                    {isNeuralJamSilenced ? (
+                      <div className="flex items-center">
+                        <span className="rounded-full border border-violet-300/35 bg-violet-500/12 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-violet-100">
+                          JAMMED
+                        </span>
+                      </div>
+                    ) : null}
 
-                  {/* Mobile: compact, consistent height. Desktop+: bigger + clearer charging/ready. */}
-                  <div className="sm:hidden">
-                    <UltimateAbilityButton
-                      type={ultimate.type}
-                      ultimateName={ultimate.name}
-                      charge={ultimate.charge}
-                      ready={ultimate.ready}
-                      used={ultimate.used}
-                      implemented={ultimate.implemented}
-                      activating={ultimateActivating}
-                      disabled={!canUseUltimate}
-                      onActivate={handleActivateUltimate}
-                      activationBurstKey={youUltimateActivationKey}
-                      activeWindow={architectCanRelease}
-                      actionLabel={architectCanRelease ? "Use Perfect System now" : undefined}
-                      statusOverride={architectCanRelease ? (ultimate.architectReady ? "AUTO AT 5" : "FIRE NOW") : undefined}
-                      size="compact"
-                      className="h-11"
-                    />
-                  </div>
-                  <div className="hidden sm:block">
-                    <UltimateAbilityButton
-                      type={ultimate.type}
-                      ultimateName={ultimate.name}
-                      charge={ultimate.charge}
-                      ready={ultimate.ready}
-                      used={ultimate.used}
-                      implemented={ultimate.implemented}
-                      activating={ultimateActivating}
-                      disabled={!canUseUltimate}
-                      onActivate={handleActivateUltimate}
-                      activationBurstKey={youUltimateActivationKey}
-                      activeWindow={architectCanRelease}
-                      actionLabel={architectCanRelease ? "Use Perfect System now" : undefined}
-                      statusOverride={architectCanRelease ? (ultimate.architectReady ? "AUTO AT 5" : "FIRE NOW") : undefined}
-                      size="regular"
-                    />
-                  </div>
+                    {/* Inline workpad — non-mobile, non-tablet-landscape only */}
+                    {!viewportState.mobileLayout && !viewportState.tabletLandscape ? (
+                      <WorkingScratchpad
+                        displayMode="inline-collapsible"
+                        answerInputLocked={inputsLocked}
+                        onOpenChange={setWorkpadOpen}
+                      />
+                    ) : null}
+
+                    {Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0 ? (
+                      <div className={cn(
+                        "grid gap-2",
+                        viewportState.tabletLandscape ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-2",
+                        compactGameplay && "grid-cols-2 gap-1.5"
+                      )}>
+                        {currentQuestionData.options.map((option, idx) => {
+                          const isFeedbackOption = answerFeedback?.option === option;
+                          return (
+                            <Button
+                              key={`${option}-${idx}`}
+                              type="button"
+                              variant="secondary"
+                              className={cn(
+                                "relative min-h-[48px] w-full justify-start overflow-hidden py-3 text-left text-sm shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_12px_28px_rgba(2,6,23,0.38)] hover:border-cyan-300/45 hover:shadow-[0_0_24px_rgba(34,211,238,0.14),0_14px_30px_rgba(2,6,23,0.44)] sm:min-h-[2.75rem] sm:py-2",
+                                compactGameplay && "min-h-[42px] px-2.5 py-2 text-center text-xs sm:min-h-[2.6rem] sm:text-sm",
+                                isFeedbackOption && answerFeedback.kind === "correct" && "border-emerald-300/70 bg-emerald-500/18 text-emerald-50 shadow-[0_0_24px_rgba(52,211,153,0.2)]",
+                                isFeedbackOption && answerFeedback.kind === "wrong" && "border-rose-300/70 bg-rose-500/18 text-rose-50 shadow-[0_0_24px_rgba(251,113,133,0.2)]"
+                              )}
+                              disabled={inputsLocked || youEliminated || feedback.youAnsweredCurrent}
+                              onClick={() => handleOptionSubmit(option)}
+                            >
+                              {option}
+                              {isFeedbackOption ? (
+                                <motion.span
+                                  className="pointer-events-none absolute inset-0"
+                                  initial={{ opacity: 0 }}
+                                  animate={{ opacity: [0, 0.42, 0] }}
+                                  transition={{ duration: 0.42, ease: "easeOut" }}
+                                  style={{
+                                    background: answerFeedback.kind === "correct"
+                                      ? "linear-gradient(90deg, transparent 0%, rgba(52,211,153,0.55) 48%, transparent 100%)"
+                                      : "linear-gradient(90deg, transparent 0%, rgba(251,113,133,0.55) 48%, transparent 100%)",
+                                  }}
+                                />
+                              ) : null}
+                              {isNeuralJamSilenced && !isJamActive ? (
+                                <span className="pointer-events-none absolute inset-0 bg-violet-950/55 bg-[repeating-linear-gradient(0deg,transparent_0px,transparent_2px,rgba(167,139,250,0.07)_2px,rgba(167,139,250,0.07)_4px)]" />
+                              ) : null}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+
+                    {!(Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0) ? (
+                      <div className={cn("flex items-stretch gap-2", compactGameplay && "flex-col")}>
+                        <input
+                          ref={answerInputRef}
+                          type="text"
+                          autoFocus
+                          value={answer}
+                          onChange={(event) => handleAnswerChange(event.target.value)}
+                          placeholder={
+                            isJamActive
+                              ? "Signal jam active - prep your answer..."
+                              : isNeuralJamSilenced
+                                ? isOpponentNeuralJamVictim
+                                  ? "Neural jam — opponent locked your inputs..."
+                                  : "Neural jam — inputs unlock shortly..."
+                                : youEliminated
+                                  ? "Eliminated"
+                                  : feedback.youAnsweredCurrent
+                                    ? "Waiting..."
+                                    : currentQuestionData?.inputMode === "text"
+                                      ? "Type text or symbol answer..."
+                                      : "Type answer..."
+                          }
+                          disabled={inputsLocked || youEliminated || feedback.youAnsweredCurrent}
+                          autoCapitalize="off"
+                          autoCorrect="off"
+                          spellCheck={false}
+                          enterKeyHint="go"
+                          className={cn(
+                            "neon-input min-h-[48px] min-w-0 flex-1 rounded-2xl px-4 py-3 text-base transition-[border-color,box-shadow,background-color] duration-150 disabled:cursor-not-allowed disabled:opacity-60 sm:h-12 sm:py-2",
+                            compactGameplay && "min-h-[44px] py-2.5 sm:h-11 sm:py-2",
+                            answerFeedback?.kind === "correct" && "border-emerald-300/65 shadow-[0_0_22px_rgba(52,211,153,0.18)]",
+                            answerFeedback?.kind === "wrong" && "border-rose-300/65 shadow-[0_0_22px_rgba(251,113,133,0.18)]"
+                          )}
+                        />
+                        <Button
+                          className={cn(
+                            "min-h-[48px] w-[7.5rem] shrink-0 sm:h-12",
+                            compactGameplay && "min-h-[44px] w-full sm:h-11"
+                          )}
+                          type="submit"
+                          disabled={!answer.trim() || inputsLocked || youEliminated || feedback.youAnsweredCurrent}
+                        >
+                          Submit
+                        </Button>
+                      </div>
+                    ) : null}
+
+                    <div className={cn(constrainedGameplay && "hidden")}>
+                      {skipQuestionButton}
+                    </div>
+
+                    {/* Abilities row */}
+                    <div
+                      className={cn(
+                        "grid gap-2",
+                        POWERUPS_ENABLED ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-2",
+                        compactGameplay && "grid-cols-1"
+                      )}
+                    >
+                      {POWERUPS_ENABLED ? (
+                        <button
+                          type="button"
+                          onClick={() => { if (feedback.youPowerUpAvailable) handleUsePowerUp(feedback.youPowerUpAvailable); }}
+                          disabled={!feedback.youPowerUpAvailable || feedback.youPowerUpUsed || youEliminated || feedback.youAnsweredCurrent}
+                          className={`h-11 w-full rounded-2xl border px-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
+                            feedback.youPowerUpAvailable && !feedback.youPowerUpUsed
+                              ? "border-sky-300/35 bg-sky-500/10 text-sky-100 hover:border-sky-300/55 active:scale-[0.99]"
+                              : feedback.youPowerUpUsed
+                                ? "border-white/[0.05] bg-slate-950/38 text-slate-500"
+                                : "border-white/[0.05] bg-slate-950/30 text-slate-500"
+                          }`}
+                          aria-label="Power-up"
+                        >
+                          {feedback.youPowerUpAvailable ? (
+                            (() => {
+                              const meta = getPowerUpMeta(feedback.youPowerUpAvailable);
+                              return (
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-[11px] font-black uppercase tracking-[0.18em]">
+                                      {meta?.icon ?? "✨"} {meta?.name ?? "Power-Up"}
+                                    </p>
+                                    <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                                      {feedback.youPowerUpUsed ? "Used" : "Ready"}
+                                    </p>
+                                  </div>
+                                  <span className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-300">Tap</span>
+                                </div>
+                              );
+                            })()
+                          ) : (
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-[11px] font-black uppercase tracking-[0.18em]">✨ Power-Up</p>
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">None</p>
+                            </div>
+                          )}
+                        </button>
+                      ) : null}
+
+                      {/* Mobile workpad toggle button */}
+                      {viewportState.mobileLayout && !constrainedGameplay ? (
+                        <button
+                          type="button"
+                          disabled={inputsLocked}
+                          onClick={() => setWorkpadSheetOpen(true)}
+                          className="h-11 w-full rounded-2xl border border-indigo-300/28 bg-slate-900/55 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-200 transition-all hover:border-cyan-300/45 disabled:cursor-not-allowed disabled:opacity-45"
+                          aria-label="Open workpad"
+                        >
+                          ✏ Workpad
+                        </button>
+                      ) : null}
+
+                      {/* Mobile: compact ultimate */}
+                      <div className="sm:hidden">
+                        <UltimateAbilityButton
+                          type={ultimate.type}
+                          ultimateName={ultimate.name}
+                          charge={ultimate.charge}
+                          ready={ultimate.ready}
+                          used={ultimate.used}
+                          implemented={ultimate.implemented}
+                          activating={ultimateActivating}
+                          disabled={!canUseUltimate}
+                          onActivate={handleActivateUltimate}
+                          activationBurstKey={youUltimateActivationKey}
+                          activeWindow={architectCanRelease}
+                          actionLabel={architectCanRelease ? "Use Perfect System now" : undefined}
+                          statusOverride={architectCanRelease ? (ultimate.architectReady ? "AUTO AT 5" : "FIRE NOW") : undefined}
+                          size="compact"
+                          className="h-11"
+                        />
+                      </div>
+                      {/* sm+: regular ultimate */}
+                      <div className="hidden sm:block">
+                        <UltimateAbilityButton
+                          type={ultimate.type}
+                          ultimateName={ultimate.name}
+                          charge={ultimate.charge}
+                          ready={ultimate.ready}
+                          used={ultimate.used}
+                          implemented={ultimate.implemented}
+                          activating={ultimateActivating}
+                          disabled={!canUseUltimate}
+                          onActivate={handleActivateUltimate}
+                          activationBurstKey={youUltimateActivationKey}
+                          activeWindow={architectCanRelease}
+                          actionLabel={architectCanRelease ? "Use Perfect System now" : undefined}
+                          statusOverride={architectCanRelease ? (ultimate.architectReady ? "AUTO AT 5" : "FIRE NOW") : undefined}
+                          size="regular"
+                        />
+                      </div>
+                    </div>
+                  </form>
                 </div>
-                </form>
-              </div>
+              ) : null}
             </div>
+
+            {/* Right col: workpad — tablet landscape + active gameplay only */}
+            {viewportState.tabletLandscape && isActiveGameplay ? (
+              <div
+                className="shrink-0 overflow-hidden border-l border-slate-700/25 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3"
+                style={{ width: "clamp(300px, 35%, 360px)" }}
+              >
+                <WorkingScratchpad
+                  displayMode="always-open"
+                  answerInputLocked={inputsLocked}
+                  onOpenChange={setWorkpadOpen}
+                  className="h-full"
+                />
+              </div>
+            ) : null}
+          </div>
+
+          {/* Mobile workpad bottom-sheet overlay (fixed, sits above everything) */}
+          {isActiveGameplay ? (
+            <AnimatePresence>
+              {viewportState.mobileLayout && workpadSheetOpen && (
+                <motion.div
+                  key="workpad-sheet"
+                  className="fixed inset-0 z-50 flex flex-col justify-end"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18 }}
+                >
+                  <div
+                    className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm"
+                    onClick={() => setWorkpadSheetOpen(false)}
+                  />
+                  <motion.div
+                    className="relative z-10 flex flex-col rounded-t-3xl border-t border-indigo-300/20 bg-[rgba(3,8,24,0.97)] px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3"
+                    style={{ height: "55dvh", minHeight: "280px", maxHeight: "80dvh" }}
+                    initial={{ y: "100%" }}
+                    animate={{ y: 0 }}
+                    exit={{ y: "100%" }}
+                    transition={{ duration: 0.26, ease: [0.32, 0.72, 0, 1] }}
+                  >
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Workpad</p>
+                      <button
+                        type="button"
+                        onClick={() => setWorkpadSheetOpen(false)}
+                        className="rounded-lg border border-indigo-300/30 bg-slate-900/70 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-200 hover:border-rose-300/50 hover:text-rose-200"
+                      >
+                        Close
+                      </button>
+                    </div>
+                    <div className="min-h-0 flex-1">
+                      <WorkingScratchpad
+                        displayMode="standalone"
+                        answerInputLocked={inputsLocked}
+                        className="h-full"
+                      />
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           ) : null}
         </div>
       </section>
@@ -4655,15 +5150,8 @@ export function GameClient({
             </motion.div>
           </motion.div>
         ) : (
-          <motion.div
-            key={shakeKey}
+          <div
             className="neon-panel-soft grid gap-3 rounded-3xl p-3 sm:p-4 md:grid-cols-[minmax(0,1fr)_3rem_minmax(0,1fr)] md:items-stretch md:gap-4 md:p-5 lg:p-6"
-            initial={{ x: 0, y: 0 }}
-            animate={{
-              x: [0, shakeVector.x, -shakeVector.x * 0.65, 0],
-              y: [0, shakeVector.y, -shakeVector.y * 0.65, 0],
-            }}
-            transition={{ duration: 0.14, ease: "easeOut" }}
           >
             {/* You */}
             <div className="relative grid min-h-[22rem] grid-rows-[auto_2.5rem_minmax(8.5rem,auto)] gap-2 sm:min-h-[23rem] sm:gap-3">
@@ -4694,6 +5182,8 @@ export function GameClient({
                 hitType={youHitType}
                 hitIntensity={youHitIntensity}
                 damageFlashTier={youDamageFlashTier}
+                hitEffect={opponentHitEffect}
+                ultimateReady={ultimate.ready && !ultimate.used && ultimate.implemented}
                 ultReadyCueKey={ultReadyCueKey.you}
                 overclockUntil={ultimate.overclockUntil}
                 blackoutUntil={ultimate.blackoutUntil}
@@ -4823,6 +5313,8 @@ export function GameClient({
                 hitType={opponentHitType}
                 hitIntensity={opponentHitIntensity}
                 damageFlashTier={opponentDamageFlashTier}
+                hitEffect={yourHitEffect}
+                ultimateReady={ultimate.opponentReady && !ultimate.opponentUsed && ultimate.opponentImplemented}
                 ultReadyCueKey={ultReadyCueKey.opponent}
                 overclockUntil={ultimate.opponentOverclockUntil}
                 blackoutUntil={ultimate.opponentBlackoutUntil}
@@ -4908,7 +5400,7 @@ export function GameClient({
                 />
               )}
             </motion.div>
-          </motion.div>
+          </div>
         )}
 
         {isRoomLobby && roomLobby ? (
@@ -5155,6 +5647,7 @@ export function GameClient({
               primaryActionLabel={rematchCtaLabel}
               primaryActionDisabled={rematchRequested || leavePending}
               secondaryActionLabel={leavePending ? "Leaving..." : "Change Topic"}
+              matchRewards={matchRewards}
               onRematch={handlePlayAgain}
               onChangeTopic={handleChangeTopic}
             />

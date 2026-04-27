@@ -1,1 +1,6 @@
-{}
+{
+  "components\\game-client.tsx -> @/lib/match-rewards": {
+    "id": "components\\game-client.tsx -> @/lib/match-rewards",
+    "files": []
+  }
+}

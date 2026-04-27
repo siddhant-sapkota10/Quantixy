@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { getAvatar, type AvatarId } from "@/lib/avatars";
 import { ULTIMATE_VFX, type UltimateType } from "@/lib/ultimate-vfx";
@@ -10,6 +10,7 @@ import { FloatingLabel, type FloatingLabelItem } from "@/components/animations/F
 
 type Side = "you" | "opponent";
 type HitEffectId = "none" | "lightning_strike" | "fire_burst" | "pixel_glitch";
+type SpeedTier = "normal" | "fast" | "lightning";
 
 export type MatchChampionCardModel = {
   side: Side;
@@ -45,8 +46,13 @@ export type MatchChampionCardModel = {
   ultimateQuestionsLeft?: number;
   jammed?: boolean;
   burning?: boolean;
+  streakCount?: number;
+  lowHp?: boolean;
+  /** Battle HUD: one-shot key when this player lands damage. */
+  attackPulseKey?: number;
+  attackEffect?: HitEffectId | string;
   /** Battle HUD: floating damage on this card when this player was just hit. */
-  damageFloat?: { hitKey: number; amount: number; flashTier: number; hitEffect?: HitEffectId | string } | null;
+  damageFloat?: { hitKey: number; amount: number; flashTier: number; speedTier?: SpeedTier; hitEffect?: HitEffectId | string } | null;
   combatEvents?: FloatingLabelItem[];
 };
 
@@ -105,6 +111,23 @@ function secondsLeft(until: number, now: number) {
   return Math.max(0, Math.ceil((until - now) / 100) / 10); // 0.1s precision
 }
 
+function damageLabel(amount: number, flashTier: number, speedTier: SpeedTier = "normal") {
+  if (speedTier === "lightning") return `-${Math.round(amount)} LIGHTNING`;
+  if (speedTier === "fast") return `-${Math.round(amount)} FAST`;
+  if (flashTier >= 2) return `-${Math.round(amount)} CRIT`;
+  if (flashTier > 0) return `-${Math.round(amount)} FAST`;
+  if (amount >= 14) return `-${Math.round(amount)} STREAK`;
+  return `-${Math.round(amount)}`;
+}
+
+function comboLabel(streak: number) {
+  if (streak >= 7) return { text: "DOMINATING", className: "border-violet-300/50 bg-violet-500/14 text-violet-100" };
+  if (streak >= 5) return { text: "UNSTOPPABLE", className: "border-amber-300/55 bg-amber-500/14 text-amber-100" };
+  if (streak >= 3) return { text: "ON FIRE", className: "border-rose-300/55 bg-rose-500/14 text-rose-100" };
+  if (streak >= 2) return { text: `x${streak} COMBO`, className: "border-cyan-300/45 bg-cyan-500/12 text-cyan-100" };
+  return null;
+}
+
 function HitEffectBurst({
   effect,
   align,
@@ -159,6 +182,40 @@ function HitEffectBurst({
   }
 
   return null;
+}
+
+function AttackTrail({
+  effect,
+  side,
+}: {
+  effect: HitEffectId | string | undefined;
+  side: Side;
+}) {
+  const isOpponent = side === "opponent";
+  const accent =
+    effect === "fire_burst"
+      ? "rgba(251,146,60,0.95)"
+      : effect === "pixel_glitch"
+        ? "rgba(217,70,239,0.9)"
+        : effect === "lightning_strike"
+          ? "rgba(125,211,252,0.95)"
+          : "rgba(226,232,240,0.7)";
+
+  return (
+    <motion.div
+      className={`pointer-events-none absolute top-1/2 z-20 h-2 w-28 -translate-y-1/2 rounded-full ${
+        isOpponent ? "left-[-1.25rem]" : "right-[-1.25rem]"
+      }`}
+      initial={{ opacity: 0, scaleX: 0.25, x: isOpponent ? 20 : -20 }}
+      animate={{ opacity: [0, 1, 0], scaleX: [0.25, 1.15, 0.35], x: isOpponent ? [20, -18, -34] : [-20, 18, 34] }}
+      transition={{ duration: 0.34, ease: "easeOut" }}
+      style={{
+        transformOrigin: isOpponent ? "right center" : "left center",
+        background: `linear-gradient(${isOpponent ? "270deg" : "90deg"}, transparent 0%, ${accent} 58%, rgba(255,255,255,0.86) 100%)`,
+        boxShadow: `0 0 18px ${accent}`,
+      }}
+    />
+  );
 }
 
 export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 }: MatchChampionCardProps) {
@@ -227,11 +284,60 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
           ? "bg-amber-400"
           : "bg-rose-500";
   const isOpponent = model.side === "opponent";
+  const combo = comboLabel(model.streakCount ?? 0);
+  const damageJitter = model.damageFloat
+    ? {
+        x: ((model.damageFloat.hitKey * 17) % 13) - 6,
+        rotate: ((model.damageFloat.hitKey * 11) % 9) - 4,
+      }
+    : { x: 0, rotate: 0 };
+  const [hpFrontPct, setHpFrontPct] = useState(hpPct ?? 100);
+  const [hpTrailPct, setHpTrailPct] = useState(hpPct ?? 100);
+  const hpTrailTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const damageGuardUntilRef = useRef(0);
+
+  useEffect(() => {
+    if (!model.damageFloat?.hitKey) return;
+    damageGuardUntilRef.current = Date.now() + 420;
+  }, [model.damageFloat?.hitKey]);
+
+  useEffect(() => {
+    if (hpPct === null) return;
+    if (Date.now() < damageGuardUntilRef.current && hpPct > hpFrontPct) {
+      return;
+    }
+    setHpFrontPct(hpPct);
+    if (hpTrailTimeoutRef.current) clearTimeout(hpTrailTimeoutRef.current);
+    hpTrailTimeoutRef.current = setTimeout(() => setHpTrailPct(hpPct), 130);
+    return () => {
+      if (hpTrailTimeoutRef.current) clearTimeout(hpTrailTimeoutRef.current);
+    };
+  }, [hpPct, hpFrontPct, model.damageFloat?.hitKey]);
+
+  useEffect(() => {
+    if (!model.damageFloat) return;
+    setHpTrailPct((previous) => Math.min(previous, hpFrontPct));
+  }, [model.damageFloat?.hitKey, hpFrontPct]);
 
   if (variant === "battle") {
     return (
-      <div
-        className={`relative overflow-hidden rounded-[1.5rem] p-2.5 sm:p-3.5`}
+      <motion.div
+        className="relative overflow-hidden rounded-[1.5rem] p-3 sm:p-4"
+        animate={
+          model.damageFloat
+            ? {
+                x: isOpponent ? [0, 4, -3, 0] : [0, -4, 3, 0],
+                scale: [1, 0.992, 1],
+              }
+            : ready
+              ? { scale: [1, 1.012, 1] }
+              : { scale: [1, 1.004, 1] }
+        }
+        transition={{
+          duration: model.damageFloat ? 0.18 : ready ? 1.25 : 2.8,
+          repeat: model.damageFloat ? 0 : Number.POSITIVE_INFINITY,
+          ease: "easeInOut",
+        }}
       >
         <div
           className="pointer-events-none absolute inset-0 opacity-85"
@@ -242,17 +348,56 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
           }}
         />
         <div className="pointer-events-none absolute inset-0 opacity-50" style={{ background: vfx.tint }} />
+        {model.lowHp ? (
+          <motion.div
+            className="pointer-events-none absolute inset-0 rounded-[1.5rem]"
+            animate={{ opacity: [0.08, 0.24, 0.08] }}
+            transition={{ duration: 0.9, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+            style={{
+              background: "radial-gradient(ellipse at 50% 45%, rgba(248,113,113,0.22) 0%, rgba(127,29,29,0.14) 46%, transparent 72%)",
+            }}
+          />
+        ) : null}
 
         {showReadyPulse ? (
-          <div className={`pointer-events-none absolute inset-[-5px] rounded-[1.6rem] ring-1 ${theme.ring}`} />
+          <motion.div
+            className={`pointer-events-none absolute inset-[-5px] rounded-[1.6rem] ring-2 ${theme.ring}`}
+            animate={{ opacity: [0.55, 1, 0.55], scale: [1, 1.018, 1] }}
+            transition={{ duration: 0.9, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+          />
         ) : null}
 
         <div
-          className={`relative grid items-stretch gap-3 grid-cols-[minmax(0,1fr)_4.75rem] sm:${
-            isOpponent ? "grid-cols-[6.75rem_minmax(0,1fr)]" : "grid-cols-[minmax(0,1fr)_6.75rem]"
+          className={`relative grid items-stretch gap-3 grid-cols-[minmax(0,1fr)_6rem] sm:${
+            isOpponent ? "grid-cols-[8.5rem_minmax(0,1fr)]" : "grid-cols-[minmax(0,1fr)_8.5rem]"
           }`}
         >
+          <AnimatePresence>
+            {(model.attackPulseKey ?? 0) > 0 ? (
+              <AttackTrail
+                key={`attack-trail-${model.attackPulseKey}`}
+                effect={model.attackEffect}
+                side={model.side}
+              />
+            ) : null}
+          </AnimatePresence>
           <FloatingLabel items={model.combatEvents ?? []} />
+          <AnimatePresence>
+            {combo ? (
+              <motion.div
+                key={`${model.side}-combo-${model.streakCount}`}
+                className={`pointer-events-none absolute top-0 z-20 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] shadow-[0_10px_26px_rgba(2,6,23,0.45)] ${combo.className} ${
+                  isOpponent ? "right-1" : "left-1"
+                }`}
+                initial={{ opacity: 0, y: 8, scale: 0.84 }}
+                animate={{ opacity: 1, y: 0, scale: [1, 1 + Math.min(0.12, ((model.streakCount ?? 0) - 2) * 0.025), 1] }}
+                exit={{ opacity: 0, y: -4, scale: 0.94 }}
+                transition={{ duration: 0.28, ease: "easeOut" }}
+              >
+                {combo.text}
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
           {/* Mobile: always left-aligned + same ordering to avoid lopsided stacked HUD. */}
           <div className={`min-w-0 order-1 text-left sm:${isOpponent ? "order-2 text-right" : "order-1 text-left"}`}>
             <p className="truncate text-[0.85rem] font-black uppercase tracking-[0.06em] text-white sm:text-[1.02rem]">
@@ -338,9 +483,11 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
                       animate={{
                         opacity: [0, 1, 1, 0],
                         y: [6, -8, -22, -34],
+                        x: [0, damageJitter.x, damageJitter.x * 1.4],
+                        rotate: [0, damageJitter.rotate, damageJitter.rotate * 0.6],
                         scale: [
                           0.82,
-                          1 + Math.max(0, model.damageFloat.flashTier - 1) * 0.12,
+                          1 + Math.max(0, model.damageFloat.flashTier - 1) * 0.12 + (model.damageFloat.speedTier === "lightning" ? 0.12 : model.damageFloat.speedTier === "fast" ? 0.06 : 0),
                           1 + Math.max(0, model.damageFloat.flashTier - 1) * 0.1,
                           0.95
                         ]
@@ -356,36 +503,81 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
                         }`}
                       >
                         {model.damageFloat.flashTier > 0 ? <span className="text-amber-300">⚡</span> : null}-
-                        {Math.round(model.damageFloat.amount)}
+                        {damageLabel(model.damageFloat.amount, model.damageFloat.flashTier, model.damageFloat.speedTier).replace(/^-/, "")}
                       </span>
                     </motion.div>
                   ) : null}
                 </AnimatePresence>
                 <div className="mb-1 flex items-center justify-between text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">
                   <span>HP</span>
-                  <span className="tabular-nums text-slate-200">{Math.round(hpSafe ?? 0)}</span>
+                  <span className="tabular-nums text-slate-200">{Math.round((hpFrontPct / 100) * hpMax)}</span>
                 </div>
-                <div className="h-2 overflow-hidden rounded-full bg-slate-800/90 sm:h-2.5">
-                  <div className={`h-full rounded-full transition-all duration-300 ${hpColor}`} style={{ width: `${hpPct}%` }} />
+                <div className="relative h-2.5 overflow-hidden rounded-full bg-slate-800/90 sm:h-3">
+                  <motion.div
+                    className="absolute inset-y-0 left-0 rounded-full bg-rose-500/55"
+                    animate={{ width: `${hpTrailPct}%` }}
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                  />
+                  <motion.div
+                    className={`relative h-full rounded-full ${hpColor} ${model.lowHp ? "shadow-[0_0_14px_rgba(248,113,113,0.55)]" : ""}`}
+                    animate={{ width: `${hpFrontPct}%` }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                  />
+                  <AnimatePresence>
+                    {model.damageFloat ? (
+                      <motion.div
+                        key={`hp-impact-${model.damageFloat.hitKey}`}
+                        className="pointer-events-none absolute inset-0 bg-white/55"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: [0, 0.55, 0] }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2, ease: "easeOut" }}
+                      />
+                    ) : null}
+                  </AnimatePresence>
                 </div>
               </div>
             ) : null}
           </div>
 
           <div className={`order-2 flex items-center justify-center sm:${isOpponent ? "order-1" : "order-2"}`}>
-            <div className={`relative w-full max-w-[4.75rem] overflow-hidden rounded-[1.05rem] border border-white/15 bg-slate-900/80 shadow-[0_16px_36px_rgba(2,6,23,0.55)] ring-1 sm:max-w-[6.75rem] ${theme.ring}`}>
+            <motion.div
+              className={`relative w-full max-w-[6rem] overflow-hidden rounded-[1.15rem] border border-white/15 bg-slate-900/80 shadow-[0_18px_42px_rgba(2,6,23,0.58)] ring-1 sm:max-w-[8.5rem] ${theme.ring}`}
+              animate={ready ? { y: [0, -2, 0], scale: [1, 1.035, 1] } : { y: [0, -1, 0], scale: [1, 1.012, 1] }}
+              transition={{ duration: ready ? 1.05 : 2.6, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+            >
+              <AnimatePresence>
+                {(model.attackPulseKey ?? 0) > 0 ? (
+                  <motion.div
+                    key={`attack-lunge-${model.attackPulseKey}`}
+                    className="pointer-events-none absolute inset-0 z-20 rounded-[1.15rem] border border-white/35"
+                    initial={{ opacity: 0, x: 0, scale: 1 }}
+                    animate={{ opacity: [0, 0.85, 0], x: isOpponent ? [0, -10, 0] : [0, 10, 0], scale: [1, 1.05, 1] }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.24, ease: "easeOut" }}
+                  />
+                ) : null}
+              </AnimatePresence>
               <div className="absolute inset-0 bg-gradient-to-b from-white/6 via-transparent to-slate-950/45" />
+              <div
+                className="pointer-events-none absolute inset-0 z-10"
+                style={{
+                  background: ready
+                    ? `radial-gradient(circle at 50% 35%, ${vfx.glow} 0%, transparent 62%)`
+                    : `radial-gradient(circle at 50% 45%, ${vfx.tint} 0%, transparent 70%)`,
+                }}
+              />
               <div className="relative aspect-[3/4]">
                 <Image
                   src={portraitSrc(model.avatarId)}
                   alt={`${avatar.name} portrait`}
                   fill
                   className="object-cover object-top"
-                  sizes="(max-width: 640px) 76px, 120px"
+                  sizes="(max-width: 640px) 96px, 150px"
                   priority={false}
                 />
               </div>
-            </div>
+            </motion.div>
           </div>
         </div>
 
@@ -398,7 +590,7 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
             }}
           />
         ) : null}
-      </div>
+      </motion.div>
     );
   }
 

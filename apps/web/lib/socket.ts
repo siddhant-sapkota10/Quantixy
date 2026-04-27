@@ -251,6 +251,10 @@ export type ServerToClientEvents = {
     opponentStreak?: number;
     fastAnswer?: boolean;
     opponentFastAnswer?: boolean;
+    answerMs?: number | null;
+    opponentAnswerMs?: number | null;
+    speedTier?: "normal" | "fast" | "lightning";
+    opponentSpeedTier?: "normal" | "fast" | "lightning";
     pointsAwarded?: number;
     guardianMitigatedDamage?: number;
     guardianStoredDamage?: number;
