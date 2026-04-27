@@ -40,6 +40,7 @@ import { EmoteDisplay, type EmoteDisplayItem } from "@/components/EmoteDisplay";
 import { OpponentPresence, type OpponentActivity } from "@/components/OpponentPresence";
 import { QuestionContent } from "@/components/question-content";
 import { WorkingScratchpad } from "@/components/working-scratchpad";
+import { GameAnswerKeypad } from "@/components/game-answer-keypad";
 import { UltimateAbilityButton } from "@/components/ultimate-ability-button";
 import type { DuelQuestion } from "@/lib/question-model";
 import {
@@ -3910,23 +3911,101 @@ export function GameClient({
     if (inputsLocked || !isActiveGameplay) setWorkpadSheetOpen(false);
   }, [inputsLocked, isActiveGameplay]);
 
-  // Keep the answer input always ready in live matches.
+  // (Keypad is always visible for text-entry questions; no toggle state.)
+
+  // Universal answer hotkeys (prevents mobile soft keyboard & keeps gameplay responsive).
   useEffect(() => {
     if (status !== "playing") return;
-    if (eliminated.you) return;
-    if (feedback.youAnsweredCurrent) return;
-    if (isNeuralBurstLocked || isOpponentNeuralJamVictim || titanRecoveryLocked) return;
-    const t = setTimeout(() => focusAnswerInput(), 40);
-    return () => clearTimeout(t);
+
+    const shouldIgnoreEvent = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return false;
+      const tag = target.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return true;
+      if (target.isContentEditable) return true;
+      return false;
+    };
+
+    const questionOptions = Array.isArray(currentQuestionData?.options) ? currentQuestionData.options : [];
+    const hasMultipleChoiceOptions = questionOptions.length > 0;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (shouldIgnoreEvent(e)) return;
+
+      if (eliminated.you || feedback.youAnsweredCurrent) return;
+      if (isNeuralBurstLocked || isOpponentNeuralJamVictim || titanRecoveryLocked) return;
+      if (ultimate.blackoutUntil > Date.now()) return;
+
+      const key = e.key;
+
+      // Multiple choice: 1-4 selects options (and T/F convenience).
+      if (hasMultipleChoiceOptions) {
+        if (/^[1-4]$/.test(key)) {
+          const idx = Number(key) - 1;
+          const opt = questionOptions[idx];
+          if (opt) {
+            e.preventDefault();
+            handleOptionSubmit(opt);
+          }
+          return;
+        }
+
+        const k = key.toLowerCase();
+        if (k === "t" || k === "f") {
+          const match = questionOptions.find((o) => o.toLowerCase() === (k === "t" ? "true" : "false"));
+          if (match) {
+            e.preventDefault();
+            handleOptionSubmit(match);
+          }
+        }
+        return;
+      }
+
+      // Text answer: build buffer without focusing an input.
+      if (key === "Enter") {
+        e.preventDefault();
+        submitAnswer();
+        return;
+      }
+      if (key === "Escape") {
+        e.preventDefault();
+        handleAnswerChange("");
+        return;
+      }
+      if (key === "Backspace") {
+        e.preventDefault();
+        handleAnswerChange(answer.slice(0, -1));
+        return;
+      }
+
+      if (key.length === 1) {
+        const ch = key;
+        // Allow digits, letters, and common math symbols used by our parser/renderer.
+        if (/^[0-9a-zA-Z+\-*/^().,%=\s]$/.test(ch)) {
+          e.preventDefault();
+          if (answer.length >= 64) return;
+          handleAnswerChange(answer + ch);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown, { passive: false });
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, [
     status,
+    currentQuestionData,
     eliminated.you,
     feedback.youAnsweredCurrent,
-    focusPulseKey,
-    neuralInputUnlockAt,
     isNeuralBurstLocked,
     isOpponentNeuralJamVictim,
-    titanRecoveryLocked
+    titanRecoveryLocked,
+    ultimate.blackoutUntil,
+    answer,
+    handleAnswerChange,
+    handleOptionSubmit,
+    submitAnswer,
   ]);
 
   useEffect(() => {
@@ -4798,9 +4877,12 @@ export function GameClient({
                         <input
                           ref={answerInputRef}
                           type="text"
-                          autoFocus
                           value={answer}
                           onChange={(event) => handleAnswerChange(event.target.value)}
+                          readOnly
+                          inputMode="none"
+                          onFocus={(e) => e.currentTarget.blur()}
+                          onPointerDown={(e) => { e.preventDefault(); (e.currentTarget as HTMLInputElement).blur(); }}
                           placeholder={
                             isJamActive
                               ? "Signal jam active - prep your answer..."
@@ -4838,6 +4920,18 @@ export function GameClient({
                         >
                           Submit
                         </Button>
+                      </div>
+                    ) : null}
+
+                    {!(Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0) ? (
+                      <div className="w-full min-w-0">
+                        <GameAnswerKeypad
+                          value={answer}
+                          disabled={inputsLocked || youEliminated || feedback.youAnsweredCurrent}
+                          onChange={(next) => handleAnswerChange(next)}
+                          onSubmit={() => submitAnswer()}
+                          showHeader={false}
+                        />
                       </div>
                     ) : null}
 

@@ -402,7 +402,8 @@ select {
   .qx-question-fit .qx-question-prompt {
     overflow-wrap: anywhere;
     text-wrap: balance;
-    font-size: clamp(1rem, 4.3dvh, 2.75rem) !important;
+    /* Bigger baseline on taller/desktop viewports. */
+    font-size: clamp(1.15rem, 4.6dvh, 3.05rem) !important;
     line-height: 1.08;
   }
 
@@ -437,18 +438,37 @@ select {
   /* Elastic in-match question card (gameplay shell). */
   .qx-question-elastic {
     width: 100%;
-    max-width: clamp(320px, 45vw, 760px);
+    /* Bigger when space allows, but still bounded for no-scroll match shells. */
+    max-width: clamp(340px, 52vw, 840px);
     margin-inline: auto;
-    padding: clamp(12px, 2.5vh, 32px);
-    max-height: min(38dvh, 22rem);
+    padding: clamp(14px, 3vh, 40px);
+    max-height: min(46dvh, 28rem);
     overflow: hidden;
   }
 
   .qx-question-elastic .qx-question-prompt {
     overflow-wrap: anywhere;
     text-wrap: balance;
-    font-size: clamp(1.4rem, 2.6vw, 2.6rem) !important;
-    line-height: 1.12;
+    /* Bigger baseline; shrink-to-fit (JS) will reduce when needed to keep single line. */
+    font-size: clamp(1.55rem, 3.1vw, 3.15rem) !important;
+    line-height: 1.16;
+  }
+
+  /* Only enforce single-line for equation prompts (set by QuestionContent). */
+  .qx-question-prompt--nowrap {
+    white-space: nowrap;
+    text-wrap: nowrap;
+    word-break: keep-all;
+  }
+
+  .qx-question-inline {
+    display: inline-block;
+    max-width: 100%;
+  }
+
+  .qx-question-inline--nowrap,
+  .qx-question-inline--nowrap * {
+    white-space: nowrap !important;
   }
 
   .qx-question-elastic .qx-question-visual {
@@ -531,6 +551,29 @@ select {
 
   .qx-gameplay-action-row--stack {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* In-game keypad: scales across device sizes/heights. */
+  .qx-answer-keypad {
+    width: 100%;
+    max-width: 100%;
+    margin-inline: auto;
+  }
+
+  .qx-answer-keypad .qx-keypad-btn {
+    height: clamp(2.25rem, 6.2vh, 2.75rem); /* ~36px..44px */
+    font-size: clamp(0.82rem, 2.05vh, 0.95rem);
+    line-height: 1;
+  }
+
+  @media (max-height: 720px) {
+    .qx-answer-keypad {
+      padding: 0.65rem;
+    }
+    .qx-answer-keypad .qx-keypad-btn {
+      height: clamp(2.05rem, 5.6vh, 2.5rem);
+      font-size: clamp(0.78rem, 1.9vh, 0.9rem);
+    }
   }
 
   .q-match-lock input,
