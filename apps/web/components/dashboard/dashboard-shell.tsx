@@ -20,7 +20,7 @@ export function DashboardShell({ children, className }: { children: ReactNode; c
         className
       )}
     >
-      <header className="sticky top-0 z-50 border-b border-[var(--qx-border-soft)] bg-[rgba(2,6,23,0.82)] backdrop-blur-xl">
+      <header className="sticky top-0 z-50 border-b border-[var(--qx-border-soft)] bg-[rgba(10,16,32,0.88)] backdrop-blur-xl">
         <div className="mx-auto grid max-w-[min(110rem,calc(100vw-1rem))] grid-cols-[minmax(0,auto)_1fr_minmax(0,auto)] items-center gap-2 px-3 py-2 pt-[max(0.35rem,env(safe-area-inset-top))] sm:gap-3 sm:px-6 sm:py-2.5 lg:px-10 xl:px-12">
           <Link
             href="/"
@@ -46,7 +46,7 @@ export function DashboardShell({ children, className }: { children: ReactNode; c
             aria-label="Main navigation"
             className="hidden min-w-0 justify-self-center md:flex"
           >
-            <div className="flex max-w-[min(64rem,calc(100vw-12rem))] flex-wrap justify-center gap-0.5 rounded-2xl border border-[var(--qx-border-soft)] bg-[rgba(6,12,28,0.92)] p-1 shadow-[0_18px_48px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl">
+            <div className="flex max-w-[min(64rem,calc(100vw-12rem))] flex-wrap justify-center gap-0.5 rounded-2xl border border-[var(--qx-border-soft)] bg-[rgba(14,22,40,0.9)] p-1 shadow-[0_14px_40px_rgba(2,8,20,0.42),inset_0_1px_0_rgba(255,255,255,0.045)] backdrop-blur-xl">
               {DASHBOARD_NAV.map((item) => {
                 const active = isDashboardNavActive(pathname, item.href);
                 return (
@@ -57,7 +57,7 @@ export function DashboardShell({ children, className }: { children: ReactNode; c
                     className={cn(
                       "inline-flex items-center gap-1.5 rounded-xl px-2 py-2 text-[9px] font-black uppercase tracking-[0.1em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 lg:px-2.5 lg:text-[10px] xl:tracking-[0.14em]",
                       active
-                        ? "bg-cyan-500/15 text-cyan-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_0_20px_rgba(34,211,238,0.12)] ring-1 ring-cyan-400/30"
+                        ? "bg-cyan-500/14 text-cyan-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_14px_rgba(34,211,238,0.08)] ring-1 ring-cyan-400/24"
                         : "text-slate-300 hover:bg-white/[0.06] hover:text-white"
                     )}
                   >

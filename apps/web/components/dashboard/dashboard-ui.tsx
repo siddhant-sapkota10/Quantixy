@@ -42,8 +42,8 @@ export function NeonPanel({
   return (
     <div
       className={cn(
-        "rounded-[1.35rem] border border-[var(--qx-border-soft)] bg-[var(--qx-panel)] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:rounded-3xl sm:p-6 md:p-8",
-        glow && "border-cyan-400/25 shadow-[0_0_40px_rgba(34,211,238,0.08),0_20px_50px_rgba(0,0,0,0.5)]",
+        "rounded-[1.35rem] border border-[var(--qx-border-soft)] bg-[var(--qx-panel)] p-4 shadow-[0_18px_44px_rgba(2,8,20,0.4)] backdrop-blur-xl sm:rounded-3xl sm:p-6 md:p-8",
+        glow && "border-cyan-400/22 shadow-[0_0_28px_rgba(34,211,238,0.06),0_18px_44px_rgba(2,8,20,0.42)]",
         className
       )}
     >
@@ -68,7 +68,7 @@ export function NeonCard({
       className={cn(
         "rounded-2xl border border-[var(--qx-border-soft)] bg-[var(--qx-card)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-md sm:rounded-3xl sm:p-5",
         interactive && "qx-card-interactive cursor-pointer",
-        equipped && "border-cyan-400/35 shadow-[0_0_28px_rgba(168,85,247,0.12),inset_0_1px_0_rgba(255,255,255,0.06)]",
+        equipped && "border-cyan-400/28 shadow-[0_0_20px_rgba(168,85,247,0.08),inset_0_1px_0_rgba(255,255,255,0.055)]",
         className
       )}
     >
@@ -117,7 +117,7 @@ export function PrimaryGradientButton({
     <button
       type="button"
       className={cn(
-        "group relative w-full overflow-hidden rounded-2xl border border-cyan-300/30 bg-[linear-gradient(115deg,#22d3ee_0%,#38bdf8_35%,#8b5cf6_88%,#a855f7_100%)] px-5 py-4 text-left font-black text-slate-950 shadow-[0_0_0_1px_rgba(255,255,255,0.12),0_16px_40px_rgba(0,0,0,0.45),0_0_36px_rgba(34,211,238,0.2)] transition-[filter,box-shadow,transform] duration-200 hover:brightness-[1.04] hover:shadow-[0_0_48px_rgba(168,85,247,0.25)] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 sm:rounded-3xl sm:py-5",
+        "group relative w-full overflow-hidden rounded-2xl border border-cyan-300/26 bg-[linear-gradient(115deg,#22d3ee_0%,#38bdf8_35%,#8b5cf6_88%,#a855f7_100%)] px-5 py-4 text-left font-black text-slate-950 shadow-[0_0_0_1px_rgba(255,255,255,0.1),0_14px_36px_rgba(2,8,20,0.38),0_0_26px_rgba(34,211,238,0.14)] transition-[filter,box-shadow,transform] duration-200 ease-out hover:brightness-[1.03] hover:shadow-[0_0_32px_rgba(168,85,247,0.16)] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 sm:rounded-3xl sm:py-5",
         className
       )}
       {...props}
@@ -139,7 +139,7 @@ export function StatusStrip({
           {s.icon ? <div className="mt-0.5 shrink-0 text-cyan-400/80">{s.icon}</div> : null}
           <div className="min-w-0">
             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[var(--qx-text-muted)]">{s.title}</p>
-            <p className="mt-0.5 text-sm font-medium leading-snug text-[var(--qx-text-primary)]">{s.body}</p>
+            <p className="mt-0.5 text-sm font-medium leading-snug text-[var(--qx-text-secondary)]">{s.body}</p>
           </div>
         </div>
       ))}

@@ -8,7 +8,7 @@ export function DashboardMobileNav({ pathname }: { pathname: string | null }) {
   return (
     <nav
       aria-label="Mobile main navigation"
-      className="fixed inset-x-2 bottom-[max(0.5rem,env(safe-area-inset-bottom))] z-40 rounded-[1.25rem] border border-[var(--qx-border-soft)] bg-[rgba(6,12,28,0.94)] p-1.5 shadow-[0_22px_60px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-xl md:hidden"
+      className="fixed inset-x-2 bottom-[max(0.5rem,env(safe-area-inset-bottom))] z-40 rounded-[1.25rem] border border-[var(--qx-border-soft)] bg-[rgba(14,22,40,0.92)] p-1.5 shadow-[0_18px_48px_rgba(2,8,20,0.48),inset_0_1px_0_rgba(255,255,255,0.045)] backdrop-blur-xl md:hidden"
     >
       <div className="grid grid-cols-6 gap-0.5">
         {DASHBOARD_NAV.map((item) => {

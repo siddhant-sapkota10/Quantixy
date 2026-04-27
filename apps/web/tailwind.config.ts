@@ -9,19 +9,19 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "#000000",
-        surface: "#000000",
-        surfaceElevated: "#000000",
-        accent: "#38c7e8",
-        accentSoft: "#7dd8ee",
-        accentPurple: "#7c5cff",
-        textPrimary: "rgba(255, 255, 255, 0.98)",
-        textSecondary: "rgba(203, 213, 225, 0.72)"
+        background: "var(--qx-background-base)",
+        surface: "var(--qx-background-surface)",
+        surfaceElevated: "var(--qx-surface-elevated)",
+        accent: "var(--qx-accent-cyan)",
+        accentSoft: "#5eccec",
+        accentPurple: "var(--qx-accent-purple)",
+        textPrimary: "var(--qx-text-primary)",
+        textSecondary: "var(--qx-text-secondary)"
       },
       boxShadow: {
-        glow: "0 0 0 1px rgba(118,145,210,0.18), 0 20px 58px rgba(4,8,20,0.56), 0 0 22px rgba(56,199,232,0.12)",
-        "glow-sm": "0 0 0 1px rgba(118,145,210,0.16), 0 8px 24px rgba(4,8,20,0.42)",
-        "glow-lg": "0 0 0 1px rgba(118,145,210,0.22), 0 28px 78px rgba(4,8,20,0.62), 0 0 32px rgba(124,92,255,0.14)"
+        glow: "0 0 0 1px rgba(118,145,210,0.12), 0 18px 48px rgba(4,10,22,0.44), 0 0 16px rgba(56,199,232,0.07)",
+        "glow-sm": "0 0 0 1px rgba(118,145,210,0.1), 0 8px 20px rgba(4,10,22,0.36)",
+        "glow-lg": "0 0 0 1px rgba(118,145,210,0.14), 0 24px 64px rgba(4,10,22,0.5), 0 0 22px rgba(124,92,255,0.09)"
       },
       backgroundImage: {
         "neon-line": "linear-gradient(120deg, rgba(56,199,232,0.78), rgba(124,92,255,0.76))"
