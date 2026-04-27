@@ -61,7 +61,7 @@ export function LobbyHeroSection({
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_55%_at_20%_0%,rgba(34,211,238,0.12),transparent_55%),radial-gradient(ellipse_60%_50%_at_90%_20%,rgba(168,85,247,0.1),transparent_55%)]"
       />
 
-      <div className="relative grid gap-8 lg:grid-cols-12 lg:gap-10">
+      <div className="relative grid gap-8 lg:grid-cols-12 lg:items-start lg:gap-10 lg:auto-rows-min">
         <div className="space-y-3 lg:col-span-4">
           <span className="inline-flex rounded-full border border-cyan-400/35 bg-cyan-500/12 px-3 py-1 text-[10px] font-black uppercase tracking-[0.26em] text-cyan-100">
             Multiplayer Math Arena
@@ -118,7 +118,7 @@ export function LobbyHeroSection({
           {guestHint ? <p className="mt-3 max-w-md text-sm text-amber-100/90">{guestHint}</p> : null}
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3 lg:col-span-4 lg:grid-cols-1 lg:content-start">
+        <div className="grid auto-rows-min grid-cols-1 items-start gap-3 sm:grid-cols-3 lg:col-span-4 lg:grid-cols-1 lg:content-start">
           {typeof coins === "number" ? (
             <div className="flex items-center gap-3 rounded-2xl border border-amber-400/18 bg-amber-500/[0.07] px-4 py-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-amber-300/25 bg-amber-500/10 text-amber-200">
@@ -167,22 +167,22 @@ export function LobbyHeroSection({
       </div>
 
       {battle ? (
-        <div className="relative mt-8 grid gap-3 border-t border-[var(--qx-border-soft)] pt-8 sm:gap-4 lg:grid-cols-12">
-          <div className="lg:col-span-6">
+        <div className="relative mt-8 grid auto-rows-min grid-cols-1 items-start gap-3 border-t border-[var(--qx-border-soft)] pt-8 sm:gap-4 lg:grid-cols-3">
+          <div className="min-w-0 lg:col-span-3">
             <PrimaryGradientButton
               onClick={battle.onPlayOnline}
               disabled={battle.anyBusy}
-              className="disabled:pointer-events-none"
+              className="w-full disabled:pointer-events-none"
             >
-              <div className="flex items-center gap-4">
+              <div className="flex min-w-0 items-center gap-4">
                 <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-slate-950/20 bg-slate-950/15">
                   <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} aria-hidden>
                     <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
                   </svg>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-lg font-black sm:text-xl">Play Online</p>
-                  <p className="mt-0.5 text-sm font-semibold text-slate-900/80">Find a real-time opponent</p>
+                <div className="min-w-0 flex-1 text-left">
+                  <p className="truncate text-lg font-black sm:text-xl">Play Online</p>
+                  <p className="mt-0.5 truncate text-sm font-semibold text-slate-900/80">Find a real-time opponent</p>
                 </div>
                 {battle.playBusy ? (
                   <div className="h-6 w-6 shrink-0 animate-spin rounded-full border-2 border-slate-900/30 border-t-slate-900" />
@@ -198,17 +198,17 @@ export function LobbyHeroSection({
             type="button"
             onClick={battle.onPracticeAi}
             disabled={battle.anyBusy}
-            className="flex min-h-[5.5rem] flex-col justify-center rounded-2xl border border-[var(--qx-border-soft)] bg-[var(--qx-card)] px-4 py-3 text-left transition hover:border-cyan-400/25 hover:bg-[var(--qx-card-hover)] disabled:opacity-60 lg:col-span-3"
+            className="flex w-full min-w-0 flex-col justify-center rounded-2xl border border-[var(--qx-border-soft)] bg-[var(--qx-card)] px-4 py-3 text-left transition hover:border-cyan-400/25 hover:bg-[var(--qx-card-hover)] disabled:opacity-60"
           >
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-500/10 text-cyan-200">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-500/10 text-cyan-200">
                 <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden>
                   <path d="M12 3a9 9 0 109 9M12 3v4M12 3L8 7" />
                 </svg>
               </div>
-              <div>
-                <p className="text-sm font-black text-white">Practice vs AI</p>
-                <p className="text-[11px] text-[var(--qx-text-muted)]">Warm up, no pressure</p>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-black text-white">Practice vs AI</p>
+                <p className="truncate text-[11px] text-[var(--qx-text-muted)]">Warm up, no pressure</p>
               </div>
             </div>
             {battle.practiceBusy ? <p className="mt-2 text-xs text-cyan-200/80">Opening…</p> : null}
@@ -217,17 +217,17 @@ export function LobbyHeroSection({
             type="button"
             onClick={battle.onDailyReward}
             disabled={battle.anyBusy}
-            className="flex min-h-[5.5rem] flex-col justify-center rounded-2xl border border-purple-400/25 bg-[var(--qx-card)] px-4 py-3 text-left shadow-[0_0_24px_rgba(168,85,247,0.08)] transition hover:border-purple-400/40 hover:bg-[var(--qx-card-hover)] disabled:opacity-60 lg:col-span-3"
+            className="flex w-full min-w-0 flex-col justify-center rounded-2xl border border-purple-400/25 bg-[var(--qx-card)] px-4 py-3 text-left shadow-[0_0_24px_rgba(168,85,247,0.08)] transition hover:border-purple-400/40 hover:bg-[var(--qx-card-hover)] disabled:opacity-60"
           >
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-purple-400/25 bg-purple-500/12 text-purple-200">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-purple-400/25 bg-purple-500/12 text-purple-200">
                 <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden>
                   <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
                 </svg>
               </div>
-              <div>
-                <p className="text-sm font-black text-white">Daily Reward</p>
-                <p className="text-[11px] text-[var(--qx-text-muted)]">Streak &amp; bonuses</p>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-black text-white">Daily Reward</p>
+                <p className="truncate text-[11px] text-[var(--qx-text-muted)]">Streak &amp; bonuses</p>
               </div>
             </div>
           </button>

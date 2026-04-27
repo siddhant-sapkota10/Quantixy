@@ -366,17 +366,22 @@ export function WorkingScratchpad({
 
   if (displayMode === "always-open") {
     return (
-      <div className={cn("neon-panel-soft flex flex-col gap-2 rounded-2xl p-2 sm:p-2.5 h-full", className)}>
+      <div
+        className={cn(
+          "neon-panel-soft relative flex h-full min-h-0 flex-col gap-2 overflow-hidden rounded-2xl p-2 sm:p-2.5",
+          className
+        )}
+      >
         <div className="shrink-0">{ControlsToolbar}</div>
         <div
           ref={wrapRef}
-          className="flex-1 min-h-0 overflow-hidden rounded-xl border border-indigo-300/28 bg-[radial-gradient(circle_at_center,rgba(22,34,69,0.88)_0%,rgba(3,8,24,1)_100%)]"
-          style={gridStyle}
+          className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-indigo-300/28 bg-[radial-gradient(circle_at_center,rgba(22,34,69,0.88)_0%,rgba(3,8,24,1)_100%)]"
+          style={{ ...gridStyle, touchAction: "none" }}
         >
           <canvas
             ref={canvasRef}
             className={cn(
-              "h-full w-full",
+              "absolute inset-0 block h-full w-full max-h-full max-w-full",
               "touch-none select-none",
               answerInputLocked ? "pointer-events-none opacity-50 cursor-not-allowed" : "cursor-crosshair"
             )}
@@ -393,17 +398,17 @@ export function WorkingScratchpad({
 
   if (displayMode === "standalone") {
     return (
-      <div className={cn("flex flex-col gap-2 h-full", className)}>
+      <div className={cn("relative flex h-full min-h-0 flex-col gap-2 overflow-hidden", className)}>
         <div className="shrink-0">{ControlsToolbar}</div>
         <div
           ref={wrapRef}
-          className="flex-1 min-h-0 overflow-hidden rounded-xl border border-indigo-300/28 bg-[radial-gradient(circle_at_center,rgba(22,34,69,0.88)_0%,rgba(3,8,24,1)_100%)]"
-          style={gridStyle}
+          className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-indigo-300/28 bg-[radial-gradient(circle_at_center,rgba(22,34,69,0.88)_0%,rgba(3,8,24,1)_100%)]"
+          style={{ ...gridStyle, touchAction: "none" }}
         >
           <canvas
             ref={canvasRef}
             className={cn(
-              "h-full w-full",
+              "absolute inset-0 block h-full w-full max-h-full max-w-full",
               "touch-none select-none",
               answerInputLocked ? "pointer-events-none opacity-50 cursor-not-allowed" : "cursor-crosshair"
             )}
@@ -436,7 +441,7 @@ export function WorkingScratchpad({
   }
 
   return (
-    <div className={cn("neon-panel-soft rounded-2xl p-2 sm:p-2.5", className)}>
+    <div className={cn("neon-panel-soft relative overflow-hidden rounded-2xl p-2 sm:p-2.5", className)}>
       {/* Header row */}
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <button
@@ -449,16 +454,16 @@ export function WorkingScratchpad({
         {ControlsToolbar}
       </div>
 
-      {/* Canvas */}
+      {/* Canvas — clipped to this box only; drawing cannot extend outside */}
       <div
         ref={wrapRef}
-        className="overflow-hidden rounded-xl border border-indigo-300/28 bg-[radial-gradient(circle_at_center,rgba(22,34,69,0.88)_0%,rgba(3,8,24,1)_100%)]"
-        style={{ height: `${resolvedCanvasHeight}px`, ...gridStyle }}
+        className="relative overflow-hidden rounded-xl border border-indigo-300/28 bg-[radial-gradient(circle_at_center,rgba(22,34,69,0.88)_0%,rgba(3,8,24,1)_100%)]"
+        style={{ height: `${resolvedCanvasHeight}px`, ...gridStyle, touchAction: "none" }}
       >
         <canvas
           ref={canvasRef}
           className={cn(
-            "h-full w-full",
+            "absolute inset-0 block h-full w-full max-h-full max-w-full",
             "touch-none select-none",
             answerInputLocked ? "pointer-events-none opacity-50 cursor-not-allowed" : "cursor-crosshair"
           )}

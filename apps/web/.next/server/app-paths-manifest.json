@@ -1,6 +1,7 @@
 {
   "/page": "app/page.js",
-  "/api/daily-rewards/status/route": "app/api/daily-rewards/status/route.js",
-  "/shop/page": "app/shop/page.js",
-  "/game/page": "app/game/page.js"
+  "/play/page": "app/play/page.js",
+  "/game/page": "app/game/page.js",
+  "/profile/page": "app/profile/page.js",
+  "/api/daily-rewards/status/route": "app/api/daily-rewards/status/route.js"
 }

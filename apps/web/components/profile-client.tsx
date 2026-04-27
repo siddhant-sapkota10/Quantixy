@@ -1300,15 +1300,17 @@ export function ProfileClient() {
         </div>
 
         <div className="q-card-strong rounded-3xl p-4 sm:p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
+          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+            <div className="min-w-0 flex-1">
               <p className="text-sm uppercase tracking-[0.25em] text-slate-400/70">Gameplay Loadout</p>
-              <h2 className="mt-2 text-2xl font-bold text-white">Avatar, emotes, and battle effects moved to Loadout</h2>
-              <p className="mt-1 max-w-2xl text-sm text-slate-300">
+              <h2 className="mt-2 text-2xl font-bold text-white">
+                Avatar, emotes, and battle effects moved to Loadout
+              </h2>
+              <p className="mt-1 line-clamp-3 max-w-2xl text-sm text-slate-300">
                 Profile now focuses on stats, display name, public leaderboard icon, ratings, and match history.
               </p>
             </div>
-            <Button className="w-full sm:w-auto" onClick={() => router.push("/loadout")}>
+            <Button className="shrink-0 self-start sm:self-center" onClick={() => router.push("/loadout")}>
               Edit Gameplay Loadout
             </Button>
           </div>
@@ -1385,7 +1387,7 @@ export function ProfileClient() {
               );
             })()}
 
-            <div className="mt-6 space-y-3">
+            <div className="mt-6 grid justify-items-start gap-3 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
               {ratingsList.map((entry, index) => {
                 const isBest = index === 0 && totalMatches > 0;
                 const isSelected = selectedRatingEntry?.topic === entry.topic;
@@ -1397,7 +1399,7 @@ export function ProfileClient() {
                     type="button"
                     aria-pressed={isSelected}
                     onClick={() => setSelectedRatingTopic(entry.topic)}
-                    className={`flex w-full items-center justify-between rounded-2xl border px-4 py-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
+                    className={`box-border flex w-full max-w-[min(320px,100%)] min-w-0 items-center justify-between gap-3 rounded-2xl border px-4 py-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 sm:w-fit sm:min-w-[220px] ${
                       isSelected
                         ? "border-cyan-300/35 bg-cyan-400/[0.09] shadow-[0_0_24px_rgba(34,211,238,0.09),inset_0_1px_0_rgba(34,211,238,0.07)]"
                         : isBest
@@ -1405,21 +1407,21 @@ export function ProfileClient() {
                           : "border-slate-500/20 bg-slate-950/45 hover:border-slate-400/35 hover:bg-slate-900/60"
                     }`}
                   >
-                    <div>
-                      <p className="text-sm font-semibold text-white">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-white">
                         {formatTopicLabel(entry.topic as Topic)}
                       </p>
                       <p
-                        className={`mt-1 text-xs uppercase tracking-[0.2em] ${
+                        className={`mt-1 truncate text-xs uppercase tracking-[0.2em] ${
                           isSelected ? "text-cyan-200" : isBest ? "text-sky-300" : "text-slate-500"
                         }`}
                       >
                         {isSelected ? "Viewing Rank Progress" : isBest ? "Highest Rated Topic" : "Select Topic"}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex shrink-0 items-center gap-2">
                       <RankBadge rank={entryRank} size="md" />
-                      <p className="text-xl font-black text-white">{entry.rating}</p>
+                      <p className="text-xl font-black tabular-nums text-white">{entry.rating}</p>
                     </div>
                   </button>
                 );

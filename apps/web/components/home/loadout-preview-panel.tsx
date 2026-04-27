@@ -42,17 +42,19 @@ export function LoadoutPreviewPanel({
       transition={{ type: "spring", stiffness: 400, damping: 30 }}
       className="rounded-[1.35rem] border border-[var(--qx-border-soft)] bg-[var(--qx-card)] p-4 shadow-[0_18px_48px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-md sm:rounded-3xl sm:p-5"
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+        <div className="min-w-0 flex-1">
           <p className="text-[10px] font-black uppercase tracking-[0.26em] text-cyan-200">Current loadout</p>
-          <h3 className="mt-1 text-lg font-black text-[var(--qx-text-primary)] sm:text-xl">Battle cosmetics</h3>
-          <p className="mt-1 text-xs leading-relaxed text-[var(--qx-text-secondary)] sm:text-sm">
+          <h3 className="mt-1 text-lg font-black text-[var(--qx-text-primary)] sm:text-xl">
+            Battle cosmetics
+          </h3>
+          <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-[var(--qx-text-secondary)] sm:text-sm">
             Equip cosmetics in Loadout to show them in battle.
           </p>
         </div>
         <Button
           type="button"
-          className="w-full shrink-0 sm:w-auto"
+          className="shrink-0 self-start sm:self-center"
           variant="secondary"
           onClick={onEditLoadout}
           loading={loadoutBusy}

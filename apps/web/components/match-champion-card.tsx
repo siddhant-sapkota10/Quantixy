@@ -368,7 +368,7 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
         ) : null}
 
         <div
-          className={`relative grid items-stretch gap-3 grid-cols-[minmax(0,1fr)_6rem] sm:${
+          className={`relative grid min-w-0 items-stretch gap-3 grid-cols-[minmax(0,1fr)_6rem] sm:${
             isOpponent ? "grid-cols-[8.5rem_minmax(0,1fr)]" : "grid-cols-[minmax(0,1fr)_8.5rem]"
           }`}
         >
@@ -399,7 +399,7 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
             ) : null}
           </AnimatePresence>
           {/* Mobile: always left-aligned + same ordering to avoid lopsided stacked HUD. */}
-          <div className={`min-w-0 order-1 text-left sm:${isOpponent ? "order-2 text-right" : "order-1 text-left"}`}>
+          <div className={`min-w-0 overflow-hidden order-1 text-left sm:${isOpponent ? "order-2 text-right" : "order-1 text-left"}`}>
             <p className="truncate text-[0.85rem] font-black uppercase tracking-[0.06em] text-white sm:text-[1.02rem]">
               {avatar.name}
             </p>
@@ -407,13 +407,13 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
               {model.playerName}
             </p>
 
-            <div className={`mt-1.5 flex items-center gap-2 justify-start sm:${isOpponent ? "justify-end" : "justify-start"}`}>
+            <div className={`mt-1.5 flex min-w-0 items-center gap-2 justify-start sm:${isOpponent ? "justify-end" : "justify-start"}`}>
               <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ${theme.chip}`}>
                 {model.used ? "USED" : !model.implemented ? "SOON" : ready ? "READY" : `${Math.round(model.charge)}%`}
               </span>
               {/* Mobile: active label is noisy/truncated; keep it for larger screens */}
               {activeLabel ? (
-                <span className="hidden truncate text-[9px] font-bold uppercase tracking-[0.18em] text-slate-300 sm:inline">
+                <span className="hidden min-w-0 truncate text-[9px] font-bold uppercase tracking-[0.18em] text-slate-300 sm:inline">
                   {activeLabel}
                 </span>
               ) : null}
@@ -540,9 +540,9 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
             ) : null}
           </div>
 
-          <div className={`order-2 flex items-center justify-center sm:${isOpponent ? "order-1" : "order-2"}`}>
+          <div className={`order-2 flex min-w-0 items-center justify-center sm:${isOpponent ? "order-1" : "order-2"}`}>
             <motion.div
-              className={`relative w-full max-w-[6rem] overflow-hidden rounded-[1.15rem] border border-white/15 bg-slate-900/80 shadow-[0_18px_42px_rgba(2,6,23,0.58)] ring-1 sm:max-w-[8.5rem] ${theme.ring}`}
+              className={`relative w-full max-w-[10rem] overflow-hidden rounded-[1.15rem] border border-white/15 bg-slate-900/80 shadow-[0_18px_42px_rgba(2,6,23,0.58)] ring-1 sm:max-w-[11rem] ${theme.ring}`}
               animate={ready ? { y: [0, -2, 0], scale: [1, 1.035, 1] } : { y: [0, -1, 0], scale: [1, 1.012, 1] }}
               transition={{ duration: ready ? 1.05 : 2.6, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
             >
@@ -567,7 +567,14 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
                     : `radial-gradient(circle at 50% 45%, ${vfx.tint} 0%, transparent 70%)`,
                 }}
               />
-              <div className="relative aspect-[3/4]">
+              <div
+                className="relative mx-auto overflow-hidden rounded-[1.05rem]"
+                style={{
+                  height: "clamp(100px, 20vh, 180px)",
+                  aspectRatio: "3 / 4",
+                  maxWidth: "100%",
+                }}
+              >
                 <Image
                   src={portraitSrc(model.avatarId)}
                   alt={`${avatar.name} portrait`}
@@ -594,11 +601,17 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
     );
   }
 
+  // Strict compact HUD (mobile/tablet portrait): image + HP + charge + short ultimate status.
+  // This prevents any text/badge overflow and keeps both sides symmetric.
+  const compactUltLabel = model.used ? "USED" : !model.implemented ? "SOON" : ready ? "READY" : `${Math.round(model.charge)}%`;
+  const ultIcon = vfx.icon;
+
   return (
     <div
-      className={`relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/55 p-3 ${
+      className={`relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/55 p-2.5 sm:p-3 ${
         theme.glow
       } ${showReadyPulse ? theme.readyGlow : ""}`}
+      title={model.ultimateName}
     >
       <FloatingLabel items={model.combatEvents ?? []} />
       {/* Subtle per-champion tint */}
@@ -609,8 +622,8 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
         <div className={`pointer-events-none absolute inset-[-6px] rounded-[1.2rem] ring-2 ${theme.ring} animate-pulse`} />
       ) : null}
 
-      <div className="relative flex items-center gap-3">
-        <div className={`relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-950/70 ring-1 ${theme.ring}`}>
+      <div className="relative flex min-w-0 items-center gap-2.5">
+        <div className={`relative h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-950/70 ring-1 ${theme.ring}`}>
           <Image
             src={portraitSrc(model.avatarId)}
             alt={`${avatar.name} portrait`}
@@ -639,57 +652,29 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
           ) : null}
         </div>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-black text-white">{avatar.name}</p>
-              <p className="truncate text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <div className="flex min-w-0 items-start justify-between gap-2">
+            <div className="min-w-0 overflow-hidden">
+              <p className="truncate text-[13px] font-black uppercase tracking-[0.06em] text-white sm:text-sm">
+                {avatar.name}
+              </p>
+              <p className="truncate text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">
                 {model.playerName}
               </p>
             </div>
-            <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.22em] ${theme.chip}`}>
-              {ultChip}
+            <span
+              className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.22em] ${theme.chip}`}
+              title={model.ultimateName}
+            >
+              {compactUltLabel}
             </span>
-          </div>
-
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <p className="truncate text-[11px] font-semibold text-slate-200">
-              <span className="text-slate-400">Ultimate:</span> {model.ultimateName}
-            </p>
-            {activeLabel ? (
-              <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-200/90">
-                {activeLabel}
-              </span>
-            ) : null}
-          </div>
-
-          <div className="mt-2">
-            <UltimateStatus
-              avatarId={model.avatarId}
-              ultimateType={avatar.ultimateId}
-              ultimateName={model.ultimateName}
-              charge={model.charge}
-              ready={model.ready}
-              used={model.used}
-              activeUntil={activeUntil}
-              remainingSeconds={questionsLeft}
-              flashStacks={flashStacks}
-              burnStacks={infernoStacks}
-              architectNodes={model.architectMarks ?? 0}
-              architectReady={model.architectReady ?? false}
-              fortressStoredDamage={model.fortressStoredDamage ?? model.fortressBlocksRemaining ?? 0}
-              jammed={Boolean(model.jammed)}
-              burning={Boolean(model.burning)}
-              titanRecovering={(model.titanRecoveryUntil ?? 0) > now}
-              titanDamageReduction={model.titanDamageReduction ?? 0}
-            />
           </div>
 
           {hpPct !== null ? (
             <div className="mt-2">
               <div className="mb-1 flex items-center justify-between text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                <span>HP</span>
-                <span className="tabular-nums text-slate-200">{Math.round(hpSafe ?? 0)}</span>
+                <span className="truncate">HP</span>
+                <span className="shrink-0 tabular-nums text-slate-200">{Math.round(hpSafe ?? 0)}</span>
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-slate-800">
                 <div className={`h-full rounded-full transition-all duration-300 ${hpColor}`} style={{ width: `${hpPct}%` }} />
@@ -697,16 +682,13 @@ export function MatchChampionCard({ model, variant = "compact", hp, maxHp = 100 
             </div>
           ) : null}
 
-          {/* Charge bar */}
-          <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-800">
-            <div
-              className="h-full rounded-full transition-all duration-200"
-              style={{
-                width: `${chargePct}%`,
-                background: ready ? vfx.accent : "rgba(148,163,184,0.55)",
-                boxShadow: ready ? `0 0 12px ${vfx.glow}` : "none",
-              }}
-            />
+          <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
+            <span className="min-w-0 truncate text-[10px] font-bold uppercase tracking-[0.22em] text-slate-300">
+              {ultIcon} {model.used ? "Ultimate used" : ready ? "Ultimate ready" : "Ultimate charging"}
+            </span>
+            <span className="shrink-0 text-[10px] font-black tabular-nums text-slate-200">
+              {Math.round(model.charge)}%
+            </span>
           </div>
         </div>
       </div>

@@ -134,7 +134,7 @@ export function HomeLobbyDashboard({
         }}
       />
 
-      <div className="grid gap-4 lg:grid-cols-3 lg:gap-5">
+      <div className="grid auto-rows-min grid-cols-1 items-start gap-4 lg:grid-cols-3 lg:gap-5">
         <RecommendedObjectiveCard
           daily={lobbyDaily}
           coins={accountIdentity?.coins}
@@ -157,7 +157,7 @@ export function HomeLobbyDashboard({
           loadoutBusy={routeBusy === "loadout"}
         />
 
-        <div className="flex min-h-0 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-col">
           <HomeQuickLinks
             onNavigate={onQuickLink}
             busy={quickLinkBusy}

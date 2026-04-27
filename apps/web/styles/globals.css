@@ -410,6 +410,105 @@ select {
     }
   }
 
+  /* Elastic in-match question card (gameplay shell). */
+  .qx-question-elastic {
+    width: 100%;
+    max-width: clamp(320px, 45vw, 760px);
+    margin-inline: auto;
+    padding: clamp(12px, 2.5vh, 32px);
+    max-height: min(38dvh, 22rem);
+    overflow: hidden;
+  }
+
+  .qx-question-elastic .qx-question-prompt {
+    overflow-wrap: anywhere;
+    text-wrap: balance;
+    font-size: clamp(1.4rem, 2.6vw, 2.6rem) !important;
+    line-height: 1.12;
+  }
+
+  .qx-question-elastic .qx-question-visual {
+    max-height: min(18dvh, 10rem);
+  }
+
+  /* Content-sized MC answers — centered, not edge-to-edge. */
+  .qx-answer-btn {
+    box-sizing: border-box;
+    width: fit-content !important;
+    min-width: 120px;
+    max-width: 180px;
+    padding: 12px 20px !important;
+    justify-content: center;
+    text-align: center;
+  }
+
+  /* Unified in-match gameplay column — single grid, shared 720px rail */
+  .qx-gameplay-stack {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: auto;
+    gap: clamp(12px, 2vh, 20px);
+    width: 100%;
+    max-width: min(720px, 92vw);
+    margin-inline: auto;
+    min-width: 0;
+  }
+
+  .qx-gameplay-stack .qx-question-elastic {
+    max-width: 100%;
+  }
+
+  .qx-gameplay-ultimate-row {
+    width: 100%;
+    max-width: min(640px, 100%);
+    margin-inline: auto;
+    justify-self: center;
+  }
+
+  .qx-gameplay-answers {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+    gap: 12px;
+    width: 100%;
+    align-items: stretch;
+    justify-items: stretch;
+  }
+
+  .qx-gameplay-answers--stack {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .qx-gameplay-stack .qx-answer-btn {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0;
+    min-height: 44px;
+    height: 100%;
+    box-sizing: border-box;
+  }
+
+  .qx-gameplay-input-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    align-items: stretch;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .qx-gameplay-action-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    width: 100%;
+    align-items: stretch;
+    min-width: 0;
+  }
+
+  .qx-gameplay-action-row--stack {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .q-match-lock input,
   .q-match-lock button {
     touch-action: manipulation;

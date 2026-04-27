@@ -527,6 +527,9 @@ export function GameClient({
   const [questionFlash, setQuestionFlash] = useState<QuestionFlash | null>(null);
   const [answerFeedback, setAnswerFeedback] = useState<AnswerFeedback | null>(null);
   const [momentCallout, setMomentCallout] = useState<MomentCallout | null>(null);
+  // Workpad UX:
+  // - Desktop/tablet landscape: optional right side panel (resizable, saved width)
+  // - Mobile/portrait: bottom sheet overlay with pinned mini-header
   const [workpadOpen, setWorkpadOpen] = useState(false);
   const [answer, setAnswer] = useState("");
   const [timeoutDecisionPrompt, setTimeoutDecisionPrompt] = useState<TimeoutDecisionPromptState>({
@@ -592,6 +595,8 @@ export function GameClient({
     mobileLayout: false,
   });
   const [workpadSheetOpen, setWorkpadSheetOpen] = useState(false);
+  const [workpadPanelWidth, setWorkpadPanelWidth] = useState<number | null>(null);
+  const workpadResizeDragRef = useRef<{ startX: number; startWidth: number; active: boolean } | null>(null);
 
   useEffect(() => {
     statusRef.current = status;
@@ -3785,6 +3790,39 @@ export function GameClient({
   const youEliminated = eliminated.you;
   const opponentEliminated = eliminated.opponent;
 
+  // Lock page scroll during in-match gameplay (fairness rule: never scroll to play).
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (!isInMatchShell) return;
+    const body = document.body;
+    const prev = body.style.overflow;
+    body.style.overflow = "hidden";
+    return () => {
+      body.style.overflow = prev;
+    };
+  }, [isInMatchShell]);
+
+  // Workpad panel width persistence.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = window.localStorage.getItem("qx.workpad.width");
+    if (!raw) return;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed < 280) return;
+    setWorkpadPanelWidth(parsed);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!workpadPanelWidth) return;
+    window.localStorage.setItem("qx.workpad.width", String(Math.round(workpadPanelWidth)));
+  }, [workpadPanelWidth]);
+
+  // Ensure mobile sheet is only used on mobile layout.
+  useEffect(() => {
+    if (!viewportState.mobileLayout && workpadSheetOpen) setWorkpadSheetOpen(false);
+  }, [viewportState.mobileLayout, workpadSheetOpen]);
+
   // Derived HP values — client-side health bar visualization
   const youHP = Math.max(0, MAX_HP - youDamageTaken);
   const opponentHP = Math.max(0, MAX_HP - opponentDamageTaken);
@@ -4362,7 +4400,7 @@ export function GameClient({
               keyboardOpenDuringGameplay && "hidden"
             )}
           >
-            <div className={cn("q-card relative rounded-[1.55rem] p-2 sm:p-3", crampedGameplay && "sm:p-2.5")}>
+          <div className={cn("q-card relative rounded-[1.55rem] p-2 sm:p-3", crampedGameplay && "sm:p-2.5")}>
               <div
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-0 rounded-[1.55rem] opacity-70"
@@ -4374,12 +4412,18 @@ export function GameClient({
 
               <div
                 className={cn(
-                  "relative grid items-stretch gap-2 md:grid-cols-[minmax(0,1fr)_7.5rem_minmax(0,1fr)] md:gap-3",
-                  crampedGameplay && "gap-1.5 md:grid-cols-[minmax(0,1fr)_6.5rem_minmax(0,1fr)]"
+                  "relative grid items-stretch gap-2 md:gap-3",
+                  viewportState.mobileLayout
+                    ? "grid-cols-[minmax(0,1fr)_5.75rem_minmax(0,1fr)]"
+                    : "md:grid-cols-[minmax(0,1fr)_7.5rem_minmax(0,1fr)]",
+                  crampedGameplay &&
+                    (viewportState.mobileLayout
+                      ? "gap-1.5"
+                      : "gap-1.5 md:grid-cols-[minmax(0,1fr)_6.5rem_minmax(0,1fr)]")
                 )}
               >
                 <MatchChampionCard
-                  variant="battle"
+                  variant={viewportState.mobileLayout ? "compact" : "battle"}
                   hp={youDisplayHP}
                   maxHp={DISPLAY_MAX_HP}
                   model={{
@@ -4451,7 +4495,7 @@ export function GameClient({
                 </div>
 
                 <MatchChampionCard
-                  variant="battle"
+                  variant={viewportState.mobileLayout ? "compact" : "battle"}
                   hp={opponentDisplayHP}
                   maxHp={DISPLAY_MAX_HP}
                   model={{
@@ -4508,52 +4552,60 @@ export function GameClient({
             </div>
           </div>
 
-          {/* Main gameplay area — question + answers in left col, workpad in right col */}
-          <div className="flex min-h-0 flex-1 overflow-hidden">
-
-            {/* Left / sole col: question card then answer form, scrollable */}
+          {/* Main gameplay area — fills row 2; optional workpad column on the right */}
+          <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
             <div
               className={cn(
-                "flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-6 sm:px-5 sm:pt-8",
-                compactGameplay && "pt-3 sm:pt-4",
-                constrainedGameplay && "pt-2 sm:pt-2",
-                keyboardOpenDuringGameplay && "pb-2 pt-1"
+                "flex min-h-0 flex-1 flex-col overflow-hidden px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 sm:px-5 sm:pt-4",
+                compactGameplay && "pt-2 sm:pt-3",
+                constrainedGameplay && "pt-2 sm:pt-2.5",
+                keyboardOpenDuringGameplay && "pb-2 pt-1",
+                viewportState.tabletLandscape && isActiveGameplay && workpadOpen && "min-w-0"
               )}
             >
-              {/* Question card — always at the top of the column */}
-              <motion.div
-                animate={reduceBattleMotion ? undefined : animState.questionShakeControls}
-                className="mx-auto w-full max-w-2xl"
-              >
-                <motion.div
-                  key={`question-card-${questionMotionKey}`}
-                  className={cn(
-                    "q-card-strong relative overflow-hidden rounded-[1.5rem] p-4 text-center sm:p-6",
-                    compactGameplay && "p-3 sm:p-4",
-                    constrainedGameplay && "p-2.5 sm:p-3",
-                    questionFlash?.kind === "correct" && "ring-2 ring-emerald-300/55",
-                    questionFlash?.kind === "wrong" && "ring-2 ring-rose-300/55"
-                  )}
-                  initial={reduceBattleMotion ? false : { opacity: 0, y: 12, scale: 0.985 }}
-                  animate={
-                    reduceBattleMotion
-                      ? undefined
-                      : {
-                          opacity: 1,
-                          y: 0,
-                          scale: 1,
-                          boxShadow:
-                            questionFlash?.kind === "correct"
-                              ? "0 0 34px rgba(52,211,153,0.22), 0 18px 52px rgba(2,6,23,0.5)"
-                              : questionFlash?.kind === "wrong"
-                                ? "0 0 34px rgba(251,113,133,0.22), 0 18px 52px rgba(2,6,23,0.5)"
-                                : showFinalPhase
-                                  ? "0 0 30px rgba(251,113,133,0.16), 0 18px 52px rgba(2,6,23,0.5)"
-                                  : "0 18px 52px rgba(2,6,23,0.5)",
-                        }
+              <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden">
+              <form
+                className="qx-gameplay-stack"
+                onSubmit={(e) => {
+                  if (!isActiveGameplay) {
+                    e.preventDefault();
+                    return;
                   }
-                  transition={{ duration: 0.22, ease: "easeOut" }}
+                  handleSubmit(e);
+                }}
+              >
+                {/* Question card */}
+                <motion.div
+                  animate={reduceBattleMotion ? undefined : animState.questionShakeControls}
+                  className="w-full min-w-0 shrink-0"
                 >
+                  <motion.div
+                    key={`question-card-${questionMotionKey}`}
+                    className={cn(
+                      "q-card-strong qx-question-elastic relative overflow-hidden rounded-[1.5rem] text-center",
+                      questionFlash?.kind === "correct" && "ring-2 ring-emerald-300/55",
+                      questionFlash?.kind === "wrong" && "ring-2 ring-rose-300/55"
+                    )}
+                    initial={reduceBattleMotion ? false : { opacity: 0, y: 12, scale: 0.985 }}
+                    animate={
+                      reduceBattleMotion
+                        ? undefined
+                        : {
+                            opacity: 1,
+                            y: 0,
+                            scale: 1,
+                            boxShadow:
+                              questionFlash?.kind === "correct"
+                                ? "0 0 34px rgba(52,211,153,0.22), 0 18px 52px rgba(2,6,23,0.5)"
+                                : questionFlash?.kind === "wrong"
+                                  ? "0 0 34px rgba(251,113,133,0.22), 0 18px 52px rgba(2,6,23,0.5)"
+                                  : showFinalPhase
+                                    ? "0 0 30px rgba(251,113,133,0.16), 0 18px 52px rgba(2,6,23,0.5)"
+                                    : "0 18px 52px rgba(2,6,23,0.5)",
+                          }
+                    }
+                    transition={{ duration: 0.22, ease: "easeOut" }}
+                  >
                   <motion.div
                     aria-hidden="true"
                     className="pointer-events-none absolute inset-0"
@@ -4600,14 +4652,7 @@ export function GameClient({
                         question={currentQuestionData}
                         fallbackPrompt={currentQuestion}
                         compact
-                        fitViewport
-                        promptClassName={
-                          constrainedGameplay
-                            ? "text-lg font-black tracking-tight text-white sm:text-xl md:text-2xl"
-                            : compactGameplay
-                              ? "text-lg font-black tracking-tight text-white sm:text-2xl md:text-3xl"
-                              : "text-xl font-black tracking-tight text-white sm:text-3xl md:text-4xl"
-                        }
+                        promptClassName="font-black tracking-tight text-white"
                       />
                     )}
                   </div>
@@ -4627,20 +4672,53 @@ export function GameClient({
                   ) : null}
                   <FrostBurst active={animState.frostBurstActive} />
                   <SnowfallOverlay active={animState.snowfallActive} reduced={reduceBattleMotion} />
+                  </motion.div>
                 </motion.div>
-              </motion.div>
 
-              {/* Answer form — directly below question, same column */}
-              {isActiveGameplay ? (
-                <div
-                  className={cn(
-                    "mx-auto mt-4 w-full sm:mt-5",
-                    compactGameplay && "mt-3 sm:mt-3",
-                    constrainedGameplay && "mt-2 sm:mt-2",
-                    viewportState.tabletLandscape ? "max-w-none" : "max-w-2xl"
-                  )}
-                >
-                  <div className={cn("mb-1.5 flex items-center justify-start", constrainedGameplay && "hidden")}>
+                {isActiveGameplay ? (
+                  <>
+                  <div className="qx-gameplay-ultimate-row min-w-0">
+                    <div className="sm:hidden">
+                      <UltimateAbilityButton
+                        type={ultimate.type}
+                        ultimateName={ultimate.name}
+                        charge={ultimate.charge}
+                        ready={ultimate.ready}
+                        used={ultimate.used}
+                        implemented={ultimate.implemented}
+                        activating={ultimateActivating}
+                        disabled={!canUseUltimate}
+                        onActivate={handleActivateUltimate}
+                        activationBurstKey={youUltimateActivationKey}
+                        activeWindow={architectCanRelease}
+                        actionLabel={architectCanRelease ? "Use Perfect System now" : undefined}
+                        statusOverride={architectCanRelease ? (ultimate.architectReady ? "AUTO AT 5" : "FIRE NOW") : undefined}
+                        size="compact"
+                        className="h-11 w-full"
+                      />
+                    </div>
+                    <div className="hidden w-full min-w-0 sm:block">
+                      <UltimateAbilityButton
+                        type={ultimate.type}
+                        ultimateName={ultimate.name}
+                        charge={ultimate.charge}
+                        ready={ultimate.ready}
+                        used={ultimate.used}
+                        implemented={ultimate.implemented}
+                        activating={ultimateActivating}
+                        disabled={!canUseUltimate}
+                        onActivate={handleActivateUltimate}
+                        activationBurstKey={youUltimateActivationKey}
+                        activeWindow={architectCanRelease}
+                        actionLabel={architectCanRelease ? "Use Perfect System now" : undefined}
+                        statusOverride={architectCanRelease ? (ultimate.architectReady ? "AUTO AT 5" : "FIRE NOW") : undefined}
+                        size="regular"
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+
+                  <div className={cn("w-full min-w-0", constrainedGameplay && "hidden")}>
                     <EmoteBar
                       emotes={availableEmotes}
                       open={emoteBarOpen && emotesEnabled}
@@ -4651,71 +4729,72 @@ export function GameClient({
                       disabled={!emotesEnabled}
                     />
                   </div>
-                  <form className={cn("flex w-full flex-col gap-2", crampedGameplay && "gap-1.5")} onSubmit={handleSubmit}>
                     {isNeuralJamSilenced ? (
-                      <div className="flex items-center">
+                      <div className="flex w-full min-w-0 items-center">
                         <span className="rounded-full border border-violet-300/35 bg-violet-500/12 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-violet-100">
                           JAMMED
                         </span>
                       </div>
                     ) : null}
 
-                    {/* Inline workpad — non-mobile, non-tablet-landscape only */}
-                    {!viewportState.mobileLayout && !viewportState.tabletLandscape ? (
-                      <WorkingScratchpad
-                        displayMode="inline-collapsible"
-                        answerInputLocked={inputsLocked}
-                        onOpenChange={setWorkpadOpen}
-                      />
-                    ) : null}
-
                     {Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0 ? (
-                      <div className={cn(
-                        "grid gap-2",
-                        viewportState.tabletLandscape ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-2",
-                        compactGameplay && "grid-cols-2 gap-1.5"
-                      )}>
-                        {currentQuestionData.options.map((option, idx) => {
-                          const isFeedbackOption = answerFeedback?.option === option;
-                          return (
-                            <Button
-                              key={`${option}-${idx}`}
-                              type="button"
-                              variant="secondary"
-                              className={cn(
-                                "relative min-h-[48px] w-full justify-start overflow-hidden py-3 text-left text-sm shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_12px_28px_rgba(2,6,23,0.38)] hover:border-cyan-300/45 hover:shadow-[0_0_24px_rgba(34,211,238,0.14),0_14px_30px_rgba(2,6,23,0.44)] sm:min-h-[2.75rem] sm:py-2",
-                                compactGameplay && "min-h-[42px] px-2.5 py-2 text-center text-xs sm:min-h-[2.6rem] sm:text-sm",
-                                isFeedbackOption && answerFeedback.kind === "correct" && "border-emerald-300/70 bg-emerald-500/18 text-emerald-50 shadow-[0_0_24px_rgba(52,211,153,0.2)]",
-                                isFeedbackOption && answerFeedback.kind === "wrong" && "border-rose-300/70 bg-rose-500/18 text-rose-50 shadow-[0_0_24px_rgba(251,113,133,0.2)]"
-                              )}
-                              disabled={inputsLocked || youEliminated || feedback.youAnsweredCurrent}
-                              onClick={() => handleOptionSubmit(option)}
-                            >
-                              {option}
-                              {isFeedbackOption ? (
-                                <motion.span
-                                  className="pointer-events-none absolute inset-0"
-                                  initial={{ opacity: 0 }}
-                                  animate={{ opacity: [0, 0.42, 0] }}
-                                  transition={{ duration: 0.42, ease: "easeOut" }}
-                                  style={{
-                                    background: answerFeedback.kind === "correct"
-                                      ? "linear-gradient(90deg, transparent 0%, rgba(52,211,153,0.55) 48%, transparent 100%)"
-                                      : "linear-gradient(90deg, transparent 0%, rgba(251,113,133,0.55) 48%, transparent 100%)",
-                                  }}
-                                />
-                              ) : null}
-                              {isNeuralJamSilenced && !isJamActive ? (
-                                <span className="pointer-events-none absolute inset-0 bg-violet-950/55 bg-[repeating-linear-gradient(0deg,transparent_0px,transparent_2px,rgba(167,139,250,0.07)_2px,rgba(167,139,250,0.07)_4px)]" />
-                              ) : null}
-                            </Button>
-                          );
-                        })}
-                      </div>
+                      (() => {
+                        const opts = currentQuestionData.options;
+                        const answerBtnBase =
+                          "qx-answer-btn relative min-h-[44px] h-full w-full overflow-hidden text-sm shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_12px_28px_rgba(2,6,23,0.38)] hover:border-cyan-300/45 hover:shadow-[0_0_24px_rgba(34,211,238,0.14),0_14px_30px_rgba(2,6,23,0.44)]";
+                        const mapButtons = () =>
+                          opts.map((option, idx) => {
+                            const isFeedbackOption = answerFeedback?.option === option;
+                            return (
+                              <Button
+                                key={`${option}-${idx}`}
+                                type="button"
+                                variant="secondary"
+                                className={cn(
+                                  answerBtnBase,
+                                  (compactGameplay || viewportState.mobileLayout) && "min-h-[42px] text-xs sm:text-sm",
+                                  isFeedbackOption && answerFeedback.kind === "correct" && "border-emerald-300/70 bg-emerald-500/18 text-emerald-50 shadow-[0_0_24px_rgba(52,211,153,0.2)]",
+                                  isFeedbackOption && answerFeedback.kind === "wrong" && "border-rose-300/70 bg-rose-500/18 text-rose-50 shadow-[0_0_24px_rgba(251,113,133,0.2)]"
+                                )}
+                                disabled={inputsLocked || youEliminated || feedback.youAnsweredCurrent}
+                                onClick={() => handleOptionSubmit(option)}
+                              >
+                                {option}
+                                {isFeedbackOption ? (
+                                  <motion.span
+                                    className="pointer-events-none absolute inset-0"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: [0, 0.42, 0] }}
+                                    transition={{ duration: 0.42, ease: "easeOut" }}
+                                    style={{
+                                      background: answerFeedback.kind === "correct"
+                                        ? "linear-gradient(90deg, transparent 0%, rgba(52,211,153,0.55) 48%, transparent 100%)"
+                                        : "linear-gradient(90deg, transparent 0%, rgba(251,113,133,0.55) 48%, transparent 100%)",
+                                    }}
+                                  />
+                                ) : null}
+                                {isNeuralJamSilenced && !isJamActive ? (
+                                  <span className="pointer-events-none absolute inset-0 bg-violet-950/55 bg-[repeating-linear-gradient(0deg,transparent_0px,transparent_2px,rgba(167,139,250,0.07)_2px,rgba(167,139,250,0.07)_4px)]" />
+                                ) : null}
+                              </Button>
+                            );
+                          });
+
+                        return (
+                          <div
+                            className={cn(
+                              "qx-gameplay-answers",
+                              viewportState.mobileLayout && "qx-gameplay-answers--stack"
+                            )}
+                          >
+                            {mapButtons()}
+                          </div>
+                        );
+                      })()
                     ) : null}
 
                     {!(Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0) ? (
-                      <div className={cn("flex items-stretch gap-2", compactGameplay && "flex-col")}>
+                      <div className="qx-gameplay-input-row">
                         <input
                           ref={answerInputRef}
                           type="text"
@@ -4743,7 +4822,7 @@ export function GameClient({
                           spellCheck={false}
                           enterKeyHint="go"
                           className={cn(
-                            "neon-input min-h-[48px] min-w-0 flex-1 rounded-2xl px-4 py-3 text-base transition-[border-color,box-shadow,background-color] duration-150 disabled:cursor-not-allowed disabled:opacity-60 sm:h-12 sm:py-2",
+                            "neon-input min-h-[48px] min-w-0 rounded-2xl px-4 py-3 text-base transition-[border-color,box-shadow,background-color] duration-150 disabled:cursor-not-allowed disabled:opacity-60 sm:h-12 sm:py-2",
                             compactGameplay && "min-h-[44px] py-2.5 sm:h-11 sm:py-2",
                             answerFeedback?.kind === "correct" && "border-emerald-300/65 shadow-[0_0_22px_rgba(52,211,153,0.18)]",
                             answerFeedback?.kind === "wrong" && "border-rose-300/65 shadow-[0_0_22px_rgba(251,113,133,0.18)]"
@@ -4751,8 +4830,8 @@ export function GameClient({
                         />
                         <Button
                           className={cn(
-                            "min-h-[48px] w-[7.5rem] shrink-0 sm:h-12",
-                            compactGameplay && "min-h-[44px] w-full sm:h-11"
+                            "min-h-[48px] w-[7.5rem] shrink-0 self-stretch sm:h-12",
+                            compactGameplay && "min-h-[44px] sm:h-11"
                           )}
                           type="submit"
                           disabled={!answer.trim() || inputsLocked || youEliminated || feedback.youAnsweredCurrent}
@@ -4762,128 +4841,156 @@ export function GameClient({
                       </div>
                     ) : null}
 
-                    <div className={cn(constrainedGameplay && "hidden")}>
+                    <div className={cn("w-full min-w-0", constrainedGameplay && "hidden")}>
                       {skipQuestionButton}
                     </div>
 
-                    {/* Abilities row */}
-                    <div
-                      className={cn(
-                        "grid gap-2",
-                        POWERUPS_ENABLED ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-2",
-                        compactGameplay && "grid-cols-1"
-                      )}
-                    >
-                      {POWERUPS_ENABLED ? (
-                        <button
-                          type="button"
-                          onClick={() => { if (feedback.youPowerUpAvailable) handleUsePowerUp(feedback.youPowerUpAvailable); }}
-                          disabled={!feedback.youPowerUpAvailable || feedback.youPowerUpUsed || youEliminated || feedback.youAnsweredCurrent}
-                          className={`h-11 w-full rounded-2xl border px-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
-                            feedback.youPowerUpAvailable && !feedback.youPowerUpUsed
-                              ? "border-sky-300/35 bg-sky-500/10 text-sky-100 hover:border-sky-300/55 active:scale-[0.99]"
-                              : feedback.youPowerUpUsed
-                                ? "border-white/[0.05] bg-slate-950/38 text-slate-500"
-                                : "border-white/[0.05] bg-slate-950/30 text-slate-500"
-                          }`}
-                          aria-label="Power-up"
-                        >
-                          {feedback.youPowerUpAvailable ? (
-                            (() => {
-                              const meta = getPowerUpMeta(feedback.youPowerUpAvailable);
-                              return (
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="min-w-0">
-                                    <p className="truncate text-[11px] font-black uppercase tracking-[0.18em]">
-                                      {meta?.icon ?? "✨"} {meta?.name ?? "Power-Up"}
-                                    </p>
-                                    <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                                      {feedback.youPowerUpUsed ? "Used" : "Ready"}
-                                    </p>
-                                  </div>
-                                  <span className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-300">Tap</span>
-                                </div>
-                              );
-                            })()
-                          ) : (
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-[11px] font-black uppercase tracking-[0.18em]">✨ Power-Up</p>
-                              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">None</p>
-                            </div>
+                    {(() => {
+                      const powerupCell = POWERUPS_ENABLED && !viewportState.mobileLayout;
+                      return (
+                        <div
+                          className={cn(
+                            "qx-gameplay-action-row",
+                            viewportState.mobileLayout && "qx-gameplay-action-row--stack",
+                            !viewportState.mobileLayout && !powerupCell && "grid-cols-1"
                           )}
-                        </button>
-                      ) : null}
-
-                      {/* Mobile workpad toggle button */}
-                      {viewportState.mobileLayout && !constrainedGameplay ? (
-                        <button
-                          type="button"
-                          disabled={inputsLocked}
-                          onClick={() => setWorkpadSheetOpen(true)}
-                          className="h-11 w-full rounded-2xl border border-indigo-300/28 bg-slate-900/55 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-200 transition-all hover:border-cyan-300/45 disabled:cursor-not-allowed disabled:opacity-45"
-                          aria-label="Open workpad"
                         >
-                          ✏ Workpad
-                        </button>
-                      ) : null}
-
-                      {/* Mobile: compact ultimate */}
-                      <div className="sm:hidden">
-                        <UltimateAbilityButton
-                          type={ultimate.type}
-                          ultimateName={ultimate.name}
-                          charge={ultimate.charge}
-                          ready={ultimate.ready}
-                          used={ultimate.used}
-                          implemented={ultimate.implemented}
-                          activating={ultimateActivating}
-                          disabled={!canUseUltimate}
-                          onActivate={handleActivateUltimate}
-                          activationBurstKey={youUltimateActivationKey}
-                          activeWindow={architectCanRelease}
-                          actionLabel={architectCanRelease ? "Use Perfect System now" : undefined}
-                          statusOverride={architectCanRelease ? (ultimate.architectReady ? "AUTO AT 5" : "FIRE NOW") : undefined}
-                          size="compact"
-                          className="h-11"
-                        />
-                      </div>
-                      {/* sm+: regular ultimate */}
-                      <div className="hidden sm:block">
-                        <UltimateAbilityButton
-                          type={ultimate.type}
-                          ultimateName={ultimate.name}
-                          charge={ultimate.charge}
-                          ready={ultimate.ready}
-                          used={ultimate.used}
-                          implemented={ultimate.implemented}
-                          activating={ultimateActivating}
-                          disabled={!canUseUltimate}
-                          onActivate={handleActivateUltimate}
-                          activationBurstKey={youUltimateActivationKey}
-                          activeWindow={architectCanRelease}
-                          actionLabel={architectCanRelease ? "Use Perfect System now" : undefined}
-                          statusOverride={architectCanRelease ? (ultimate.architectReady ? "AUTO AT 5" : "FIRE NOW") : undefined}
-                          size="regular"
-                        />
-                      </div>
-                    </div>
-                  </form>
-                </div>
-              ) : null}
+                          <div className="flex min-h-[44px] min-w-0 items-stretch justify-center sm:min-h-0">
+                            {viewportState.mobileLayout ? (
+                              <button
+                                type="button"
+                                disabled={inputsLocked}
+                                onClick={() => setWorkpadSheetOpen(true)}
+                                className="h-11 w-full rounded-2xl border border-indigo-300/28 bg-slate-900/55 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-200 transition-all hover:border-cyan-300/45 disabled:cursor-not-allowed disabled:opacity-45"
+                                aria-label="Open workpad"
+                              >
+                                ✏ Workpad
+                              </button>
+                            ) : viewportState.tabletLandscape ? (
+                              <button
+                                type="button"
+                                disabled={inputsLocked}
+                                onClick={() => setWorkpadOpen((open) => !open)}
+                                className="h-11 w-full rounded-2xl border border-indigo-300/28 bg-slate-900/55 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-200 transition-all hover:border-cyan-300/45 disabled:cursor-not-allowed disabled:opacity-45"
+                                aria-label={workpadOpen ? "Close workpad" : "Open workpad"}
+                              >
+                                {workpadOpen ? "Close workpad" : "✏ Workpad"}
+                              </button>
+                            ) : (
+                              <WorkingScratchpad
+                                displayMode="inline-collapsible"
+                                answerInputLocked={inputsLocked}
+                                onOpenChange={setWorkpadOpen}
+                                className="flex w-full min-w-0 justify-center"
+                              />
+                            )}
+                          </div>
+                          {powerupCell ? (
+                            <div className="flex min-h-[44px] min-w-0 items-stretch">
+                              <button
+                                type="button"
+                                onClick={() => { if (feedback.youPowerUpAvailable) handleUsePowerUp(feedback.youPowerUpAvailable); }}
+                                disabled={!feedback.youPowerUpAvailable || feedback.youPowerUpUsed || youEliminated || feedback.youAnsweredCurrent}
+                                className={`h-11 w-full rounded-2xl border px-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 ${
+                                  feedback.youPowerUpAvailable && !feedback.youPowerUpUsed
+                                    ? "border-sky-300/35 bg-sky-500/10 text-sky-100 hover:border-sky-300/55 active:scale-[0.99]"
+                                    : feedback.youPowerUpUsed
+                                      ? "border-white/[0.05] bg-slate-950/38 text-slate-500"
+                                      : "border-white/[0.05] bg-slate-950/30 text-slate-500"
+                                }`}
+                                aria-label="Power-up"
+                              >
+                                {feedback.youPowerUpAvailable ? (
+                                  (() => {
+                                    const meta = getPowerUpMeta(feedback.youPowerUpAvailable);
+                                    return (
+                                      <div className="flex h-full items-center justify-between gap-2">
+                                        <div className="min-w-0">
+                                          <p className="truncate text-[11px] font-black uppercase tracking-[0.18em]">
+                                            {meta?.icon ?? "✨"} {meta?.name ?? "Power-Up"}
+                                          </p>
+                                          <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                                            {feedback.youPowerUpUsed ? "Used" : "Ready"}
+                                          </p>
+                                        </div>
+                                        <span className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-300">Tap</span>
+                                      </div>
+                                    );
+                                  })()
+                                ) : (
+                                  <div className="flex h-full items-center justify-between gap-2">
+                                    <p className="text-[11px] font-black uppercase tracking-[0.18em]">✨ Power-Up</p>
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">None</p>
+                                  </div>
+                                )}
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })()}
+                  </>
+                ) : null}
+              </form>
+              </div>
             </div>
 
-            {/* Right col: workpad — tablet landscape + active gameplay only */}
-            {viewportState.tabletLandscape && isActiveGameplay ? (
+            {/* Right col: workpad — tablet/laptop landscape (optional, resizable) */}
+            {viewportState.tabletLandscape && isActiveGameplay && workpadOpen ? (
               <div
-                className="shrink-0 overflow-hidden border-l border-slate-700/25 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3"
-                style={{ width: "clamp(300px, 35%, 360px)" }}
+                className="relative flex min-h-0 shrink-0 flex-col overflow-hidden border-l border-slate-700/25 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3"
+                style={{
+                  width: Math.max(
+                    320,
+                    Math.min(
+                      Math.floor((viewportState.width || 1280) * 0.55),
+                      Math.round(workpadPanelWidth ?? 420)
+                    )
+                  )
+                }}
               >
-                <WorkingScratchpad
-                  displayMode="always-open"
-                  answerInputLocked={inputsLocked}
-                  onOpenChange={setWorkpadOpen}
-                  className="h-full"
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize workpad"
+                  className="absolute left-0 top-0 z-10 h-full w-2 cursor-col-resize touch-none bg-transparent"
+                  onPointerDown={(e) => {
+                    if (e.button !== 0) return;
+                    const startWidth =
+                      (e.currentTarget.parentElement as HTMLElement | null)?.getBoundingClientRect().width ??
+                      (workpadPanelWidth ?? 420);
+                    workpadResizeDragRef.current = { startX: e.clientX, startWidth, active: true };
+                    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                    e.preventDefault();
+                  }}
+                  onPointerMove={(e) => {
+                    const drag = workpadResizeDragRef.current;
+                    if (!drag?.active) return;
+                    const dx = drag.startX - e.clientX; // drag left increases width
+                    const next = drag.startWidth + dx;
+                    const vw = viewportState.width || window.innerWidth || 1280;
+                    const min = 320;
+                    const max = Math.max(min, Math.floor(vw * 0.55));
+                    setWorkpadPanelWidth(Math.max(min, Math.min(max, next)));
+                  }}
+                  onPointerUp={(e) => {
+                    const drag = workpadResizeDragRef.current;
+                    if (!drag) return;
+                    workpadResizeDragRef.current = { ...drag, active: false };
+                    try {
+                      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+                    } catch {
+                      // ignore
+                    }
+                  }}
                 />
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                  <WorkingScratchpad
+                    displayMode="always-open"
+                    answerInputLocked={inputsLocked}
+                    className="min-h-0 h-full flex-1"
+                  />
+                </div>
               </div>
             ) : null}
           </div>
@@ -4906,21 +5013,41 @@ export function GameClient({
                   />
                   <motion.div
                     className="relative z-10 flex flex-col rounded-t-3xl border-t border-indigo-300/20 bg-[rgba(3,8,24,0.97)] px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3"
-                    style={{ height: "55dvh", minHeight: "280px", maxHeight: "80dvh" }}
+                    style={{ height: "70dvh", minHeight: "320px", maxHeight: "90dvh" }}
                     initial={{ y: "100%" }}
                     animate={{ y: 0 }}
                     exit={{ y: "100%" }}
                     transition={{ duration: 0.26, ease: [0.32, 0.72, 0, 1] }}
                   >
-                    <div className="mb-2 flex items-center justify-between">
-                      <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Workpad</p>
-                      <button
-                        type="button"
-                        onClick={() => setWorkpadSheetOpen(false)}
-                        className="rounded-lg border border-indigo-300/30 bg-slate-900/70 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-200 hover:border-rose-300/50 hover:text-rose-200"
-                      >
-                        Close
-                      </button>
+                    <div className="mb-2 rounded-2xl border border-white/10 bg-slate-950/65 p-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-300">Workpad</p>
+                        <button
+                          type="button"
+                          onClick={() => setWorkpadSheetOpen(false)}
+                          className="rounded-lg border border-indigo-300/30 bg-slate-900/70 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-200 hover:border-cyan-300/50 hover:text-cyan-100"
+                        >
+                          Back to answers
+                        </button>
+                      </div>
+                      <div className="mt-2 grid grid-cols-[1fr_auto] items-start gap-2">
+                        <p className="min-w-0 text-sm font-semibold leading-snug text-slate-100 line-clamp-2">
+                          {currentQuestionData?.prompt ?? currentQuestion}
+                        </p>
+                        <span className="shrink-0 rounded-full border border-sky-300/18 bg-sky-500/10 px-3 py-1 text-[10px] font-black tracking-[0.24em] text-sky-200">
+                          {timerLabel}
+                        </span>
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+                        <div className="rounded-xl border border-white/10 bg-slate-950/55 px-2.5 py-2">
+                          <p className="truncate font-bold text-slate-200">You</p>
+                          <p className="mt-0.5 font-black tabular-nums text-emerald-200">{Math.round(youHP)} HP</p>
+                        </div>
+                        <div className="rounded-xl border border-white/10 bg-slate-950/55 px-2.5 py-2 text-right">
+                          <p className="truncate font-bold text-slate-200">{opponentName}</p>
+                          <p className="mt-0.5 font-black tabular-nums text-rose-200">{Math.round(opponentHP)} HP</p>
+                        </div>
+                      </div>
                     </div>
                     <div className="min-h-0 flex-1">
                       <WorkingScratchpad
