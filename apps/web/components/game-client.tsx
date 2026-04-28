@@ -351,6 +351,13 @@ type ServerAvatarSnapshot = Pick<
   "id" | "emoji" | "ultimateId" | "ultimateName" | "ultimateDescription"
 >;
 
+type LocalPlayerQueueProfile = {
+  id: string;
+  username: string | null;
+  display_name?: string | null;
+  avatar: string | null;
+};
+
 function isServerAvatarSnapshot(value: unknown): value is ServerAvatarSnapshot {
   if (!value || typeof value !== "object") {
     return false;
@@ -1049,6 +1056,8 @@ export function GameClient({
     setAnswer("");
     setYourName("You");
     setOpponentName("Opponent");
+    setYourAvatarId("flash");
+    setOpponentAvatarId("flash");
     setYourAvatar("🦊");
     setOpponentAvatar("🦊");
     setCountdownValue(null);
@@ -1126,6 +1135,41 @@ export function GameClient({
         nextSocket.disconnect();
         router.push("/");
         return;
+      }
+
+      const { data: queueProfile, error: queueProfileError } = await supabase
+        .from("players")
+        .select("id, username, display_name, avatar")
+        .eq("auth_user_id", session.user.id)
+        .maybeSingle();
+
+      if (queueProfileError) {
+        console.warn("[client] queue profile load failed", queueProfileError.message);
+      } else if (queueProfile) {
+        const localProfile = queueProfile as LocalPlayerQueueProfile;
+        const nextAvatarId = normalizeAvatarId(localProfile.avatar);
+        const nextAvatar = getAvatar(nextAvatarId);
+        setYourName(localProfile.display_name || localProfile.username || "You");
+        setYourAvatarId(nextAvatarId);
+        setYourAvatar(nextAvatar.emoji);
+        setUltimate((previous) => ({
+          ...previous,
+          ...buildUltimateIdentityFromAvatars(nextAvatarId, opponentAvatarId),
+        }));
+
+        const { data: queueRating } = await supabase
+          .from("ratings")
+          .select("rating")
+          .eq("player_id", localProfile.id)
+          .eq("topic", topic)
+          .maybeSingle();
+
+        if (queueRating && typeof (queueRating as { rating?: unknown }).rating === "number") {
+          setRatings((previous) => ({
+            ...previous,
+            you: (queueRating as { rating: number }).rating,
+          }));
+        }
       }
 
       if (roomJoinMode === "create") {
@@ -4648,13 +4692,20 @@ export function GameClient({
                 viewportState.tabletLandscape && isActiveGameplay && workpadOpen && "min-w-0"
               )}
             >
-              <div className="qx-gameplay-stage flex min-h-0 flex-1 flex-col items-center justify-start overflow-visible">
+              <div className="qx-gameplay-stage flex min-h-0 flex-1 flex-col items-center justify-center overflow-visible">
               <form
                 className={cn(
                   "qx-gameplay-stack",
                   constrainedGameplay && "qx-gameplay-stack--constrained",
+                  viewportState.tabletLandscape &&
+                    isActiveGameplay &&
+                    workpadOpen &&
+                    "qx-gameplay-stack--workpad-open",
                   !(Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0) &&
-                    "qx-gameplay-stack--text-entry qx-gameplay-stack--keyboard-fit"
+                    "qx-gameplay-stack--text-entry",
+                  constrainedGameplay &&
+                    !(Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0) &&
+                    "qx-gameplay-stack--keyboard-fit"
                 )}
                 onSubmit={(e) => {
                   if (!isActiveGameplay) {
@@ -5046,9 +5097,11 @@ export function GameClient({
                 className="relative flex min-h-0 shrink-0 flex-col overflow-hidden border-l border-slate-700/25 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3"
                 style={{
                   width: Math.max(
-                    320,
+                    (viewportState.width || 1280) < 1000 ? 280 : 320,
                     Math.min(
-                      Math.floor((viewportState.width || 1280) * 0.55),
+                      Math.floor(
+                        (viewportState.width || 1280) * ((viewportState.width || 1280) < 1100 ? 0.42 : 0.48)
+                      ),
                       Math.round(workpadPanelWidth ?? 420)
                     )
                   )
@@ -5074,8 +5127,8 @@ export function GameClient({
                     const dx = drag.startX - e.clientX; // drag left increases width
                     const next = drag.startWidth + dx;
                     const vw = viewportState.width || window.innerWidth || 1280;
-                    const min = 320;
-                    const max = Math.max(min, Math.floor(vw * 0.55));
+                    const min = vw < 1000 ? 280 : 320;
+                    const max = Math.max(min, Math.floor(vw * (vw < 1100 ? 0.42 : 0.48)));
                     setWorkpadPanelWidth(Math.max(min, Math.min(max, next)));
                   }}
                   onPointerUp={(e) => {
@@ -5283,53 +5336,34 @@ export function GameClient({
               }}
             />
 
-            {/* You (ready) */}
-            <div className="relative grid min-h-[22rem] grid-rows-[auto_2.5rem_minmax(8.5rem,auto)] gap-2 sm:min-h-[23rem] sm:gap-3">
-              <PlayerPanel
-                label={yourName}
-                score={scores.you}
-                rating={ratings.you}
-                eliminated={youEliminated}
-                streakLabel={null}
-                streakLevel={null}
-                streakEffect={yourStreakEffect}
-                fastActive={false}
-                highlighted
-                pulseKey={feedback.youPulseKey}
-                scoreGlowKey={animState.youScoreGlowKey}
-                shieldBlockFlashKey={0}
-                powerUpGlowKey={0}
-                ultimateFxKey={0}
-                ultimateFxType={null}
-                hp={undefined}
-                hitKey={0}
-                latestDamage={null}
-              />
-
-              <div className="min-h-[2.5rem] flex items-center justify-center" aria-hidden="true">
-                <span className="rounded-full border border-emerald-400/25 bg-emerald-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-emerald-200 shadow-[0_0_20px_rgba(52,211,153,0.16)]">
-                  READY
+            <div className="relative flex min-h-[18rem] flex-col overflow-hidden rounded-2xl border border-sky-300/12 bg-slate-950/30 p-3 sm:min-h-[20rem] sm:p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-sky-200/80">You</p>
+                  <p className="mt-1 truncate text-lg font-black text-white">{yourName}</p>
+                </div>
+                <span className="shrink-0 rounded-full border border-emerald-400/25 bg-emerald-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-emerald-200">
+                  Ready
                 </span>
               </div>
-
-              <div className="q-card-subtle rounded-2xl p-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-textSecondary/70">Matchmaking</p>
-                <p className="mt-2 text-sm text-slate-200">Searching for an opponent…</p>
-                <motion.p
-                  className="mt-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400"
-                  animate={{ opacity: [0.35, 1, 0.35] }}
-                  transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
-                >
-                  Finding match
-                  <span className="inline-block w-6 text-left">
-                    <motion.span
-                      animate={{ opacity: [0.2, 1, 0.2] }}
-                      transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
-                    >
-                      ...
-                    </motion.span>
-                  </span>
-                </motion.p>
+              <div className="mt-3 flex flex-1 items-center justify-center">
+                <div className="relative aspect-[3/4] h-[11rem] overflow-hidden rounded-[1.15rem] border border-white/15 bg-slate-900/80 shadow-[0_18px_42px_rgba(2,6,23,0.45)] ring-1 ring-amber-300/30 sm:h-[13rem]">
+                  <img
+                    src={`/assets/avatarCards/${yourAvatarId}.png`}
+                    alt=""
+                    className="h-full w-full object-cover object-top"
+                  />
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className="rounded-xl border border-white/10 bg-slate-950/45 px-3 py-2">
+                  <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-500">Rating</p>
+                  <p className="mt-1 text-lg font-black tabular-nums text-slate-100">{ratings.you}</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-slate-950/45 px-3 py-2 text-right">
+                  <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-500">Avatar</p>
+                  <p className="mt-1 truncate text-sm font-black uppercase text-amber-100">{getAvatar(yourAvatarId).name}</p>
+                </div>
               </div>
             </div>
 
@@ -5345,12 +5379,12 @@ export function GameClient({
 
             {/* Opponent placeholder */}
             <motion.div
-              className="relative grid min-h-[22rem] grid-rows-[auto_2.5rem_minmax(8.5rem,auto)] gap-2 sm:min-h-[23rem] sm:gap-3"
+              className="relative flex min-h-[18rem] flex-col overflow-hidden rounded-2xl border border-rose-300/10 bg-slate-950/24 p-3 sm:min-h-[20rem] sm:p-4"
               initial={{ opacity: 0.7 }}
               animate={{ opacity: [0.55, 0.85, 0.55] }}
               transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
             >
-              <div className="q-card-subtle relative w-full min-h-[11.5rem] rounded-2xl p-3 text-center sm:min-h-[12.25rem] sm:p-4">
+              <div className="relative flex flex-1 flex-col items-center justify-center rounded-2xl text-center">
                 <p className="truncate px-1 text-xs uppercase tracking-[0.2em] text-slate-400/70">
                   Searching for opponent…
                 </p>
@@ -5374,8 +5408,8 @@ export function GameClient({
                 </div>
               </div>
 
-              <div className="min-h-[2.5rem]" aria-hidden="true" />
-              <div className="q-card-subtle rounded-2xl p-3">
+              <div className="hidden" aria-hidden="true" />
+              <div className="hidden">
                 <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-textSecondary/70">Opponent</p>
                 <p className="mt-2 text-sm text-slate-300">Searching…</p>
               </div>
@@ -5773,7 +5807,7 @@ export function GameClient({
               </Button>
             </div>
           </div>
-        ) : !isFinished ? (
+        ) : isWaitingState ? null : !isFinished ? (
           <>
             {/* Question card — shake wrapper + frost burst overlay */}
             <motion.div animate={animState.questionShakeControls}>

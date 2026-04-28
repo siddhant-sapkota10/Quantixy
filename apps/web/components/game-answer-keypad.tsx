@@ -12,7 +12,11 @@ type GameAnswerKeypadProps = {
   className?: string;
 };
 
-type KeyDef = { label: string; insert?: string; action?: "backspace" | "clear" | "submit" };
+type KeyDef = {
+  label: string;
+  insert?: string;
+  action?: "backspace" | "clear" | "submit";
+};
 
 const NUMPAD: KeyDef[] = [
   { label: "7", insert: "7" },
@@ -26,26 +30,32 @@ const NUMPAD: KeyDef[] = [
   { label: "3", insert: "3" },
   { label: "0", insert: "0" },
   { label: ".", insert: "." },
-  { label: "⌫", action: "backspace" },
+  { label: "Del", action: "backspace" },
 ];
 
 const OPS: KeyDef[] = [
   { label: "+", insert: "+" },
-  { label: "−", insert: "-" },
-  { label: "×", insert: "*" },
-  { label: "÷", insert: "/" },
+  { label: "-", insert: "-" },
+  { label: "x", insert: "*" },
+  { label: "/", insert: "/" },
 ];
 
 const MATH: KeyDef[] = [
   { label: "(", insert: "(" },
   { label: ")", insert: ")" },
-  { label: "/", insert: "/" },
   { label: "^", insert: "^" },
-  { label: "√", insert: "sqrt(" },
+  { label: "sqrt", insert: "sqrt(" },
   { label: "=", insert: "=" },
   { label: "Clear", action: "clear" },
   { label: "Enter", action: "submit" },
 ];
+
+function keyTone(k: KeyDef) {
+  if (k.action === "submit") return "qx-keypad-btn--enter qx-keypad-btn--wide";
+  if (k.action === "clear") return "qx-keypad-btn--clear";
+  if (k.action === "backspace") return "qx-keypad-btn--delete";
+  return "";
+}
 
 export function GameAnswerKeypad({
   value,
@@ -95,22 +105,17 @@ export function GameAnswerKeypad({
         </div>
       ) : null}
 
-      <div className="grid grid-cols-[1fr_auto] gap-2 sm:gap-2.5">
-        <div className="min-w-0">
-          <p className="mb-1.5 text-[9px] font-black uppercase tracking-[0.22em] text-[var(--qx-text-muted)]">
-            Numbers
-          </p>
-          <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
+      <div className="qx-keypad-layout">
+        <div className="qx-keypad-section qx-keypad-section--numbers">
+          <p className="qx-keypad-label">Numbers</p>
+          <div className="qx-keypad-grid qx-keypad-grid--numbers">
             {NUMPAD.map((k) => (
               <button
                 key={`num-${k.label}`}
                 type="button"
                 disabled={disabled}
                 onClick={() => apply(k)}
-                className={cn(
-                  "qx-keypad-btn select-none rounded-2xl border border-[var(--qx-border-soft)] bg-[var(--qx-card)] px-2 text-center font-black text-[var(--qx-text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:border-cyan-400/18 hover:bg-[var(--qx-card-hover)] disabled:cursor-not-allowed disabled:opacity-60",
-                  k.action === "backspace" && "border-amber-300/16 bg-amber-500/10 text-amber-100"
-                )}
+                className={cn("qx-keypad-btn select-none", keyTone(k))}
               >
                 {k.label}
               </button>
@@ -118,18 +123,33 @@ export function GameAnswerKeypad({
           </div>
         </div>
 
-        <div className="w-[4.15rem] sm:w-[4.75rem]">
-          <p className="mb-1.5 text-[9px] font-black uppercase tracking-[0.22em] text-[var(--qx-text-muted)]">
-            Ops
-          </p>
-          <div className="grid grid-rows-4 gap-2 sm:gap-2.5">
+        <div className="qx-keypad-section qx-keypad-section--ops">
+          <p className="qx-keypad-label">Ops</p>
+          <div className="qx-keypad-grid qx-keypad-grid--ops">
             {OPS.map((k) => (
               <button
                 key={`op-${k.label}`}
                 type="button"
                 disabled={disabled}
                 onClick={() => apply(k)}
-                className="qx-keypad-btn select-none rounded-2xl border border-[var(--qx-border-soft)] bg-[var(--qx-card)] px-2 text-center font-black text-[var(--qx-text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:border-cyan-400/18 hover:bg-[var(--qx-card-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+                className="qx-keypad-btn qx-keypad-btn--op select-none"
+              >
+                {k.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="qx-keypad-section qx-keypad-section--math">
+          <p className="qx-keypad-label">Roots / exponents</p>
+          <div className="qx-keypad-grid qx-keypad-grid--math">
+            {MATH.map((k) => (
+              <button
+                key={`math-${k.label}`}
+                type="button"
+                disabled={disabled}
+                onClick={() => apply(k)}
+                className={cn("qx-keypad-btn select-none", keyTone(k))}
               >
                 {k.label}
               </button>
@@ -137,30 +157,6 @@ export function GameAnswerKeypad({
           </div>
         </div>
       </div>
-
-      <div className="my-2 h-px w-full bg-white/5" />
-
-      <p className="mb-1.5 text-[9px] font-black uppercase tracking-[0.22em] text-[var(--qx-text-muted)]">
-        Roots / Fractions / Exponents
-      </p>
-      <div className="grid grid-cols-4 gap-2 sm:gap-2.5">
-        {MATH.map((k) => (
-          <button
-            key={`math-${k.label}`}
-            type="button"
-            disabled={disabled}
-            onClick={() => apply(k)}
-            className={cn(
-              "qx-keypad-btn select-none rounded-2xl border border-[var(--qx-border-soft)] bg-[var(--qx-card)] px-2 text-center font-black text-[var(--qx-text-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:border-cyan-400/18 hover:bg-[var(--qx-card-hover)] disabled:cursor-not-allowed disabled:opacity-60",
-              k.action === "submit" && "col-span-2 border-cyan-300/22 bg-cyan-500/10 text-cyan-100",
-              k.action === "clear" && "border-rose-300/18 bg-rose-500/10 text-rose-100"
-            )}
-          >
-            {k.label}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
-

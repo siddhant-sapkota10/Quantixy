@@ -1461,12 +1461,13 @@ export function AiGameClient({
                 keyboardOpenInDuel && "pb-2 pt-1"
               )}
             >
-              <div className="qx-gameplay-stage flex min-h-0 flex-1 flex-col items-center justify-start overflow-visible">
+              <div className="qx-gameplay-stage flex min-h-0 flex-1 flex-col items-center justify-center overflow-visible">
                 <form
                   className={cn(
                     "qx-gameplay-stack",
                     constrainedDuelUi && "qx-gameplay-stack--constrained",
-                    !hasMultipleChoiceOptions && "qx-gameplay-stack--text-entry qx-gameplay-stack--keyboard-fit"
+                    !hasMultipleChoiceOptions && "qx-gameplay-stack--text-entry",
+                    constrainedDuelUi && !hasMultipleChoiceOptions && "qx-gameplay-stack--keyboard-fit"
                   )}
                   onSubmit={(e) => {
                     if (!isActiveGameplay) {
