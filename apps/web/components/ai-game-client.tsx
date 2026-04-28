@@ -1460,7 +1460,7 @@ export function AiGameClient({
                 keyboardOpenInDuel && "pb-2 pt-1"
               )}
             >
-              <div className="qx-gameplay-stage flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden">
+              <div className="qx-gameplay-stage flex min-h-0 flex-1 flex-col items-center justify-start overflow-visible">
                 <form
                   className={cn(
                     "qx-gameplay-stack",
@@ -1529,7 +1529,7 @@ export function AiGameClient({
                     </div>
                   ) : null}
 
-                  <div className="w-full min-w-0">
+                  <div className={cn("w-full min-w-0", constrainedDuelUi && "hidden")}>
                     <EmoteBar
                       emotes={availableEmotes}
                       open={emoteBarOpen}

@@ -478,6 +478,11 @@ select {
   .qx-gameplay-scroll {
     overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
+    overflow-y: auto;
+  }
+
+  .qx-gameplay-stage {
+    overflow: visible;
   }
 
   /* Content-sized MC answers — centered, not edge-to-edge. */
@@ -501,10 +506,12 @@ select {
     max-width: min(720px, 92vw);
     margin-inline: auto;
     min-width: 0;
+    padding-block: 0.25rem;
   }
 
   .qx-gameplay-stack--text-entry {
     gap: clamp(8px, 1.55dvh, 14px);
+    padding-bottom: 0.5rem;
   }
 
   .qx-gameplay-stack--constrained {
@@ -555,6 +562,10 @@ select {
     align-items: stretch;
     width: 100%;
     min-width: 0;
+  }
+
+  .qx-gameplay-input-row input {
+    width: 100%;
   }
 
   .qx-gameplay-action-row {

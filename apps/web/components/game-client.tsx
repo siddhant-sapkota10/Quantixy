@@ -4646,7 +4646,7 @@ export function GameClient({
                 viewportState.tabletLandscape && isActiveGameplay && workpadOpen && "min-w-0"
               )}
             >
-              <div className="qx-gameplay-stage flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden">
+              <div className="qx-gameplay-stage flex min-h-0 flex-1 flex-col items-center justify-start overflow-visible">
               <form
                 className={cn(
                   "qx-gameplay-stack",
@@ -5887,4 +5887,3 @@ export function GameClient({
     </section>
   );
 }
-
