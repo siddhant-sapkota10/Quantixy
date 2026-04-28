@@ -1,1 +1,1 @@
-self.__REACT_LOADABLE_MANIFEST="{}"
+self.__REACT_LOADABLE_MANIFEST="{\"components/game-client.tsx -> @/lib/match-rewards\":{\"id\":\"components/game-client.tsx -> @/lib/match-rewards\",\"files\":[]}}"

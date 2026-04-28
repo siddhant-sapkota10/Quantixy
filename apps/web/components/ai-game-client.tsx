@@ -1008,14 +1008,15 @@ export function AiGameClient({
     isDuelMode &&
     !isFinished &&
     (viewportState.compact || (viewportState.width > 0 && viewportState.width < 768));
+  const textEntryDuelUi = isDuelMode && !isFinished && !hasMultipleChoiceOptions;
   const crampedDuelUi =
     isDuelMode &&
     !isFinished &&
     (viewportState.cramped || (viewportState.width > 0 && viewportState.width < 480));
   const keyboardOpenInDuel = isDuelMode && !isFinished && viewportState.keyboardOpen;
-  const constrainedDuelUi = crampedDuelUi || keyboardOpenInDuel;
-  const compactTextEntryUi = compactDuelUi && !hasMultipleChoiceOptions;
-  const reduceBattleMotion = viewportState.reducedMotion || (isDuelMode && !isFinished && (compactDuelUi || crampedDuelUi));
+  const constrainedDuelUi = crampedDuelUi || keyboardOpenInDuel || textEntryDuelUi;
+  const compactTextEntryUi = (compactDuelUi || textEntryDuelUi) && !hasMultipleChoiceOptions;
+  const reduceBattleMotion = viewportState.reducedMotion || (isDuelMode && !isFinished && (compactDuelUi || crampedDuelUi || textEntryDuelUi));
   // (Keypad is always visible for text-entry questions; no toggle state.)
 
   // Universal answer hotkeys (no need to focus inputs; prevents mobile soft keyboard).
@@ -1208,7 +1209,7 @@ export function AiGameClient({
     </form>
   ) : null;
 
-  const compactDuelHud = compactDuelUi ? (
+  const compactDuelHud = compactDuelUi || textEntryDuelUi ? (
     <div className="q-card relative rounded-[1.35rem] p-2.5">
       <div
         aria-hidden="true"
@@ -1219,7 +1220,7 @@ export function AiGameClient({
         }}
       />
       <div className="relative space-y-2">
-        <div className="grid gap-2">
+        <div className="grid gap-2 md:grid-cols-2">
           <div className="q-card-subtle rounded-2xl px-3 py-2.5">
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-start gap-2.5">
@@ -1342,7 +1343,7 @@ export function AiGameClient({
               keyboardOpenInDuel && "hidden"
             )}
           >
-            {isDuelMode && compactDuelUi ? compactDuelHud : (
+            {isDuelMode && (compactDuelUi || textEntryDuelUi) ? compactDuelHud : (
               <div className={cn("q-card relative rounded-[1.55rem] p-2 sm:p-3", crampedDuelUi && "sm:p-2.5")}>
                 <div
                   aria-hidden="true"
@@ -1465,7 +1466,7 @@ export function AiGameClient({
                   className={cn(
                     "qx-gameplay-stack",
                     constrainedDuelUi && "qx-gameplay-stack--constrained",
-                    !hasMultipleChoiceOptions && "qx-gameplay-stack--text-entry"
+                    !hasMultipleChoiceOptions && "qx-gameplay-stack--text-entry qx-gameplay-stack--keyboard-fit"
                   )}
                   onSubmit={(e) => {
                     if (!isActiveGameplay) {
@@ -1522,8 +1523,8 @@ export function AiGameClient({
                           implemented
                           disabled={!canUseYourUltimate}
                           onActivate={() => activateYourUltimate()}
-                          size="regular"
-                          className="w-full"
+                          size={textEntryDuelUi ? "compact" : "regular"}
+                          className={cn("w-full", textEntryDuelUi && "h-11")}
                         />
                       </div>
                     </div>

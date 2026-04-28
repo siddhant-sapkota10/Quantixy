@@ -514,6 +514,12 @@ select {
     padding-bottom: 0.5rem;
   }
 
+  .qx-gameplay-stack--keyboard-fit {
+    gap: clamp(6px, 1.05dvh, 10px);
+    max-width: min(640px, 92vw);
+    padding-block: 0;
+  }
+
   .qx-gameplay-stack--constrained {
     gap: clamp(7px, 1.25dvh, 11px);
   }
@@ -610,6 +616,44 @@ select {
 
   .qx-gameplay-stack--constrained .qx-gameplay-ultimate-row :is(button, [role="button"]) {
     min-height: 2.5rem;
+  }
+
+  .qx-gameplay-stack--keyboard-fit .qx-question-elastic {
+    padding: clamp(10px, 1.7dvh, 18px);
+    max-height: min(24dvh, 10rem);
+  }
+
+  .qx-gameplay-stack--keyboard-fit .qx-question-elastic .qx-question-prompt {
+    font-size: clamp(1rem, 3.2dvh, 2.05rem) !important;
+    line-height: 1.05;
+  }
+
+  .qx-gameplay-stack--keyboard-fit .qx-gameplay-ultimate-row :is(button, [role="button"]) {
+    min-height: 2.4rem;
+  }
+
+  .qx-gameplay-stack--keyboard-fit .qx-answer-keypad {
+    padding: 0.5rem;
+    border-radius: 1.15rem;
+  }
+
+  .qx-gameplay-stack--keyboard-fit .qx-answer-keypad p,
+  .qx-gameplay-stack--keyboard-fit .qx-answer-keypad .my-2 {
+    display: none;
+  }
+
+  .qx-gameplay-stack--keyboard-fit .qx-answer-keypad .grid {
+    gap: 0.375rem;
+  }
+
+  .qx-gameplay-stack--keyboard-fit .qx-answer-keypad .qx-keypad-btn {
+    height: clamp(1.75rem, 4.3dvh, 2.15rem);
+    border-radius: 0.8rem;
+    font-size: clamp(0.75rem, 1.85dvh, 0.9rem);
+  }
+
+  .qx-gameplay-stack--keyboard-fit .qx-gameplay-action-row {
+    display: none;
   }
 
   @media (max-height: 720px) {

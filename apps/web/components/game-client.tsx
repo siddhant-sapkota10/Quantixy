@@ -3786,11 +3786,13 @@ export function GameClient({
   const isWaitingState = status === "connecting" || status === "waiting";
   const isActiveGameplay = status === "playing";
   const isInMatchShell = isActiveGameplay || isCountdown;
-  const compactGameplay = isInMatchShell && viewportState.compact;
+  const activeQuestionOptions = Array.isArray(currentQuestionData?.options) ? currentQuestionData.options : [];
+  const textEntryGameplay = isActiveGameplay && Boolean(currentQuestionData) && activeQuestionOptions.length === 0;
+  const compactGameplay = isInMatchShell && (viewportState.compact || textEntryGameplay);
   const crampedGameplay = isInMatchShell && viewportState.cramped;
   const keyboardOpenDuringGameplay = isActiveGameplay && viewportState.keyboardOpen;
-  const constrainedGameplay = crampedGameplay || keyboardOpenDuringGameplay;
-  const reduceBattleMotion = viewportState.reducedMotion || (isInMatchShell && (compactGameplay || crampedGameplay));
+  const constrainedGameplay = crampedGameplay || keyboardOpenDuringGameplay || textEntryGameplay;
+  const reduceBattleMotion = viewportState.reducedMotion || (isInMatchShell && (compactGameplay || crampedGameplay || textEntryGameplay));
   const emotesEnabled = status === "playing" || status === "countdown" || status === "finished";
   const youEliminated = eliminated.you;
   const opponentEliminated = eliminated.opponent;
@@ -4506,7 +4508,7 @@ export function GameClient({
                 )}
               >
                 <MatchChampionCard
-                  variant={viewportState.mobileLayout ? "compact" : "battle"}
+                  variant={compactGameplay || viewportState.mobileLayout ? "compact" : "battle"}
                   hp={youDisplayHP}
                   maxHp={DISPLAY_MAX_HP}
                   model={{
@@ -4578,7 +4580,7 @@ export function GameClient({
                 </div>
 
                 <MatchChampionCard
-                  variant={viewportState.mobileLayout ? "compact" : "battle"}
+                  variant={compactGameplay || viewportState.mobileLayout ? "compact" : "battle"}
                   hp={opponentDisplayHP}
                   maxHp={DISPLAY_MAX_HP}
                   model={{
@@ -4652,7 +4654,7 @@ export function GameClient({
                   "qx-gameplay-stack",
                   constrainedGameplay && "qx-gameplay-stack--constrained",
                   !(Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0) &&
-                    "qx-gameplay-stack--text-entry"
+                    "qx-gameplay-stack--text-entry qx-gameplay-stack--keyboard-fit"
                 )}
                 onSubmit={(e) => {
                   if (!isActiveGameplay) {
@@ -4800,8 +4802,8 @@ export function GameClient({
                         activeWindow={architectCanRelease}
                         actionLabel={architectCanRelease ? "Use Perfect System now" : undefined}
                         statusOverride={architectCanRelease ? (ultimate.architectReady ? "AUTO AT 5" : "FIRE NOW") : undefined}
-                        size="regular"
-                        className="w-full"
+                        size={textEntryGameplay ? "compact" : "regular"}
+                        className={cn("w-full", textEntryGameplay && "h-11")}
                       />
                     </div>
                   </div>
