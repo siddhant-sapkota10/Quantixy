@@ -828,6 +828,10 @@ export function GameClient({
     const el = answerInputRef.current;
     if (!el) return;
     if (document.activeElement === el) return;
+    const prefersTouchInput =
+      typeof window !== "undefined" &&
+      window.matchMedia("(pointer: coarse)").matches;
+    if (prefersTouchInput) return;
     el.focus({ preventScroll: true });
     if (opts.select) {
       try {
@@ -1815,8 +1819,8 @@ export function GameClient({
         opponentTypingTimerRef.current = null;
       }
       lastTypingEmitRef.current = 0;
-      // Mobile UX: immediately focus the answer box so typing "just works".
-      // Delay by a tick so the input is enabled + mounted before focusing.
+      // Desktop UX: focus the answer box for physical keyboard entry.
+      // Touch devices use the in-game keypad, avoiding native keyboard resize.
       setTimeout(() => {
         if (!youEliminated && !feedbackRef.current.youAnsweredCurrent) {
           if (!(inputLockUntil > Date.now())) {
@@ -4635,16 +4639,21 @@ export function GameClient({
           <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
             <div
               className={cn(
-                "flex min-h-0 flex-1 flex-col overflow-hidden px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 sm:px-5 sm:pt-4",
+                "qx-gameplay-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 sm:px-5 sm:pt-4",
                 compactGameplay && "pt-2 sm:pt-3",
                 constrainedGameplay && "pt-2 sm:pt-2.5",
                 keyboardOpenDuringGameplay && "pb-2 pt-1",
                 viewportState.tabletLandscape && isActiveGameplay && workpadOpen && "min-w-0"
               )}
             >
-              <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden">
+              <div className="qx-gameplay-stage flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden">
               <form
-                className="qx-gameplay-stack"
+                className={cn(
+                  "qx-gameplay-stack",
+                  constrainedGameplay && "qx-gameplay-stack--constrained",
+                  !(Array.isArray(currentQuestionData?.options) && currentQuestionData.options.length > 0) &&
+                    "qx-gameplay-stack--text-entry"
+                )}
                 onSubmit={(e) => {
                   if (!isActiveGameplay) {
                     e.preventDefault();

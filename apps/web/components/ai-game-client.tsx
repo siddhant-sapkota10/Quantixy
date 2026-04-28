@@ -123,7 +123,7 @@ export function AiGameClient({
   const [yourUltimateUsed, setYourUltimateUsed] = useState(false);
   const [yourArchitectSequence, setYourArchitectSequence] = useState(0);
   const [yourShieldedHit, setYourShieldedHit] = useState(false);
-  const [botAvatarId, setBotAvatarId] = useState<AvatarId>(() => getRandomBotAvatarId());
+  const [botAvatarId, setBotAvatarId] = useState<AvatarId>("flash");
   const [botUltimateCharge, setBotUltimateCharge] = useState(0);
   const [botUltimateActiveUntil, setBotUltimateActiveUntil] = useState(0);
   const [botUltimateUsed, setBotUltimateUsed] = useState(false);
@@ -1453,10 +1453,20 @@ export function AiGameClient({
 
           {/* Main gameplay area (same layout rail as PvP) */}
           <div className="flex min-h-0 flex-1 overflow-hidden">
-            <div className={cn("flex min-h-0 flex-1 flex-col overflow-hidden px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 sm:px-5 sm:pt-4")}>
-              <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden">
+            <div
+              className={cn(
+                "qx-gameplay-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3 sm:px-5 sm:pt-4",
+                constrainedDuelUi && "pt-2 sm:pt-2.5",
+                keyboardOpenInDuel && "pb-2 pt-1"
+              )}
+            >
+              <div className="qx-gameplay-stage flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden">
                 <form
-                  className="qx-gameplay-stack"
+                  className={cn(
+                    "qx-gameplay-stack",
+                    constrainedDuelUi && "qx-gameplay-stack--constrained",
+                    !hasMultipleChoiceOptions && "qx-gameplay-stack--text-entry"
+                  )}
                   onSubmit={(e) => {
                     if (!isActiveGameplay) {
                       e.preventDefault();

@@ -475,6 +475,11 @@ select {
     max-height: min(18dvh, 10rem);
   }
 
+  .qx-gameplay-scroll {
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
   /* Content-sized MC answers — centered, not edge-to-edge. */
   .qx-answer-btn {
     box-sizing: border-box;
@@ -496,6 +501,18 @@ select {
     max-width: min(720px, 92vw);
     margin-inline: auto;
     min-width: 0;
+  }
+
+  .qx-gameplay-stack--text-entry {
+    gap: clamp(8px, 1.55dvh, 14px);
+  }
+
+  .qx-gameplay-stack--constrained {
+    gap: clamp(7px, 1.25dvh, 11px);
+  }
+
+  .qx-gameplay-stack--constrained.qx-gameplay-stack--text-entry {
+    max-width: min(660px, 94vw);
   }
 
   .qx-gameplay-stack .qx-question-elastic {
@@ -566,6 +583,24 @@ select {
     line-height: 1;
   }
 
+  .qx-gameplay-stack--constrained .qx-question-elastic {
+    padding: clamp(10px, 2dvh, 18px);
+    max-height: min(34dvh, 17rem);
+  }
+
+  .qx-gameplay-stack--constrained .qx-question-elastic .qx-question-prompt {
+    font-size: clamp(1.08rem, 4.1dvh, 2.1rem) !important;
+    line-height: 1.08;
+  }
+
+  .qx-gameplay-stack--constrained .qx-question-elastic .qx-question-visual {
+    max-height: min(12dvh, 6.5rem);
+  }
+
+  .qx-gameplay-stack--constrained .qx-gameplay-ultimate-row :is(button, [role="button"]) {
+    min-height: 2.5rem;
+  }
+
   @media (max-height: 720px) {
     .qx-answer-keypad {
       padding: 0.65rem;
@@ -573,6 +608,103 @@ select {
     .qx-answer-keypad .qx-keypad-btn {
       height: clamp(2.05rem, 5.6vh, 2.5rem);
       font-size: clamp(0.78rem, 1.9vh, 0.9rem);
+    }
+  }
+
+  @media (max-height: 680px) {
+    .qx-gameplay-scroll {
+      overflow-y: auto !important;
+    }
+
+    .qx-gameplay-stage {
+      justify-content: flex-start;
+      overflow: visible !important;
+    }
+
+    .qx-gameplay-stack {
+      align-content: start;
+      padding-block: 0.25rem;
+    }
+
+    .qx-question-elastic {
+      padding: clamp(9px, 1.75dvh, 14px);
+      max-height: min(31dvh, 13rem);
+    }
+
+    .qx-question-elastic .qx-question-prompt {
+      font-size: clamp(1rem, 3.65dvh, 1.7rem) !important;
+      line-height: 1.06;
+    }
+
+    .qx-answer-keypad {
+      padding: 0.5rem;
+      border-radius: 1.1rem;
+    }
+
+    .qx-answer-keypad p {
+      display: none;
+    }
+
+    .qx-answer-keypad .grid {
+      gap: 0.375rem;
+    }
+
+    .qx-answer-keypad .my-2 {
+      margin-block: 0.375rem;
+    }
+
+    .qx-answer-keypad .qx-keypad-btn {
+      height: clamp(1.85rem, 5.25dvh, 2.25rem);
+      border-radius: 0.75rem;
+      font-size: clamp(0.72rem, 1.85dvh, 0.86rem);
+    }
+
+    .qx-gameplay-input-row {
+      gap: 0.375rem;
+    }
+
+    .qx-gameplay-input-row input,
+    .qx-gameplay-input-row button {
+      min-height: 2.5rem;
+    }
+  }
+
+  @media (max-height: 600px) {
+    .qx-gameplay-stack--text-entry {
+      gap: 0.375rem;
+    }
+
+    .qx-gameplay-stack--text-entry .qx-question-elastic {
+      max-height: min(28dvh, 10.5rem);
+    }
+
+    .qx-gameplay-stack--text-entry .qx-gameplay-ultimate-row {
+      max-width: min(560px, 100%);
+    }
+
+    .qx-gameplay-stack--text-entry .qx-answer-keypad .qx-keypad-btn {
+      height: clamp(1.65rem, 5dvh, 2rem);
+    }
+  }
+
+  @media (max-width: 420px) {
+    .qx-gameplay-stack {
+      max-width: min(100%, 94vw);
+    }
+
+    .qx-question-elastic {
+      min-width: 0;
+      max-width: 100%;
+      border-radius: 1.15rem;
+      padding-inline: clamp(10px, 3.2vw, 14px);
+    }
+
+    .qx-gameplay-input-row {
+      grid-template-columns: minmax(0, 1fr) minmax(5.75rem, 6.4rem);
+    }
+
+    .qx-gameplay-input-row input {
+      padding-inline: 0.75rem;
     }
   }
 
